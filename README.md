@@ -9,6 +9,8 @@ Phase 3 adds [runtime hardening and operator recovery](docs/phase3.md), while ke
 the control plane and broker in Python. Real providers remain gated on containment tests.
 Use the [runtime-readiness commands](docs/runtime-readiness.md) to check the intended
 Docker host/image and record the remaining pre-provider gate.
+The [JSON/CLI provider boundary](docs/provider-adapter.md) can now run the offline
+workflow through a fixed subprocess fixture. Live provider execution remains disabled.
 
 ```sh
 python -m pip install -r requirements-dev.txt
