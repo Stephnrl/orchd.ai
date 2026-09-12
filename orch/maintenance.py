@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import tempfile
 import time
 
 from .contracts import Rejected, canonical, validate
@@ -76,8 +77,10 @@ def restore(source, destination):
     if manifest_file.stat().st_size > 8 * 1024 * 1024:
         raise Rejected("Manifest too large")
     manifest = json.loads(manifest_file.read_text())
-    if set(manifest) != {"version", "database_sha256", "artifacts"} or manifest["version"] != 1:
+    if not isinstance(manifest, dict) or set(manifest) != {"version", "database_sha256", "artifacts"} or type(manifest["version"]) is not int or manifest["version"] != 1:
         raise Rejected("Unsupported backup manifest")
+    if not isinstance(manifest["database_sha256"], str) or not re.fullmatch(r"[a-f0-9]{64}", manifest["database_sha256"]):
+        raise Rejected("Invalid database digest")
     hashes = manifest["artifacts"]
     if not isinstance(hashes, list) or any(not isinstance(x, str) or not re.fullmatch(r"[a-f0-9]{64}", x) for x in hashes) or len(hashes) != len(set(hashes)):
         raise Rejected("Invalid artifact manifest")
@@ -88,16 +91,30 @@ def restore(source, destination):
     for sha in hashes:
         if hashlib.sha256(plain(source / "artifacts" / sha).read_bytes()).hexdigest() != sha:
             raise Rejected("Backup artifact digest mismatch")
-    destination.mkdir()
-    (destination / "artifacts").mkdir()
-    copy_bytes(db_path, destination / "orch.sqlite")
-    for sha in hashes:
-        copy_bytes(source / "artifacts" / sha, destination / "artifacts" / sha)
-    recovered = Store(destination)
-    try:
-        audit(recovered)
-    finally:
-        recovered.close()
+    # A failed copy or audit must never publish a runnable destination. Stage on
+    # the same filesystem so the final directory rename publishes the whole copy.
+    with tempfile.TemporaryDirectory(prefix=".orch-restore-", dir=destination.parent) as temporary:
+        staged = Path(temporary)
+        (staged / "artifacts").mkdir()
+        copy_bytes(db_path, staged / "orch.sqlite")
+        if hashlib.sha256((staged / "orch.sqlite").read_bytes()).hexdigest() != manifest["database_sha256"]:
+            raise Rejected("Copied database digest mismatch")
+        for sha in hashes:
+            copy_bytes(source / "artifacts" / sha, staged / "artifacts" / sha)
+            if hashlib.sha256((staged / "artifacts" / sha).read_bytes()).hexdigest() != sha:
+                raise Rejected("Copied artifact digest mismatch")
+        recovered = Store(staged)
+        try:
+            referenced = {json.loads(row[0])["sha256"] for row in recovered.db.execute("SELECT payload FROM artifacts")}
+            if referenced != set(hashes):
+                raise Rejected("Artifact manifest does not match database")
+            audit(recovered)
+        finally:
+            recovered.close()
+        plain(destination.parent)
+        if destination.exists() or destination.is_symlink():
+            raise Rejected("Restore destination appeared during verification")
+        staged.rename(destination)
     return {"restored": str(destination), "artifacts": len(hashes)}
 
 

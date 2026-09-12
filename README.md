@@ -20,6 +20,7 @@ Readiness now requires [five real Docker gates](docs/docker-resource-gates.md),
 including resource exhaustion and failure cleanup.
 Operators can [cancel a task between operations](docs/operator-cancellation.md)
 through the UI, API or CLI while retaining its audit evidence.
+Restore now [verifies a staging copy before publishing its destination](docs/verified-restore.md).
 
 ```sh
 python -m pip install -r requirements-dev.txt

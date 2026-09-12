@@ -9,6 +9,8 @@ provider-specific reviews. See [local management](local-management.md) and
 Worker hardening now includes [mandatory resource-containment gates](docker-resource-gates.md).
 The human control boundary also supports [durable cancellation](operator-cancellation.md)
 between operations.
+Backup/restore recovery now includes [verified restore publication](verified-restore.md),
+so a failed copy or audit does not expose a partially restored destination.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

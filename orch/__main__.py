@@ -26,6 +26,8 @@ def main():
     parser.add_argument("--executable", help="Absolute provider executable path for read-only inventory")
     parser.add_argument("--expected-sha256", help="Approved executable digest for provider-check")
     args = parser.parse_args()
+    if args.command in ("backup", "restore") and not args.destination:
+        parser.error(args.command + " requires --destination")
     if args.command == "cancel" and (not args.task or args.expected_revision is None or args.reason is None):
         parser.error("cancel requires --task, --expected-revision and --reason")
     if args.command == "cancel" and not (Path(args.data) / "orch.sqlite").is_file():
