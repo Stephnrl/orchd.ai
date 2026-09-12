@@ -354,14 +354,21 @@ class Engine:
 
     def recover(self, task_id, expected_revision, principal="local-operator"):
         """Operator requests reconciliation; no arbitrary resume state or approval bypass."""
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise Rejected("Invalid recovery revision")
         with self.store.exclusive():
             state, context = self.store.task(task_id)
+            previous = context.get("operator_recovery")
+            if previous and previous["expected_revision"] == expected_revision and previous["principal"] == principal and previous["completed_revision"] == state["revision"] and state["state"] == "CHANGES_REQUESTED":
+                return self._finish_recovery_cleanup(state, context)
             if state["state"] != "BLOCKED" or state["revision"] != expected_revision:
                 raise Rejected("Recovery requires current BLOCKED revision")
             operation_id = state["active_operation_id"]
             op = self.store.db.execute("SELECT * FROM operations WHERE id=? AND task_id=?", (operation_id, task_id)).fetchone()
             if not op or op["status"] != "started":
                 raise Rejected("No unresolved operation")
+            if self.store.db.execute("SELECT count(*) FROM operations WHERE task_id=? AND status='started'", (task_id,)).fetchone()[0] != 1:
+                raise Rejected("Inspect additional unresolved operations before recovery")
             if state["resume_state"] not in ("IMPLEMENTING", "TESTING"):
                 raise Rejected("This recovery path supports only worker/test operations")
             self._approved(state, context, "plan")
@@ -395,12 +402,28 @@ class Engine:
                 state["active_operation_id"] = None
                 state["error"] = None
                 target = state["resume_state"]
+                context["operator_recovery"] = {"expected_revision": expected_revision, "principal": principal,
+                                                "operation_id": operation_id, "completed_revision": state["revision"] + 2,
+                                                "cleanup": "pending"}
                 self._event(state, context, "operator_recovery", {"principal": principal, "retired_generation": op["generation"], "result": result}, role="human", operation=operation_id)
                 self._transition(state, context, target)
                 state["resume_state"] = None
                 self._transition(state, context, "CHANGES_REQUESTED")
-            self.worker.cleanup(operation_id)
-            return self.task(task_id)
+            return self._finish_recovery_cleanup(state, context)
+
+    def _finish_recovery_cleanup(self, state, context):
+        """Called under dispatcher lock, after workflow reconciliation committed."""
+        recovery = context["operator_recovery"]
+        if recovery["cleanup"] == "pending":
+            try:
+                self.worker.cleanup(recovery["operation_id"])
+                recovery["cleanup"] = "completed"
+            except (Rejected, OSError):
+                recovery["cleanup"] = "deferred"
+            self._event(state, context, "recovery_cleanup_" + recovery["cleanup"],
+                        {"operation_id": recovery["operation_id"], "cleanup": recovery["cleanup"]},
+                        operation=recovery["operation_id"])
+        return self.task(state["task_id"])
 
     def _invoke(self, state, context, role, inputs, expected, operation_id, invocation_id=None):
         task = state["task_id"]

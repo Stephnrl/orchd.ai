@@ -38,6 +38,22 @@ A rejection refreshes the task view and leaves the operator to inspect the curre
 evidence. Successful recovery also refreshes state and records; it does not call
 `run`. Review the resulting state before explicitly choosing to continue execution.
 
+Recovery now persists its original revision, operator identity and cleanup status
+with the committed reconciliation. An exact retry while the task remains at that
+recovered revision returns the same outcome without repeating runtime reconciliation
+or advancing the operation generation again. A different identity or a request after
+workflow advancement is rejected. This retry record survives backup/restore.
+
+Workspace cleanup is a separate post-commit step. Unexpected files or filesystem
+errors produce an audited `deferred` cleanup status while recovery still returns
+success; the UI tells the operator to inspect retained files. An ordinary retry does
+not repeat deferred cleanup. If the process crashes before cleanup is recorded, the
+status remains `pending`; retrying the original API/CLI recovery request finishes
+only that cleanup step. The diagnostic panel is for BLOCKED tasks, so this pending
+post-commit retry uses the API or CLI with the original revision in task context.
+Completed cleanup is also recorded, and the UI shows the outcome. No unexpected
+files are implicitly removed and no task is automatically run afterward.
+
 The API request is:
 
 ```text
@@ -72,3 +88,10 @@ tasks, busy/unavailable states and the exact recovery request. The API regressio
 checks failed runtime verification, stale requests and successful recovery without
 automatic continuation. These UI changes did not rerun the full Docker gate suite;
 the Node tests use DOM stubs rather than a rendered browser.
+
+The subsequent recovery-retry change passed the full 113-test Python suite with no
+skips, including all five real Docker gates. Four new tests cover deferred cleanup
+with retained files, interruption immediately after commit, exact retries after
+restore, and rejection of extra unresolved operations before runtime probes. Both
+Node UI checks passed, including all three cleanup messages. Contract validation
+passed 19 examples and 366 negative cases; compilation and whitespace checks passed.

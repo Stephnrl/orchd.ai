@@ -57,5 +57,11 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, "../orch/ui/app.js"), "utf8
   await vm.runInContext("blocked = false; state();", context);
   assert.equal(element("recovery-diagnostics").hidden, true);
   assert.equal(element("recover-task").disabled, true);
+  for (const cleanup of ["pending", "deferred", "completed"]) {
+    context.cleanupStatus = cleanup;
+    await vm.runInContext(`api = async route => route.includes("/records/") ? {title: "Fixture"} : {state: {state: "CHANGES_REQUESTED", spec: {id: "spec"}, revision: 6, pending_approval: null}, context: {operator_recovery: {cleanup: cleanupStatus}}}; state();`, context);
+    assert.equal(element("recovery-outcome").hidden, false);
+    assert.match(element("recovery-outcome").textContent, new RegExp(cleanup));
+  }
   console.log("PASS: recovery text, explicit review, stale-state guards and request binding");
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -19,6 +19,8 @@ orphan cleanup candidates visible without changing workflow data.
 in the UI and API; runtime recovery remains an explicit, separately checked action.
 The diagnostic panel now offers guarded operator recovery with an evidence-review
 acknowledgement, matching revision, and no automatic continuation afterward.
+Recovery retries now preserve the committed outcome and separately record completed,
+pending or deferred workspace cleanup, avoiding repeated runtime reconciliation.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |
