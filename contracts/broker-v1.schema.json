@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:orchd:broker:1.0.0",
+  "oneOf": [{"$ref": "#/$defs/Request"}, {"$ref": "#/$defs/Envelope"}],
+  "$defs": {
+    "Id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "Hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "Result": {
+      "type": "object", "additionalProperties": false,
+      "required": ["command", "started", "ended", "code", "stdout", "stderr", "truncated", "failure"],
+      "properties": {
+        "command": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"type": "string", "maxLength": 32768}},
+        "started": {"type": "string", "format": "date-time"},
+        "ended": {"type": "string", "format": "date-time"},
+        "code": {"type": ["integer", "null"]},
+        "stdout": {"type": "string", "maxLength": 262144},
+        "stderr": {"type": "string", "maxLength": 262144},
+        "truncated": {"type": "boolean"},
+        "failure": {"enum": [null, "timeout", "output_limit", "unreaped_stream", "executor_unavailable", "cleanup_uncertain"]}
+      }
+    },
+    "Request": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "operation_id", "task_id", "generation", "nonce", "workspace", "recipe", "args", "mode", "image", "source_digest"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"}, "operation_id": {"$ref": "#/$defs/Id"},
+        "task_id": {"$ref": "#/$defs/Id"}, "generation": {"type": "integer", "minimum": 1},
+        "nonce": {"$ref": "#/$defs/Id"}, "source_digest": {"$ref": "#/$defs/Hash"},
+        "workspace": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "recipe": {"enum": ["edit", "test"]}, "args": {"type": "array", "maxItems": 1, "items": {"enum": ["hello world\n", "wrong\n"]}},
+        "mode": {"enum": ["docker", "trusted-fixture"]}, "image": {"type": ["string", "null"], "maxLength": 4096}
+      }
+    },
+    "Envelope": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "operation_id", "task_id", "generation", "nonce", "source_digest", "request_sha256", "result"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"}, "operation_id": {"$ref": "#/$defs/Id"},
+        "task_id": {"$ref": "#/$defs/Id"}, "generation": {"type": "integer", "minimum": 1},
+        "nonce": {"$ref": "#/$defs/Id"}, "source_digest": {"$ref": "#/$defs/Hash"},
+        "request_sha256": {"$ref": "#/$defs/Hash"}, "result": {"$ref": "#/$defs/Result"}
+      }
+    }
+  }
+}

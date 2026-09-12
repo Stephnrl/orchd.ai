@@ -11,6 +11,7 @@ from .execution import Executor, FixtureWorker
 from .fixtures import recipe, repository
 from .provider import MockProvider, Scenario
 from .storage import Store
+from .broker import BrokerClient, BrokerUncertain, file_lock, atomic_json
 
 EDGES = {
     "DRAFT_SPEC": {"AWAITING_CLARIFICATION", "SPEC_READY"},
@@ -42,6 +43,7 @@ class Engine:
     def __init__(self, root, executor=None, provider_factory=MockProvider):
         self.store = Store(root)
         self.executor = executor or Executor()
+        self.executor.broker = BrokerClient(self.store, self.executor.mode, self.executor.image)
         self.worker = FixtureWorker(self.store, self.executor)
         self.provider_factory = provider_factory
         self.guardian = FixtureGuardian()
@@ -216,15 +218,21 @@ class Engine:
             return None
         operation_id = requested_operation_id or uid()
         with self.store.transaction():
-            self.store.db.execute("INSERT INTO operations VALUES(?,?,?,?,?,NULL)", (operation_id, task, stage, str(slot), "started"))
+            self.store.db.execute("INSERT INTO operations(id,task_id,stage,slot,status,result) VALUES(?,?,?,?,?,NULL)", (operation_id, task, stage, str(slot), "started"))
             state["active_operation_id"] = operation_id
             self._event(state, context, stage + "_started", operation=operation_id)
         try:
             result = function(operation_id)
             with self.store.transaction():
-                self.store.db.execute("UPDATE operations SET status='done',result=? WHERE id=?", (canonical(result).decode(), operation_id))
+                self.store.complete_operation(operation_id, 1, result)
                 state["active_operation_id"] = None
                 self._event(state, context, stage + ("_failed" if result.get("failure") else "_completed"), result, operation=operation_id)
+        except BrokerUncertain as exc:
+            with self.store.transaction():
+                state["error"] = error("broker_uncertain")
+                self._event(state, context, "broker_reconciliation_required", {"reason": str(exc)}, operation=operation_id)
+                self._transition(state, context, "BLOCKED")
+            return None
         except (Rejected, OSError) as exc:
             # Preserve already committed invocation/actor evidence on failure.
             saved_state, saved_context = self.store.task(task)
@@ -234,12 +242,67 @@ class Engine:
             context.update(saved_context)
             result = {"failure": "operation_failed", "reason": str(exc)}
             with self.store.transaction():
-                self.store.db.execute("UPDATE operations SET status='done',result=? WHERE id=?", (canonical(result).decode(), operation_id))
+                self.store.complete_operation(operation_id, 1, result)
                 state["active_operation_id"] = None
                 self._event(state, context, stage + "_failed", result, operation=operation_id)
+        if stage in ("implementation", "tests"):
+            try:
+                self.worker.cleanup(operation_id)
+            except Rejected as exc:
+                self._event(state, context, "workspace_cleanup_deferred", {"reason": str(exc)}, operation=operation_id)
         if self.after_operation:
             self.after_operation(stage)
         return result
+
+    def recover(self, task_id, expected_revision, principal="local-operator"):
+        """Operator requests reconciliation; no arbitrary resume state or approval bypass."""
+        with self.store.exclusive():
+            state, context = self.store.task(task_id)
+            if state["state"] != "BLOCKED" or state["revision"] != expected_revision:
+                raise Rejected("Recovery requires current BLOCKED revision")
+            operation_id = state["active_operation_id"]
+            op = self.store.db.execute("SELECT * FROM operations WHERE id=? AND task_id=?", (operation_id, task_id)).fetchone()
+            if not op or op["status"] != "started":
+                raise Rejected("No unresolved operation")
+            if state["resume_state"] not in ("IMPLEMENTING", "TESTING"):
+                raise Rejected("This recovery path supports only worker/test operations")
+            self._approved(state, context, "plan")
+            # A verified completion proves the broker finished. Do not relaunch even
+            # when workflow-level receipt persistence was interrupted.
+            try:
+                execution = self.executor.broker.result(operation_id, op["generation"])
+            except Rejected:
+                # Only Docker offers an independently discoverable/reapable execution.
+                # Holding the broker lock plus a durable tombstone prevents late launch.
+                if self.executor.mode != "docker":
+                    raise
+                root = self.executor.broker.root
+                with file_lock(root / (operation_id + ".lock")):
+                    if (root / (operation_id + ".json")).exists():
+                        raise Rejected("Invalid journal must be investigated, not discarded")
+                    atomic_json(root / (operation_id + ".retired"), {"generation": op["generation"]})
+                    if not self.executor.reconcile(operation_id):
+                        raise Rejected("Cannot prove Docker execution is stopped")
+                execution = {"failure": "stopped_without_receipt"}
+            if execution["failure"] in ("cleanup_uncertain", "unreaped_stream"):
+                if not self.executor.reconcile(operation_id):
+                    raise Rejected("Container cleanup remains uncertain")
+            # Retire the uncertain workflow attempt after preserving execution evidence.
+            # A fresh WorkOrder follows via the existing CHANGES_REQUESTED edge.
+            # This avoids fabricating a PatchReceipt from incompletely persisted context.
+            result = {"failure": "reconciled_interrupted_attempt", "execution": execution}
+            with self.store.transaction():
+                self.store.complete_operation(operation_id, op["generation"], result)
+                self.store.db.execute("UPDATE operations SET generation=generation+1 WHERE id=?", (operation_id,))
+                state["active_operation_id"] = None
+                state["error"] = None
+                target = state["resume_state"]
+                self._event(state, context, "operator_recovery", {"principal": principal, "retired_generation": op["generation"], "result": result}, role="human", operation=operation_id)
+                self._transition(state, context, target)
+                state["resume_state"] = None
+                self._transition(state, context, "CHANGES_REQUESTED")
+            self.worker.cleanup(operation_id)
+            return self.task(task_id)
 
     def _invoke(self, state, context, role, inputs, expected, operation_id, invocation_id=None):
         task = state["task_id"]

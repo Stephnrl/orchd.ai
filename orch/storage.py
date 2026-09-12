@@ -10,7 +10,8 @@ from .contracts import Rejected, canonical, redact, ref, uid, validate
 
 
 class Store:
-    def __init__(self, root):
+    def __init__(self, root, task_quota=64 * 1024 * 1024, disk_quota=256 * 1024 * 1024):
+        self.task_quota, self.disk_quota = task_quota, disk_quota
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         (self.root / "artifacts").mkdir(exist_ok=True)
@@ -19,6 +20,10 @@ class Store:
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA busy_timeout=5000")
+        version = self.db.execute("PRAGMA user_version").fetchone()[0]
+        if version not in (0, 1, 2):
+            self.db.close()
+            raise Rejected("Unsupported database version")
         self.db.executescript('''
         CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, state TEXT NOT NULL, context TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS records(id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), kind TEXT NOT NULL, payload TEXT NOT NULL);
@@ -27,11 +32,17 @@ class Store:
         CREATE TABLE IF NOT EXISTS approvals(request_id TEXT PRIMARY KEY REFERENCES records(id), decision_id TEXT NOT NULL REFERENCES records(id));
         CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), stage TEXT NOT NULL, slot TEXT NOT NULL, status TEXT NOT NULL, result TEXT, UNIQUE(task_id,stage,slot));
         CREATE TABLE IF NOT EXISTS effects(operation_id TEXT PRIMARY KEY REFERENCES operations(id), receipt_id TEXT NOT NULL REFERENCES records(id));
-        PRAGMA user_version=1;
         ''')
+        with self.transaction():
+            columns = {r[1] for r in self.db.execute("PRAGMA table_info(operations)")}
+            if "generation" not in columns:
+                self.db.execute("ALTER TABLE operations ADD COLUMN generation INTEGER NOT NULL DEFAULT 1")
+            self.db.execute("CREATE TABLE IF NOT EXISTS broker_requests(operation_id TEXT NOT NULL REFERENCES operations(id), generation INTEGER NOT NULL, request TEXT NOT NULL, PRIMARY KEY(operation_id,generation))")
+            self.db.execute("CREATE TABLE IF NOT EXISTS execution_provenance(operation_id TEXT NOT NULL REFERENCES operations(id), generation INTEGER NOT NULL, envelope_sha256 TEXT NOT NULL, artifact TEXT NOT NULL, PRIMARY KEY(operation_id,generation))")
+            self.db.execute("PRAGMA user_version=2")
         self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_execution_receipt ON records(task_id,kind,json_extract(payload,'$.operation_id')) WHERE kind IN ('PatchReceipt','TestReceipt','ExternalActionReceipt')")
         self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_invocation_receipt ON records(task_id,json_extract(payload,'$.invocation_id')) WHERE kind='AgentInvocationReceipt'")
-        for table in ("records", "events", "artifacts", "approvals", "effects"):
+        for table in ("records", "events", "artifacts", "approvals", "effects", "broker_requests", "execution_provenance"):
             for action in ("UPDATE", "DELETE"):
                 self.db.execute(f"CREATE TRIGGER IF NOT EXISTS {table}_{action.lower()} BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT, 'append-only'); END")
 
@@ -103,9 +114,19 @@ class Store:
         raw = clean.encode()
         if len(raw) > 1024 * 1024:
             raise Rejected("Artifact quota exceeded")
+        used = self.db.execute("SELECT coalesce(sum(json_extract(payload,'$.size_bytes')),0) FROM artifacts WHERE task_id=?", (task_id,)).fetchone()[0]
+        # Small audit reserve lets the engine record a fail-closed quota incident.
+        reserve = 4 * 1024 * 1024 if producer == "orchestrator" and trust == "trusted_receipt" else 0
+        if used + len(raw) > self.task_quota + reserve:
+            raise Rejected("Task artifact quota exceeded")
         sha = hashlib.sha256(raw).hexdigest()
         path = self.root / "artifacts" / sha
+        if path.is_symlink():
+            raise Rejected("Artifact link rejected")
         if not path.exists():
+            disk_used = sum(p.stat().st_size for p in path.parent.iterdir() if p.is_file() and not p.is_symlink())
+            if disk_used + len(raw) > self.disk_quota + reserve:
+                raise Rejected("Artifact disk quota exceeded")
             temp = path.with_suffix("." + uid())
             with temp.open("xb") as stream:
                 stream.write(raw)
@@ -146,3 +167,8 @@ class Store:
                 raise Rejected("Event gap")
             result = json.loads(self.read_artifact(event["payload"], task_id))
         return result
+
+    def complete_operation(self, operation_id, generation, result):
+        updated = self.db.execute("UPDATE operations SET status='done',result=? WHERE id=? AND generation=? AND status='started'", (canonical(result).decode(), operation_id, generation))
+        if updated.rowcount != 1:
+            raise Rejected("Stale operation completion")

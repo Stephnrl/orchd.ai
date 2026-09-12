@@ -10,19 +10,36 @@ from .provider import Scenario
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "recover"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--image", help="Preloaded digest-pinned Python image for Docker")
     parser.add_argument("--task")
     parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--destination")
+    parser.add_argument("--expected-revision", type=int)
     args = parser.parse_args()
+    if args.command == "restore":
+        from .maintenance import restore
+        print(json.dumps(restore(args.data, args.destination)))
+        return
+    if args.command in ("backup", "gc"):
+        from .storage import Store
+        from .maintenance import backup, collect_orphans
+        store = Store(args.data)
+        try:
+            print(json.dumps(backup(store, args.destination) if args.command == "backup" else collect_orphans(store)))
+        finally:
+            store.close()
+        return
     engine = Engine(args.data, Executor("trusted-fixture" if args.trusted_fixture else "docker", args.image))
     try:
         if args.command == "serve":
             serve(engine, args.port)
         elif args.command == "history":
             print(json.dumps([{ "event": e, "payload": json.loads(engine.store.read_artifact(e["payload"], args.task))} for e in engine.events(args.task)], indent=2))
+        elif args.command == "recover":
+            print(json.dumps(engine.recover(args.task, args.expected_revision)))
         else:
             task = engine.create_task(scenario=Scenario(reviews=("NEEDS_CHANGES", "ACCEPT")))
             engine.run(task)

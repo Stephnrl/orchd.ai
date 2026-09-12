@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .contracts import Rejected, actor, error, make, now, ref
 from .fixtures import EDIT_CODE, TEST_CODE, recipe
+from .process import capture
 
 
 class Executor:
@@ -19,17 +20,26 @@ class Executor:
         if mode == "docker" and (not image or not re.fullmatch(r"[A-Za-z0-9./:_-]+@sha256:[a-f0-9]{64}", image)):
             raise Rejected("Docker requires an operator-selected digest-pinned Python image")
         self.mode, self.image = mode, image
+        self.broker = None
 
     @property
     def image_digest(self):
         return self.image.split("@sha256:")[1] if self.image else hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest()
 
     def run(self, workspace, script, args, operation_id):
+        if self.broker:
+            if script not in (TEST_CODE, EDIT_CODE):
+                raise Rejected("Untrusted script")
+            return self.broker.run(workspace, "test" if script == TEST_CODE else "edit", args, operation_id)
+        return self.run_direct(workspace, script, args, operation_id)
+
+    def run_direct(self, workspace, script, args, operation_id):
         if script not in (TEST_CODE, EDIT_CODE):
             raise Rejected("Untrusted script")
         workspace = Path(workspace).resolve()
         if self.mode == "docker":
             command = ["docker", "run", "--rm", "--pull=never", "--name", "orch-" + operation_id,
+                       "--label", "ai.orchd.operation=" + operation_id,
                        "--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
                        "--user=65534:65534", "--pids-limit=64", "--cpus=1", "--memory=256m",
                        "--tmpfs=/tmp:rw,noexec,nosuid,size=16m", "--mount", f"type=bind,source={workspace},target=/workspace" + (",readonly" if script == TEST_CODE else ""),
@@ -37,18 +47,44 @@ class Executor:
         else:
             command = [sys.executable, "-I", "-c", script, str(workspace / "greeting.txt"), *args]
         started = now()
-        # Fixed tiny programs have no untrusted code, child processes, network or output loops.
         env = {k: os.environ[k] for k in ("PATH", "SystemRoot", "WINDIR", "TEMP", "TMP") if k in os.environ}
         try:
-            result = subprocess.run(command, cwd=workspace, env=env, shell=False, capture_output=True, timeout=20)
-            code, stdout, stderr, failure = result.returncode, result.stdout.decode(errors="replace"), result.stderr.decode(errors="replace"), None
-        except subprocess.TimeoutExpired:
-            if self.mode == "docker":
-                subprocess.run(["docker", "rm", "-f", "orch-" + operation_id], capture_output=True, timeout=10, shell=False)
-            code, stdout, stderr, failure = None, "", "deadline exceeded", "timeout"
+            result = capture(command, cwd=workspace, env=env, timeout=10 if script == TEST_CODE else 20)
+            if self.mode == "docker" and result["failure"]:
+                if not self.reconcile(operation_id):
+                    result["failure"] = "cleanup_uncertain"
+            code, stdout, stderr, failure = result["code"], result["stdout"], result["stderr"], result["failure"]
+            if failure:
+                code = None
         except OSError:
             code, stdout, stderr, failure = None, "", "executor unavailable", "executor_unavailable"
-        return dict(command=command, started=started, ended=now(), code=code, stdout=stdout[:65536], stderr=stderr[:65536], truncated=len(stdout) > 65536 or len(stderr) > 65536, failure=failure)
+        return dict(command=command, started=started, ended=now(), code=code, stdout=stdout, stderr=stderr, truncated=failure == "output_limit", failure=failure)
+
+    def reconcile(self, operation_id):
+        """Remove only the exact labelled task container; daemon errors are not absence."""
+        from .broker import safe_id
+        safe_id(operation_id)
+        if self.mode != "docker":
+            return False  # Cannot prove an orphaned local fixture process has exited.
+        try:
+            listing = capture(["docker", "ps", "-aq", "--filter", "name=^/orch-" + operation_id + "$"], timeout=10)
+            if listing["code"] != 0 or listing["failure"]:
+                return False
+            if not listing["stdout"].strip():
+                return True
+            inspected = capture(["docker", "inspect", "orch-" + operation_id], timeout=10)
+            if inspected["code"] != 0 or inspected["failure"]:
+                return False
+            info = json.loads(inspected["stdout"])[0]
+            if info["Config"].get("Labels", {}).get("ai.orchd.operation") != operation_id:
+                return False
+            removed = capture(["docker", "rm", "-f", info["Id"]], timeout=10)
+            if removed["code"] != 0 or removed["failure"]:
+                return False
+            check = capture(["docker", "ps", "-aq", "--filter", "name=^/orch-" + operation_id + "$"], timeout=10)
+            return check["code"] == 0 and not check["failure"] and not check["stdout"].strip()
+        except (OSError, ValueError, KeyError, IndexError):
+            return False
 
 
 class FixtureWorker:
@@ -56,6 +92,11 @@ class FixtureWorker:
         self.store, self.executor = store, executor
 
     def workspace(self, operation_id):
+        from .broker import safe_id
+        safe_id(operation_id)
+        parent = self.store.root / "workspaces"
+        if parent.is_symlink() or (hasattr(parent, "is_junction") and parent.is_junction()):
+            raise Rejected("Workspace root link")
         path = self.store.root / "workspaces" / operation_id
         if path.is_symlink():
             raise Rejected("Workspace link")
@@ -63,6 +104,22 @@ class FixtureWorker:
         if path.resolve().parent != (self.store.root / "workspaces").resolve():
             raise Rejected("Workspace escape")
         return path
+
+    def cleanup(self, operation_id):
+        from .broker import safe_id
+        safe_id(operation_id)
+        path = self.store.root / "workspaces" / operation_id
+        if not path.exists():
+            return
+        if path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction()) or path.resolve() != self.store.root / "workspaces" / operation_id:
+            raise Rejected("Unsafe cleanup path")
+        files = list(path.iterdir())
+        if any(p.name != "greeting.txt" or not p.is_file() or p.is_symlink() for p in files):
+            raise Rejected("Unexpected workspace content; retain for investigation")
+        for file in files:
+            file.chmod(0o600)
+            file.unlink()
+        path.rmdir()
 
     def implement(self, operation_id, work, proposal):
         if set(proposal) != {"content"} or proposal["content"] not in ("hello world\n", "wrong\n"):
