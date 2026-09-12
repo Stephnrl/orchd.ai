@@ -25,7 +25,7 @@ not supported by this increment.
 
 `doctor` is read-only. It checks CLI availability, daemon identity, Linux container mode,
 and local image identity. A reachable daemon without the required image is not ready.
-`verify-runtime` runs both existing real-Docker tests in a bounded subprocess and records
+`verify-runtime` runs all five mandatory real-Docker tests in a bounded subprocess and records
 their outcomes. Exit 0 means ready/passed for the respective command; exit 2 means
 unavailable/failed. Missing arguments are usage errors. Existing report paths are not
 overwritten; choose a new path for each verification run.
@@ -39,7 +39,7 @@ environment values into evidence.
 
 The versioned report includes correlation ID, timestamps, hashed hostname and host
 runtime metadata, daemon identity/version/architecture, requested image digest and local
-image ID, source/contract/test digest, and exact test IDs/outcomes. Tests must both run
+image ID, source/contract/test digest, and exact test IDs/outcomes. Every required test must run
 and pass. A skipped test, zero-test run, timeout, malformed result or environment change
 cannot become a pass. Preflight is repeated after the tests to detect drift.
 
@@ -50,13 +50,17 @@ service, signed attestation or a new workflow approval. Report files must remain
 trusted local control. This hash does not attest installed third-party dependencies or
 the operating system, and a local administrator can rewrite both code and evidence.
 
-All reports explicitly carry `provider_authorized=false`. The Engine now rejects a
-non-mock provider factory before opening storage or dispatching anything. A future
+All reports explicitly carry `provider_authorized=false`. The Engine admits only the
+two built-in offline fixture providers. A future
 provider-adapter PR must deliberately replace that gate with provider-specific tool
 containment, source-sharing policy and authentication checks in addition to current
 runtime evidence. A passed Docker test alone will not authorize a provider.
 
 ## Current status and next action
+
+The [resource-containment gates](docker-resource-gates.md) expand the required set
+from two to five tests. Earlier two-test reports cannot satisfy current readiness.
+The records below describe earlier milestones and retain their original scope.
 
 Docker Desktop was installed and repaired after this readiness increment was merged.
 On 2026-09-12, both real gates passed on Windows 11 using Docker Desktop Linux

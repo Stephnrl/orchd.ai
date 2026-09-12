@@ -16,7 +16,10 @@ from .process import capture
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = sorted(["test_docker_integration.DockerIsolationTests.test_full_docker_workflow",
-                   "test_docker_integration.DockerIsolationTests.test_linux_isolation_and_cleanup"])
+                   "test_docker_integration.DockerIsolationTests.test_linux_isolation_and_cleanup",
+                   "test_docker_integration.DockerIsolationTests.test_resource_limits",
+                   "test_docker_integration.DockerIsolationTests.test_memory_limit_and_cleanup",
+                   "test_docker_integration.DockerIsolationTests.test_timeout_and_output_cleanup"])
 
 
 def code_digest():

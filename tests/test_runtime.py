@@ -192,6 +192,32 @@ class RuntimeTests(unittest.TestCase):
         with patch("orch.execution.capture", return_value=absent):
             self.assertTrue(executor.reconcile(uid()))
 
+    def test_docker_auto_removal_races_require_proven_absence(self):
+        executor = Executor("docker", "python@sha256:" + "a" * 64)
+        operation = uid()
+        absent = {"code": 0, "stdout": "", "stderr": "", "failure": None}
+        present = {**absent, "stdout": "container-id\n"}
+        failure = {**absent, "code": 1}
+        inspected = {**absent, "stdout": json.dumps([{"Id": "container-id", "Config": {"Labels": {"ai.orchd.operation": operation}}}])}
+        for prefix in ([present, failure], [present, inspected, failure]):
+            for final, expected in ((absent, True), (present, False), (failure, False)):
+                with patch("orch.execution.capture", side_effect=[*prefix, final]):
+                    self.assertEqual(executor.reconcile(operation), expected)
+        wrong_label = {**absent, "stdout": json.dumps([{"Id": "unrelated", "Config": {"Labels": {"ai.orchd.operation": "other"}}}])}
+        with patch("orch.execution.capture", side_effect=[present, wrong_label]) as command:
+            self.assertFalse(executor.reconcile(operation))
+            self.assertEqual(command.call_count, 2)  # Never remove an unrelated container.
+
+    def test_output_truncation_survives_uncertain_cleanup(self):
+        executor = Executor("docker", "python@sha256:" + "a" * 64)
+        flooded = {"code": -1, "stdout": "bounded", "stderr": "", "failure": "output_limit", "truncated": True}
+        from orch.fixtures import TEST_CODE
+        with patch("orch.execution.capture", return_value=flooded), patch.object(executor, "reconcile", return_value=False):
+            result = executor.run_direct(self.temp.name, TEST_CODE, [], uid())
+        self.assertEqual(result["failure"], "cleanup_uncertain")
+        self.assertTrue(result["truncated"])
+        self.assertIsNone(result["code"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -101,7 +101,7 @@ class BoundaryTests(unittest.TestCase):
         with patch("orch.execution.capture", return_value={"code": 0, "stdout": "", "stderr": "", "truncated": False, "failure": None}) as run:
             executor.run(self.temp.name, TEST_CODE, [], uid())
             command = run.call_args.args[0]
-            for flag in ("--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user=65534:65534", "--pull=never"):
+            for flag in ("--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user=65534:65534", "--pull=never", "--memory-swap=256m", "--log-driver=none"):
                 self.assertIn(flag, command)
             self.assertNotIn("/var/run/docker.sock", str(command))
             self.assertIsInstance(command, list)
