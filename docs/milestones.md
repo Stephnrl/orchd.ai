@@ -1,6 +1,10 @@
 # MVP milestones and verification
 
-This design PR is milestone M0. Do not implement real agents before contract review.
+Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
+the local management UI now covers M4 visibility and explicit decisions. M5 has an
+offline CLI conformance boundary; real providers remain disabled pending their
+provider-specific reviews. See [local management](local-management.md) and
+[provider adapter](provider-adapter.md) for the implemented scope and limitations.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

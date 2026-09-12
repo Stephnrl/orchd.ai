@@ -22,6 +22,7 @@ EXPECTED = sorted(["test_docker_integration.DockerIsolationTests.test_full_docke
 def code_digest():
     files = list((ROOT / "orch").glob("*.py")) + list((ROOT / "contracts").rglob("*.json"))
     files += [ROOT / "contracts/interfaces.py", ROOT / "tests/test_docker_integration.py"]
+    files += list((ROOT / "orch/ui").glob("*"))
     return digest({str(path.relative_to(ROOT).as_posix()): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(files)})
 
 
