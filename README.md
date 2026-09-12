@@ -11,6 +11,8 @@ Use the [runtime-readiness commands](docs/runtime-readiness.md) to check the int
 Docker host/image and record the remaining pre-provider gate.
 The [JSON/CLI provider boundary](docs/provider-adapter.md) can now run the offline
 workflow through a fixed subprocess fixture. Live provider execution remains disabled.
+The [local management UI](docs/local-management.md) adds task browsing, explicit
+approvals, evidence inspection and event replay at the existing loopback server.
 
 ```sh
 python -m pip install -r requirements-dev.txt
