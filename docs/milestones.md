@@ -6,6 +6,7 @@ offline CLI conformance boundary and [Copilot protocol codec](copilot-protocol.m
 real providers remain disabled pending their
 provider-specific reviews. See [local management](local-management.md) and
 [provider adapter](provider-adapter.md) for the implemented scope and limitations.
+Worker hardening now includes [mandatory resource-containment gates](docker-resource-gates.md).
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

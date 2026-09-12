@@ -16,6 +16,8 @@ approvals, evidence inspection and event replay at the existing loopback server.
 The [Copilot protocol codec and deployment guide](docs/copilot-protocol.md) provide
 documented prompt/output preparation and read-only provider inventory without requiring
 either provider CLI on this workstation.
+Readiness now requires [five real Docker gates](docs/docker-resource-gates.md),
+including resource exhaustion and failure cleanup.
 
 ```sh
 python -m pip install -r requirements-dev.txt

@@ -48,6 +48,9 @@ class ReadinessTests(unittest.TestCase):
             self.assertFalse(assess_checks({**success(), **update}, process))
         self.assertFalse(assess_checks(success(), {"code": 2, "failure": None}))
         self.assertFalse(assess_checks(success(), {"code": 0, "failure": "timeout"}))
+        old = sorted(["test_docker_integration.DockerIsolationTests.test_full_docker_workflow",
+                      "test_docker_integration.DockerIsolationTests.test_linux_isolation_and_cleanup"])
+        self.assertFalse(assess_checks({**success(), "expected": old, "passed": old, "tests_run": 2}, process))
 
     def preflight(self):
         with patch("orch.readiness.shutil.which", return_value="docker"), patch("orch.readiness.docker_json", side_effect=[INFO, DETAILS]):

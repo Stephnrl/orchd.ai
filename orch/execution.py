@@ -41,15 +41,17 @@ class Executor:
             command = ["docker", "run", "--rm", "--pull=never", "--name", "orch-" + operation_id,
                        "--label", "ai.orchd.operation=" + operation_id,
                        "--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
-                       "--user=65534:65534", "--pids-limit=64", "--cpus=1", "--memory=256m",
+                       "--user=65534:65534", "--pids-limit=64", "--cpus=1", "--memory=256m", "--memory-swap=256m", "--log-driver=none",
                        "--tmpfs=/tmp:rw,noexec,nosuid,size=16m", "--mount", f"type=bind,source={workspace},target=/workspace" + (",readonly" if script == TEST_CODE else ""),
                        "--workdir=/workspace", self.image, "python", "-I", "-c", script, "/workspace/greeting.txt", *args]
         else:
             command = [sys.executable, "-I", "-c", script, str(workspace / "greeting.txt"), *args]
         started = now()
+        truncated = False
         env = {k: os.environ[k] for k in ("PATH", "SystemRoot", "WINDIR", "TEMP", "TMP") if k in os.environ}
         try:
             result = capture(command, cwd=workspace, env=env, timeout=10 if script == TEST_CODE else 20)
+            truncated = result["truncated"]
             if self.mode == "docker" and result["failure"]:
                 if not self.reconcile(operation_id):
                     result["failure"] = "cleanup_uncertain"
@@ -58,7 +60,7 @@ class Executor:
                 code = None
         except OSError:
             code, stdout, stderr, failure = None, "", "executor unavailable", "executor_unavailable"
-        return dict(command=command, started=started, ended=now(), code=code, stdout=stdout, stderr=stderr, truncated=failure == "output_limit", failure=failure)
+        return dict(command=command, started=started, ended=now(), code=code, stdout=stdout, stderr=stderr, truncated=truncated, failure=failure)
 
     def reconcile(self, operation_id):
         """Remove only the exact labelled task container; daemon errors are not absence."""
@@ -74,13 +76,15 @@ class Executor:
                 return True
             inspected = capture(["docker", "inspect", "orch-" + operation_id], timeout=10)
             if inspected["code"] != 0 or inspected["failure"]:
-                return False
+                # --rm may finish between list and inspect. Only a successful fresh
+                # query proving absence can resolve this race; errors cannot.
+                check = capture(["docker", "ps", "-aq", "--filter", "name=^/orch-" + operation_id + "$"], timeout=10)
+                return check["code"] == 0 and not check["failure"] and not check["stdout"].strip()
             info = json.loads(inspected["stdout"])[0]
             if info["Config"].get("Labels", {}).get("ai.orchd.operation") != operation_id:
                 return False
             removed = capture(["docker", "rm", "-f", info["Id"]], timeout=10)
-            if removed["code"] != 0 or removed["failure"]:
-                return False
+            # Auto-removal may also win the race with rm. Verify absence either way.
             check = capture(["docker", "ps", "-aq", "--filter", "name=^/orch-" + operation_id + "$"], timeout=10)
             return check["code"] == 0 and not check["failure"] and not check["stdout"].strip()
         except (OSError, ValueError, KeyError, IndexError):
