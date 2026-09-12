@@ -21,6 +21,8 @@ The diagnostic panel now offers guarded operator recovery with an evidence-revie
 acknowledgement, matching revision, and no automatic continuation afterward.
 Recovery retries now preserve the committed outcome and separately record completed,
 pending or deferred workspace cleanup, avoiding repeated runtime reconciliation.
+[Continuous validation](continuous-validation.md) runs offline checks on Windows/Linux
+and isolates the five mandatory Docker gates in a Linux CI job.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

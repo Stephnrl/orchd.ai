@@ -27,6 +27,8 @@ Read-only [storage usage reports](docs/storage-usage.md) expose artifact quota h
 and orphan cleanup candidates through the CLI and authenticated API.
 Blocked tasks expose [recovery diagnostics](docs/recovery-diagnostics.md) in the UI
 and API, explaining saved preconditions without probing or changing the runtime.
+[Continuous validation](docs/continuous-validation.md) adds Windows/Linux offline
+checks and a separate mandatory Linux Docker job for pull requests.
 
 ```sh
 python -m pip install -r requirements-dev.txt
