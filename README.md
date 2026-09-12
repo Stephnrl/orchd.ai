@@ -7,6 +7,8 @@ Phase 1 remains the design baseline below. Phase 2 implements the bounded offlin
 vertical slice; see [running Phase 2](docs/phase2.md) for APIs, recovery and limitations.
 Phase 3 adds [runtime hardening and operator recovery](docs/phase3.md), while keeping
 the control plane and broker in Python. Real providers remain gated on containment tests.
+Use the [runtime-readiness commands](docs/runtime-readiness.md) to check the intended
+Docker host/image and record the remaining pre-provider gate.
 
 ```sh
 python -m pip install -r requirements-dev.txt

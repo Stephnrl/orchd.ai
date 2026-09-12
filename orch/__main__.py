@@ -10,7 +10,7 @@ from .provider import Scenario
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "recover"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "recover", "doctor", "verify-runtime"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--image", help="Preloaded digest-pinned Python image for Docker")
@@ -19,6 +19,18 @@ def main():
     parser.add_argument("--destination")
     parser.add_argument("--expected-revision", type=int)
     args = parser.parse_args()
+    if args.command == "doctor":
+        from .readiness import doctor
+        report = doctor(args.image)
+        print(json.dumps(report, indent=2))
+        raise SystemExit(0 if report["status"] == "ready" else 2)
+    if args.command == "verify-runtime":
+        if not args.image or not args.destination:
+            parser.error("verify-runtime requires --image and --destination")
+        from .readiness import verify_runtime
+        report = verify_runtime(args.image, args.destination)
+        print(json.dumps(report, indent=2))
+        raise SystemExit(0 if report["status"] == "passed" else 2)
     if args.command == "restore":
         from .maintenance import restore
         print(json.dumps(restore(args.data, args.destination)))

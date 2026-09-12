@@ -41,6 +41,8 @@ def allowed(source, target, resume=None):
 
 class Engine:
     def __init__(self, root, executor=None, provider_factory=MockProvider):
+        if provider_factory is not MockProvider:
+            raise Rejected("Real provider execution is not enabled; containment and provider authorization are required")
         self.store = Store(root)
         self.executor = executor or Executor()
         self.executor.broker = BrokerClient(self.store, self.executor.mode, self.executor.image)
