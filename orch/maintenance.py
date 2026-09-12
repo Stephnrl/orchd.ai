@@ -49,21 +49,37 @@ def backup(store, destination):
     plain(destination.parent)
     with store.exclusive():
         audit(store)
-        destination.mkdir()
-        artifacts = destination / "artifacts"
-        artifacts.mkdir()
-        connection = sqlite3.connect(destination / "orch.sqlite")
-        try:
-            store.db.backup(connection)
-        finally:
-            connection.close()
-        hashes = sorted({json.loads(row[0])["sha256"] for row in store.db.execute("SELECT payload FROM artifacts")})
-        for sha in hashes:
-            copy_bytes(store.root / "artifacts" / sha, artifacts / sha)
-        # Journals are not authoritative workflow records; unresolved restored operations
-        # stay BLOCKED. Do not copy live locks or pretend a new host owns old processes.
-        manifest = {"version": 1, "database_sha256": hashlib.sha256((destination / "orch.sqlite").read_bytes()).hexdigest(), "artifacts": hashes}
-        (destination / "manifest.json").write_bytes(canonical(manifest))
+        with tempfile.TemporaryDirectory(prefix=".orch-backup-", dir=destination.parent) as temporary:
+            staged = Path(temporary)
+            artifacts = staged / "artifacts"
+            artifacts.mkdir()
+            connection = sqlite3.connect(staged / "orch.sqlite")
+            try:
+                store.db.backup(connection)
+            finally:
+                connection.close()
+            hashes = sorted({json.loads(row[0])["sha256"] for row in store.db.execute("SELECT payload FROM artifacts")})
+            for sha in hashes:
+                copy_bytes(store.root / "artifacts" / sha, artifacts / sha)
+            copied = Store(staged, read_only=True)
+            try:
+                audit(copied)
+                copied_hashes = {json.loads(row[0])["sha256"] for row in copied.db.execute("SELECT payload FROM artifacts")}
+                if copied_hashes != set(hashes):
+                    raise Rejected("Copied backup references changed")
+            finally:
+                copied.close()
+            # Only committed database records and artifacts are authoritative;
+            # live broker locks/journals and workspace ownership are not copied.
+            manifest = {"version": 1, "database_sha256": hashlib.sha256((staged / "orch.sqlite").read_bytes()).hexdigest(), "artifacts": hashes}
+            with (staged / "manifest.json").open("xb") as stream:
+                stream.write(canonical(manifest))
+                stream.flush()
+                os.fsync(stream.fileno())
+            plain(destination.parent)
+            if destination.exists() or destination.is_symlink():
+                raise Rejected("Backup destination appeared during verification")
+            staged.rename(destination)
         return manifest
 
 

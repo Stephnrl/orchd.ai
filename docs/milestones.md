@@ -23,6 +23,8 @@ Recovery retries now preserve the committed outcome and separately record comple
 pending or deferred workspace cleanup, avoiding repeated runtime reconciliation.
 [Continuous validation](continuous-validation.md) runs offline checks on Windows/Linux
 and isolates the five mandatory Docker gates in a Linux CI job.
+[Verified backup publication](verified-backup.md) prevents handled copy/audit failures
+from leaving a partially populated backup at the requested destination.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |
