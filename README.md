@@ -13,6 +13,9 @@ The [JSON/CLI provider boundary](docs/provider-adapter.md) can now run the offli
 workflow through a fixed subprocess fixture. Live provider execution remains disabled.
 The [local management UI](docs/local-management.md) adds task browsing, explicit
 approvals, evidence inspection and event replay at the existing loopback server.
+The [Copilot protocol codec and deployment guide](docs/copilot-protocol.md) provide
+documented prompt/output preparation and read-only provider inventory without requiring
+either provider CLI on this workstation.
 
 ```sh
 python -m pip install -r requirements-dev.txt

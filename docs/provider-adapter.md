@@ -54,6 +54,10 @@ support or authorize live providers. Python remains sufficient for this mileston
 Rust can be considered for a future hostile-process supervisor after its requirements
 and measurable constraints are established.
 
+The next [Copilot protocol milestone](copilot-protocol.md) supplies native prompt
+preparation, strict response decoding and read-only deployment inventory. It does not
+enable the live launcher or change the engine's fixture-only provider admission.
+
 Validation on 2026-09-12: all 60 tests passed with no skips on Windows Docker Desktop,
 including both real Linux-container gates. The CLI-provider/Docker-worker demo reached
 COMPLETED with 59 events. Phase 1 validation passed 19 examples and 366 negative cases.

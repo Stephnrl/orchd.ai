@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "recover", "doctor", "verify-runtime"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "recover", "doctor", "verify-runtime", "provider-check"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -21,7 +21,16 @@ def main():
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--destination")
     parser.add_argument("--expected-revision", type=int)
+    parser.add_argument("--provider", choices=["github_copilot_cli", "abc_binary_ai_placeholder"])
+    parser.add_argument("--executable", help="Absolute provider executable path for read-only inventory")
+    parser.add_argument("--expected-sha256", help="Approved executable digest for provider-check")
     args = parser.parse_args()
+    if args.command == "provider-check":
+        if not args.provider:
+            parser.error("provider-check requires --provider")
+        from .copilot import provider_check
+        print(json.dumps(provider_check(args.provider, args.executable, args.expected_sha256), indent=2))
+        raise SystemExit(2)  # No live provider is admitted in this milestone.
     if args.command == "doctor":
         from .readiness import doctor
         report = doctor(args.image)
