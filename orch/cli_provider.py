@@ -87,6 +87,9 @@ class FixtureTransport:
 
 
 class JsonCliProvider:
+    adapter_version = ADAPTER_VERSION
+    prompt_version = PROMPT_VERSION
+
     def __init__(self, store, config, transport=None):
         self.store, self.config, self.transport = store, config, transport
         # Parsing is repeated even for a manually constructed dataclass.
@@ -99,11 +102,11 @@ class JsonCliProvider:
 
     async def health_check(self):
         if not self.capabilities().proposal_only_verified:
-            return HealthResult("unsupported", ADAPTER_VERSION, "Live provider admission not implemented")
+            return HealthResult("unsupported", self.adapter_version, "Live provider admission not implemented")
         executable = Path(self.config.executable)
         if not executable.is_file() or hashlib.sha256(executable.read_bytes()).hexdigest() != self.config.executable_sha256:
-            return HealthResult("unavailable", ADAPTER_VERSION, "Executable absent or changed")
-        return HealthResult("ready", ADAPTER_VERSION, "Bundled offline fixture only; no authentication performed")
+            return HealthResult("unavailable", self.adapter_version, "Executable absent or changed")
+        return HealthResult("ready", self.adapter_version, "Bundled offline fixture only; no authentication performed")
 
     async def cancel(self, invocation_id):
         if invocation_id in self.active:
@@ -132,7 +135,7 @@ class JsonCliProvider:
         manifest = json.loads(self.store.read_artifact(invocation["context_manifest"], invocation["task_id"]))
         if manifest != {"role": role, "contracts": ROLES[role][1]}:
             raise Rejected("Context manifest mismatch")
-        return {"prompt_version": PROMPT_VERSION, "invocation": invocation,
+        return {"prompt_version": self.prompt_version, "invocation": invocation,
                 "system_instructions": self.store.read_artifact(invocation["system_instructions"], invocation["task_id"]), "artifacts": context}
 
     def parse_result(self, raw, invocation, prompt):
@@ -169,7 +172,7 @@ class JsonCliProvider:
         cancel = threading.Event()
         self.active[invocation["id"]] = cancel
         try:
-            if (invocation["provider"], invocation["model"], invocation["adapter_version"], invocation["prompt_version"]) != (self.config.provider, self.config.model, ADAPTER_VERSION, PROMPT_VERSION):
+            if (invocation["provider"], invocation["model"], invocation["adapter_version"], invocation["prompt_version"]) != (self.config.provider, self.config.model, self.adapter_version, self.prompt_version):
                 raise Rejected("Provider configuration mismatch")
             if not self.capabilities().proposal_only_verified:
                 raise Rejected("Live provider admission not implemented")

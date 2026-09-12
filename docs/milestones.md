@@ -2,7 +2,8 @@
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
-offline CLI conformance boundary; real providers remain disabled pending their
+offline CLI conformance boundary and [Copilot protocol codec](copilot-protocol.md);
+real providers remain disabled pending their
 provider-specific reviews. See [local management](local-management.md) and
 [provider adapter](provider-adapter.md) for the implemented scope and limitations.
 
