@@ -125,9 +125,9 @@ Backups do not copy live broker locks/journals or workspaces. Committed receipt 
 is already an artifact; unresolved restored operations remain blocked rather than
 assuming ownership of original-host processes. Manifests detect accidental corruption,
 not malicious replacement by someone who can rewrite both backup and manifest. Backups
-must be stored under trusted access controls. Interrupted backup directories remain
-for inspection. Restore now uses [verified staging publication](verified-restore.md),
-with handled-failure cleanup and separate instructions for abandoned staging directories.
+must be stored under trusted access controls. Both [backup](verified-backup.md) and
+[restore](verified-restore.md) now use verified staging publication, with handled-failure
+cleanup and separate instructions for abandoned staging directories.
 
 ## Validation and Docker gates
 

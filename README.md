@@ -29,6 +29,8 @@ Blocked tasks expose [recovery diagnostics](docs/recovery-diagnostics.md) in the
 and API, explaining saved preconditions without probing or changing the runtime.
 [Continuous validation](docs/continuous-validation.md) adds Windows/Linux offline
 checks and a separate mandatory Linux Docker job for pull requests.
+Backup creation now [verifies a staged snapshot before publication](docs/verified-backup.md),
+matching the existing restore safeguard.
 
 ```sh
 python -m pip install -r requirements-dev.txt
