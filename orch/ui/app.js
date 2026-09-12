@@ -1,11 +1,17 @@
 "use strict";
 const $ = id => document.getElementById(id);
-let token = "", selected = null, snapshot = null, approval = null;
+let token = "", selected = null, snapshot = null, approval = null, recovery = null;
 let epoch = 0, cursor = 0, taskNext = null, recordNext = null, busy = false;
 const names = new Map();
 const pretty = value => JSON.stringify(value, null, 2);
 function notice(message) { $("notice").textContent = message; }
+function canRecover() {
+  return !busy && !!snapshot && snapshot.state.state === "BLOCKED" && !!recovery &&
+    recovery.task_id === selected && recovery.revision === snapshot.state.revision &&
+    recovery.recovery_status === "preconditions_met" && $("recovery-reviewed").checked;
+}
 function controls() {
+  $("recover-task").disabled = !canRecover();
   $("run").disabled = busy || !snapshot || !!snapshot.state.pending_approval || ["COMPLETED", "FAILED", "CANCELLED", "BLOCKED"].includes(snapshot.state.state);
   const expired = !!approval && Date.parse(approval.expires_at) <= Date.now();
   $("approve").disabled = $("reject").disabled = busy || !approval || expired || !$("reviewed").checked;
@@ -70,12 +76,13 @@ async function records(more = false) {
 }
 async function state() {
   const version = epoch, task = selected;
+  recovery = null; $("recovery-reviewed").checked = false; controls();
   const data = await api(`/tasks/${task}`);
   const spec = await api(`/tasks/${task}/records/${data.state.spec.id}`);
   const pending = data.state.pending_approval ? await api(`/tasks/${task}/records/${data.state.pending_approval.id}`) : null;
   const diagnostics = data.state.state === "BLOCKED" ? await api(`/tasks/${task}/recovery-diagnostics`) : null;
   if (version !== epoch) return;
-  snapshot = data; approval = pending;
+  snapshot = data; approval = pending; recovery = diagnostics;
   $("task-title").textContent = spec.title; $("task-id").textContent = task;
   $("state").textContent = data.state.state.replaceAll("_", " "); $("revision").textContent = "Revision " + data.state.revision;
   $("state-json").textContent = pretty(data); $("approval").hidden = !pending; $("reviewed").checked = false;
@@ -92,7 +99,7 @@ async function state() {
 }
 async function select(task) {
   if (busy) return;
-  epoch++; selected = task; cursor = 0; snapshot = null; approval = null;
+  epoch++; selected = task; cursor = 0; snapshot = null; approval = null; recovery = null;
   $("cancel-reason").value = ""; $("cancellation").open = false;
   $("events").replaceChildren(); $("evidence").hidden = true; $("empty").hidden = true; $("detail").hidden = false; $("approval").hidden = true;
   for (const [id, b] of names) b.setAttribute("aria-current", String(id === task));
@@ -136,6 +143,12 @@ $("refresh").addEventListener("click", () => tasks().catch(e => notice(e.message
 $("more-tasks").addEventListener("click", () => tasks(true).catch(e => notice(e.message)));
 $("more-records").addEventListener("click", () => records(true).catch(e => notice(e.message)));
 $("reviewed").addEventListener("change", controls);
+$("recovery-reviewed").addEventListener("change", controls);
+$("recover-task").addEventListener("click", () => {
+  if (!canRecover()) return;
+  const task = selected, payload = {expected_revision: recovery.revision};
+  mutate(() => api(`/tasks/${task}/recover`, payload)).catch(e => notice(e.message));
+});
 $("renew-approval").addEventListener("click", () => {
   if (busy || !approval || !snapshot) return;
   const task = selected, payload = {request_id: approval.id, expected_revision: snapshot.state.revision};

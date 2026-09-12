@@ -17,6 +17,8 @@ the exact scope and a separate human decision.
 orphan cleanup candidates visible without changing workflow data.
 [Recovery diagnostics](recovery-diagnostics.md) explain blocked-task preconditions
 in the UI and API; runtime recovery remains an explicit, separately checked action.
+The diagnostic panel now offers guarded operator recovery with an evidence-review
+acknowledgement, matching revision, and no automatic continuation afterward.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |
