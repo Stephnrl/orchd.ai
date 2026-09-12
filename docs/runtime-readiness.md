@@ -58,14 +58,14 @@ runtime evidence. A passed Docker test alone will not authorize a provider.
 
 ## Current status and next action
 
-This workstation still has no Docker CLI. Running the commands here produces
-`status=unavailable`, `reason=docker_cli_missing` and exit 2. The direct machine-readable
-runner also returns exit 2 when both Docker tests are skipped. No real isolation pass
-is claimed.
+Docker Desktop was installed and repaired after this readiness increment was merged.
+On 2026-09-12, both real gates passed on Windows 11 using Docker Desktop Linux
+containers. See [the validation record](docker-validation.md) for the exact image,
+runtime and scope. Earlier unavailable/skipped results below describe the initial
+implementation run, not the current host.
 
-The next external prerequisite is an approved Docker environment and digest-pinned
-Python image. Run `verify-runtime` there and retain its JSON report. After the gates
-pass, the next implementation step is one proposal-only provider adapter, with offline
+For another execution host, run `verify-runtime` there and retain its JSON report.
+The next implementation step is one proposal-only provider adapter, with offline
 conformance tests first and a separate review before any live provider invocation.
 Python remains the control-plane/broker implementation; the JSON boundary stays suitable
 for a future Rust broker if there is a concrete need.
