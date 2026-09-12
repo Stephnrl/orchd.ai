@@ -6,6 +6,8 @@ from .api import serve
 from .engine import Engine
 from .execution import Executor
 from .provider import Scenario
+from .provider import MockProvider
+from .cli_provider import FixtureCliProvider
 
 
 def main():
@@ -13,6 +15,7 @@ def main():
     parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "recover", "doctor", "verify-runtime"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
+    parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
     parser.add_argument("--image", help="Preloaded digest-pinned Python image for Docker")
     parser.add_argument("--task")
     parser.add_argument("--port", type=int, default=8080)
@@ -44,7 +47,7 @@ def main():
         finally:
             store.close()
         return
-    engine = Engine(args.data, Executor("trusted-fixture" if args.trusted_fixture else "docker", args.image))
+    engine = Engine(args.data, Executor("trusted-fixture" if args.trusted_fixture else "docker", args.image), provider_factory=FixtureCliProvider if args.fixture_provider == "cli" else MockProvider)
     try:
         if args.command == "serve":
             serve(engine, args.port)
