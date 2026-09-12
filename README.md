@@ -31,6 +31,8 @@ and API, explaining saved preconditions without probing or changing the runtime.
 checks and a separate mandatory Linux Docker job for pull requests.
 Backup creation now [verifies a staged snapshot before publication](docs/verified-backup.md),
 matching the existing restore safeguard.
+An [on-demand integrity audit](docs/integrity-audit.md) verifies stored artifacts and
+event replay through the CLI or authenticated API without creating a backup.
 
 ```sh
 python -m pip install -r requirements-dev.txt

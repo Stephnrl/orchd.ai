@@ -43,6 +43,9 @@ class Application:
             if method == "GET" and parts == ["storage"]:
                 from .maintenance import storage_usage
                 return 200, storage_usage(self.engine.store)
+            if method == "GET" and parts == ["integrity-report"]:
+                from .maintenance import integrity_report
+                return 200, integrity_report(self.engine.store)
             if method == "POST" and parts == ["tasks"]:
                 if set(payload) - {"title"}:
                     raise Rejected("Unknown create fields")

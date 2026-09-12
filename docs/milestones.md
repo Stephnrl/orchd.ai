@@ -25,6 +25,8 @@ pending or deferred workspace cleanup, avoiding repeated runtime reconciliation.
 and isolates the five mandatory Docker gates in a Linux CI job.
 [Verified backup publication](verified-backup.md) prevents handled copy/audit failures
 from leaving a partially populated backup at the requested destination.
+[On-demand integrity audits](integrity-audit.md) expose the existing backup consistency
+checks without copying data or attempting repairs.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

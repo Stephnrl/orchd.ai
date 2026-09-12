@@ -42,6 +42,22 @@ def audit(store):
             raise Rejected("Projection does not match event history")
 
 
+def integrity_report(store):
+    """Read-only integrity evidence; busy dispatchers reject rather than give a verdict."""
+    with store.exclusive():
+        report = {"version": 1, "generated_at": now(), "status": "failed", "reason": None,
+                  "tasks": None, "records": None, "artifact_references": None}
+        try:
+            plain(store.root / "artifacts")
+            audit(store)
+            report.update(status="passed", tasks=store.db.execute("SELECT count(*) FROM tasks").fetchone()[0],
+                          records=store.db.execute("SELECT count(*) FROM records").fetchone()[0],
+                          artifact_references=store.db.execute("SELECT count(*) FROM artifacts").fetchone()[0])
+        except (Rejected, OSError, sqlite3.DatabaseError, ValueError, TypeError, KeyError):
+            report["reason"] = "database_artifact_or_replay_integrity_failure"
+        return report
+
+
 def backup(store, destination):
     destination = Path(destination).absolute()
     if destination.exists() or destination.is_symlink() or store.root == destination or store.root in destination.parents:
