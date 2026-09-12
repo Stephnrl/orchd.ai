@@ -47,7 +47,7 @@ class RecoveryDiagnosticsTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(result["state"]["state"], "CHANGES_REQUESTED")
         self.assertIsNone(result["state"]["active_operation_id"])
-        self.assertEqual(app.dispatch("POST", route, payload, app.session)[0], 409)
+        self.assertEqual(app.dispatch("POST", route, payload, app.session), (200, result))
 
     def test_expired_approval_explains_recovery_limit(self):
         task, _ = self.interrupted_broker()

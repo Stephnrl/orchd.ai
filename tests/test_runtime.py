@@ -59,8 +59,7 @@ class RuntimeTests(unittest.TestCase):
             self.engine.store.complete_operation(operation, 1, {})
         with self.assertRaises(Rejected):
             self.engine.executor.broker.result(operation, 1)
-        with self.assertRaises(Rejected):
-            self.engine.recover(task, state["revision"])
+        self.assertEqual(self.engine.recover(task, state["revision"]), result)
         self.engine.run(task)
         self.assertEqual(self.engine.task(task)["state"]["state"], "AWAITING_ACTION_APPROVAL")
 

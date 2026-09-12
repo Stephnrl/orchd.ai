@@ -87,6 +87,12 @@ async function state() {
   $("state").textContent = data.state.state.replaceAll("_", " "); $("revision").textContent = "Revision " + data.state.revision;
   $("state-json").textContent = pretty(data); $("approval").hidden = !pending; $("reviewed").checked = false;
   $("recovery-diagnostics").hidden = !diagnostics;
+  const outcome = data.context?.operator_recovery;
+  $("recovery-outcome").hidden = !outcome;
+  if (outcome) $("recovery-outcome").textContent = outcome.cleanup === "deferred" ?
+    "Recovery committed. Workspace cleanup was deferred; inspect the retained files before continuing." :
+    outcome.cleanup === "pending" ? "Recovery committed. Cleanup is pending; retry the original recovery request to finish cleanup." :
+    "Recovery committed and workspace cleanup completed.";
   if (diagnostics) {
     $("recovery-guidance").textContent = diagnostics.reasons.join(" ") + " " + diagnostics.next_step;
     $("recovery-json").textContent = pretty(diagnostics);
