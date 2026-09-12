@@ -73,11 +73,17 @@ async function state() {
   const data = await api(`/tasks/${task}`);
   const spec = await api(`/tasks/${task}/records/${data.state.spec.id}`);
   const pending = data.state.pending_approval ? await api(`/tasks/${task}/records/${data.state.pending_approval.id}`) : null;
+  const diagnostics = data.state.state === "BLOCKED" ? await api(`/tasks/${task}/recovery-diagnostics`) : null;
   if (version !== epoch) return;
   snapshot = data; approval = pending;
   $("task-title").textContent = spec.title; $("task-id").textContent = task;
   $("state").textContent = data.state.state.replaceAll("_", " "); $("revision").textContent = "Revision " + data.state.revision;
   $("state-json").textContent = pretty(data); $("approval").hidden = !pending; $("reviewed").checked = false;
+  $("recovery-diagnostics").hidden = !diagnostics;
+  if (diagnostics) {
+    $("recovery-guidance").textContent = diagnostics.reasons.join(" ") + " " + diagnostics.next_step;
+    $("recovery-json").textContent = pretty(diagnostics);
+  }
   if (pending) {
     $("approval-summary").textContent = `${pending.kind === "plan" ? "Plan" : "Simulated action"} approval · Expires ${pending.expires_at}`;
     $("approval-json").textContent = pretty(pending); references(pending, $("approval-links"));

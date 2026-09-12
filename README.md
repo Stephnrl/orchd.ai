@@ -25,6 +25,8 @@ Expired pending requests support [fresh approval requests](docs/approval-renewal
 without granting a decision or starting execution.
 Read-only [storage usage reports](docs/storage-usage.md) expose artifact quota headroom
 and orphan cleanup candidates through the CLI and authenticated API.
+Blocked tasks expose [recovery diagnostics](docs/recovery-diagnostics.md) in the UI
+and API, explaining saved preconditions without probing or changing the runtime.
 
 ```sh
 python -m pip install -r requirements-dev.txt

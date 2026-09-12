@@ -321,6 +321,37 @@ class Engine:
             self._transition(state, context, "CANCELLED")
             return self.task(task_id)
 
+    def recovery_diagnostics(self, task_id):
+        """Inspect persisted recovery preconditions; never probe or reconcile a process."""
+        with self.store.exclusive():
+            state, context = self.store.task(task_id)
+            rows = self.store.db.execute("SELECT id,stage,generation FROM operations WHERE task_id=? AND status='started' ORDER BY rowid LIMIT 21", (task_id,)).fetchall()
+            reasons = []
+            if state["state"] != "BLOCKED":
+                status = "not_applicable"
+                reasons.append("Task is not BLOCKED; worker recovery is not applicable.")
+            else:
+                status = "unavailable"
+                if not state["active_operation_id"] or len(rows) != 1 or rows[0]["id"] != state["active_operation_id"]:
+                    reasons.append("Recovery needs one unresolved operation matching the task's active operation. Inspect the event history and operation evidence.")
+                if state["resume_state"] not in ("IMPLEMENTING", "TESTING"):
+                    reasons.append("Recovery supports interrupted implementation or testing only. Other stages need operator investigation.")
+                try:
+                    self._approved(state, context, "plan")
+                except (Rejected, KeyError, TypeError, ValueError, OSError):
+                    reasons.append("The plan approval is missing, expired or does not match current evidence. Pending-request renewal cannot extend a decision already granted.")
+                if not reasons:
+                    status = "preconditions_met"
+                    reasons.append("Persisted preconditions permit a recovery attempt. Recovery must still verify the broker result or prove Docker cleanup; this report does not establish that execution stopped.")
+            return {"version": 1, "task_id": task_id, "revision": state["revision"], "generated_at": now(),
+                    "state": state["state"], "resume_state": state["resume_state"],
+                    "active_operation_id": state["active_operation_id"],
+                    "unresolved_operations": [dict(row) for row in rows[:20]], "operations_truncated": len(rows) > 20,
+                    "recovery_status": status, "reasons": reasons, "runtime_checked": False,
+                    "next_step": "Request operator recovery using this revision; runtime checks may still reject it." if status == "preconditions_met" else
+                                 "Inspect retained evidence; do not delete journals or repeat uncertain execution." if status == "unavailable" else
+                                 "Use the task's ordinary approval, execution or cancellation controls."}
+
     def recover(self, task_id, expected_revision, principal="local-operator"):
         """Operator requests reconciliation; no arbitrary resume state or approval bypass."""
         with self.store.exclusive():
