@@ -7,6 +7,8 @@ real providers remain disabled pending their
 provider-specific reviews. See [local management](local-management.md) and
 [provider adapter](provider-adapter.md) for the implemented scope and limitations.
 Worker hardening now includes [mandatory resource-containment gates](docker-resource-gates.md).
+The human control boundary also supports [durable cancellation](operator-cancellation.md)
+between operations.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

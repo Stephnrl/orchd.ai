@@ -257,6 +257,35 @@ class Engine:
             self.after_operation(stage)
         return result
 
+    def cancel(self, task_id, expected_revision, reason, principal="local-operator"):
+        """Cancel at a quiescent boundary; never claim to stop unresolved execution."""
+        if type(expected_revision) is not int or expected_revision < 0 or not isinstance(reason, str):
+            raise Rejected("Invalid cancellation request")
+        reason = reason.strip()
+        if not 1 <= len(reason) <= 500 or any(ord(c) < 32 or ord(c) == 127 for c in reason) or redact(reason) != reason:
+            raise Rejected("Invalid cancellation reason")
+        with self.store.exclusive(), self.store.transaction():
+            state, context = self.store.task(task_id)
+            previous = context.get("cancellation")
+            if state["state"] == "CANCELLED" and previous and all(previous[k] == v for k, v in (("expected_revision", expected_revision), ("reason", reason), ("principal", principal))):
+                return self.task(task_id)
+            if state["state"] in TERMINAL or state["revision"] != expected_revision:
+                raise Rejected("Cancellation requires a current nonterminal task")
+            unresolved = self.store.db.execute("SELECT 1 FROM operations WHERE task_id=? AND status='started' LIMIT 1", (task_id,)).fetchone()
+            if state["active_operation_id"] or state["active_invocation_id"] or state["container_id"] or unresolved:
+                raise Rejected("Reconcile unresolved execution before cancellation")
+            completed_action = self.store.db.execute("SELECT 1 FROM records WHERE task_id=? AND kind='ExternalActionReceipt' AND json_extract(payload,'$.outcome')='succeeded' LIMIT 1", (task_id,)).fetchone()
+            if state["state"] == "PR_CREATED" or completed_action:
+                raise Rejected("Cancellation cannot undo a completed external action")
+            context["cancellation"] = {"principal": principal, "reason": reason, "expected_revision": expected_revision,
+                                       "cancelled_at": now(), "previous_state": state["state"], "pending_approval": state["pending_approval"]}
+            state["pending_approval"] = None
+            state["resume_state"] = None
+            state["assigned_role"] = None
+            self._event(state, context, "operator_cancellation", context["cancellation"], role="human")
+            self._transition(state, context, "CANCELLED")
+            return self.task(task_id)
+
     def recover(self, task_id, expected_revision, principal="local-operator"):
         """Operator requests reconciliation; no arbitrary resume state or approval bypass."""
         with self.store.exclusive():
