@@ -1,0 +1,564 @@
+{
+  "TaskSpec": {
+    "schema_version": "1.0.0",
+    "contract_type": "TaskSpec",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "revision": 0,
+    "title": "example",
+    "request": {
+      "artifact_id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "example",
+      "size_bytes": 0,
+      "trust": "untrusted",
+      "producer_id": "example",
+      "redacted": false
+    },
+    "repository": {
+      "repository_id": "example",
+      "base_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "branch": "example"
+    },
+    "acceptance_criteria": [
+      "example"
+    ],
+    "constraints": [],
+    "allowed_paths": [
+      "example"
+    ],
+    "external_references": [],
+    "confirmed_by": null
+  },
+  "ClarificationRequest": {
+    "schema_version": "1.0.0",
+    "contract_type": "ClarificationRequest",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "spec": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "invocation_id": "example",
+    "questions": [
+      {
+        "question_id": "example",
+        "question": "example"
+      }
+    ]
+  },
+  "ClarificationResponse": {
+    "schema_version": "1.0.0",
+    "contract_type": "ClarificationResponse",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "request": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "actor": {
+      "principal_id": "example",
+      "role": "human"
+    },
+    "answers": [
+      {
+        "question_id": "example",
+        "answer": "example"
+      }
+    ]
+  },
+  "ImplementationPlan": {
+    "schema_version": "1.0.0",
+    "contract_type": "ImplementationPlan",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "spec": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "repository": {
+      "repository_id": "example",
+      "base_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "branch": "example"
+    },
+    "planner_invocation_id": "example",
+    "steps": [
+      "example"
+    ],
+    "allowed_paths": [
+      "example"
+    ],
+    "permitted_tests": [
+      {
+        "recipe_id": "example",
+        "recipe_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "argv": [
+          "example"
+        ],
+        "cwd": ".",
+        "timeout_seconds": 1
+      }
+    ],
+    "risks": [],
+    "max_changed_bytes": 1,
+    "max_attempts": 1
+  },
+  "WorkOrder": {
+    "schema_version": "1.0.0",
+    "contract_type": "WorkOrder",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "spec": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "plan": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "plan_approval": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "repository": {
+      "repository_id": "example",
+      "base_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "branch": "example"
+    },
+    "attempt": 1,
+    "workspace_id": "example",
+    "allowed_paths": [
+      "example"
+    ],
+    "permitted_tests": [
+      {
+        "recipe_id": "example",
+        "recipe_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "argv": [
+          "example"
+        ],
+        "cwd": ".",
+        "timeout_seconds": 1
+      }
+    ],
+    "allowed_capabilities": [],
+    "deadline": "2026-09-12T14:00:00Z",
+    "max_changed_bytes": 1
+  },
+  "AgentInvocation": {
+    "schema_version": "1.0.0",
+    "contract_type": "AgentInvocation",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "role": "human",
+    "provider": "example",
+    "model": null,
+    "adapter_version": "example",
+    "prompt_version": "example",
+    "system_instructions": {
+      "artifact_id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "example",
+      "size_bytes": 0,
+      "trust": "untrusted",
+      "producer_id": "example",
+      "redacted": false
+    },
+    "supplied_artifacts": [],
+    "context_manifest": {
+      "artifact_id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "example",
+      "size_bytes": 0,
+      "trust": "untrusted",
+      "producer_id": "example",
+      "redacted": false
+    },
+    "workspace_id": null,
+    "allowed_capabilities": [],
+    "timeout_seconds": 1,
+    "max_output_bytes": 1,
+    "expected_result_contract": "example"
+  },
+  "AgentInvocationReceipt": {
+    "schema_version": "1.0.0",
+    "contract_type": "AgentInvocationReceipt",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "invocation_id": "example",
+    "provider": "example",
+    "model": null,
+    "started_at": "2026-09-12T14:00:00Z",
+    "ended_at": "2026-09-12T14:00:00Z",
+    "exit_code": null,
+    "stdout": {
+      "artifact_id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "example",
+      "size_bytes": 0,
+      "trust": "untrusted",
+      "producer_id": "example",
+      "redacted": false
+    },
+    "stderr": {
+      "artifact_id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "example",
+      "size_bytes": 0,
+      "trust": "untrusted",
+      "producer_id": "example",
+      "redacted": false
+    },
+    "output_truncated": false,
+    "structured_result": null,
+    "input_tokens": null,
+    "output_tokens": null,
+    "cost": null,
+    "error": null
+  },
+  "ToolRequest": {
+    "schema_version": "1.0.0",
+    "contract_type": "ToolRequest",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "operation_id": "example",
+    "invocation_id": null,
+    "actor": {
+      "principal_id": "example",
+      "role": "human"
+    },
+    "work_order": null,
+    "workspace_id": null,
+    "tool": "apply_patch",
+    "command": null,
+    "target_paths": [],
+    "payload": null,
+    "secret_references": [],
+    "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "policy_version": "example"
+  },
+  "ToolDecision": {
+    "schema_version": "1.0.0",
+    "contract_type": "ToolDecision",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "operation_id": "example",
+    "request": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "policy_version": "example",
+    "decision": "allow",
+    "reasons": [
+      "example"
+    ],
+    "effective_request": null,
+    "approval_request": null,
+    "expires_at": "2026-09-12T14:00:00Z"
+  },
+  "PatchReceipt": {
+    "schema_version": "1.0.0",
+    "contract_type": "PatchReceipt",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "operation_id": "example",
+    "work_order": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "producer": {
+      "principal_id": "example",
+      "role": "action_broker"
+    },
+    "repository": {
+      "repository_id": "example",
+      "base_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "branch": "example"
+    },
+    "started_at": "2026-09-12T14:00:00Z",
+    "ended_at": "2026-09-12T14:00:00Z",
+    "requested_commands": [],
+    "executed_commands": [],
+    "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "diff": {
+      "artifact_id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "example",
+      "size_bytes": 0,
+      "trust": "untrusted",
+      "producer_id": "example",
+      "redacted": false
+    },
+    "changed_files": [
+      {
+        "path": "example",
+        "change": "add",
+        "before_sha256": null,
+        "after_sha256": null
+      }
+    ],
+    "changed_bytes": 0
+  },
+  "TestRequest": {
+    "schema_version": "1.0.0",
+    "contract_type": "TestRequest",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "operation_id": "example",
+    "work_order": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "patch": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "command": {
+      "recipe_id": "example",
+      "recipe_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "argv": [
+        "example"
+      ],
+      "cwd": ".",
+      "timeout_seconds": 1
+    },
+    "runner_image_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "TestReceipt": {
+    "schema_version": "1.0.0",
+    "contract_type": "TestReceipt",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "operation_id": "example",
+    "request": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "patch": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "producer": {
+      "principal_id": "example",
+      "role": "test_runner"
+    },
+    "requested_command": {
+      "recipe_id": "example",
+      "recipe_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "argv": [
+        "example"
+      ],
+      "cwd": ".",
+      "timeout_seconds": 1
+    },
+    "executed_argv": [
+      "example"
+    ],
+    "working_directory": "example",
+    "environment": {
+      "os": "example",
+      "architecture": "example",
+      "tool_version": "example",
+      "image_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "started_at": "2026-09-12T14:00:00Z",
+    "ended_at": "2026-09-12T14:00:00Z",
+    "exit_code": 0,
+    "outcome": "passed",
+    "stdout": {
+      "artifact_id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "example",
+      "size_bytes": 0,
+      "trust": "untrusted",
+      "producer_id": "example",
+      "redacted": false
+    },
+    "stderr": {
+      "artifact_id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "example",
+      "size_bytes": 0,
+      "trust": "untrusted",
+      "producer_id": "example",
+      "redacted": false
+    },
+    "output_truncated": false,
+    "error": null
+  },
+  "ReviewRequest": {
+    "schema_version": "1.0.0",
+    "contract_type": "ReviewRequest",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "spec": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "plan": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "patch": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "test_receipts": [
+      {
+        "id": "example",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "implementer_invocation_id": "example",
+    "reviewer_invocation_id": "example"
+  },
+  "ReviewDecision": {
+    "schema_version": "1.0.0",
+    "contract_type": "ReviewDecision",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "request": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "reviewer_invocation_id": "example",
+    "decision": "ACCEPT",
+    "findings": [],
+    "summary": "example"
+  },
+  "ApprovalRequest": {
+    "schema_version": "1.0.0",
+    "contract_type": "ApprovalRequest",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "kind": "plan",
+    "subject": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "subject_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "task_revision": 0,
+    "policy_version": "example",
+    "summary": "example",
+    "evidence": [
+      {
+        "id": "example",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "expires_at": "2026-09-12T14:00:00Z"
+  },
+  "ApprovalDecision": {
+    "schema_version": "1.0.0",
+    "contract_type": "ApprovalDecision",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "request": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "subject_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "actor": {
+      "principal_id": "example",
+      "role": "human"
+    },
+    "decision": "approve",
+    "reason": "example",
+    "decided_at": "2026-09-12T14:00:00Z"
+  },
+  "ExternalActionReceipt": {
+    "schema_version": "1.0.0",
+    "contract_type": "ExternalActionReceipt",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "operation_id": "example",
+    "request": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "approval": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "adapter": "example",
+    "simulated": false,
+    "destination": "example",
+    "outcome": "succeeded",
+    "external_id": null,
+    "external_url": null,
+    "started_at": "2026-09-12T14:00:00Z",
+    "ended_at": "2026-09-12T14:00:00Z",
+    "response": null,
+    "error": null
+  },
+  "TaskEvent": {
+    "schema_version": "1.0.0",
+    "contract_type": "TaskEvent",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "sequence": 1,
+    "task_revision": 0,
+    "event_type": "example",
+    "actor": {
+      "principal_id": "example",
+      "role": "human"
+    },
+    "provider": null,
+    "model": null,
+    "invocation_id": null,
+    "operation_id": null,
+    "from_state": null,
+    "to_state": null,
+    "payload": {
+      "artifact_id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "example",
+      "size_bytes": 0,
+      "trust": "untrusted",
+      "producer_id": "example",
+      "redacted": false
+    },
+    "artifacts": []
+  },
+  "TaskState": {
+    "schema_version": "1.0.0",
+    "contract_type": "TaskState",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "revision": 0,
+    "state": "DRAFT_SPEC",
+    "assigned_role": null,
+    "active_invocation_id": null,
+    "active_operation_id": null,
+    "container_id": null,
+    "resume_state": null,
+    "spec": null,
+    "plan": null,
+    "work_order": null,
+    "patch": null,
+    "pending_approval": null,
+    "last_event_sequence": 0,
+    "error": null
+  }
+}

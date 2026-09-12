@@ -1,0 +1,2550 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:orchd:contracts:1.0.0",
+  "title": "orchd.ai v1 contracts",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/TaskSpec"
+    },
+    {
+      "$ref": "#/$defs/ClarificationRequest"
+    },
+    {
+      "$ref": "#/$defs/ClarificationResponse"
+    },
+    {
+      "$ref": "#/$defs/ImplementationPlan"
+    },
+    {
+      "$ref": "#/$defs/WorkOrder"
+    },
+    {
+      "$ref": "#/$defs/AgentInvocation"
+    },
+    {
+      "$ref": "#/$defs/AgentInvocationReceipt"
+    },
+    {
+      "$ref": "#/$defs/ToolRequest"
+    },
+    {
+      "$ref": "#/$defs/ToolDecision"
+    },
+    {
+      "$ref": "#/$defs/PatchReceipt"
+    },
+    {
+      "$ref": "#/$defs/TestRequest"
+    },
+    {
+      "$ref": "#/$defs/TestReceipt"
+    },
+    {
+      "$ref": "#/$defs/ReviewRequest"
+    },
+    {
+      "$ref": "#/$defs/ReviewDecision"
+    },
+    {
+      "$ref": "#/$defs/ApprovalRequest"
+    },
+    {
+      "$ref": "#/$defs/ApprovalDecision"
+    },
+    {
+      "$ref": "#/$defs/ExternalActionReceipt"
+    },
+    {
+      "$ref": "#/$defs/TaskEvent"
+    },
+    {
+      "$ref": "#/$defs/TaskState"
+    }
+  ],
+  "$defs": {
+    "ArtifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "trust": {
+          "type": "string",
+          "enum": [
+            "untrusted",
+            "trusted_receipt",
+            "human_approved"
+          ]
+        },
+        "producer_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "redacted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "sha256",
+        "media_type",
+        "size_bytes",
+        "trust",
+        "producer_id",
+        "redacted"
+      ]
+    },
+    "DocumentRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "id",
+        "sha256"
+      ]
+    },
+    "SecretRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "broker": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "reference": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        }
+      },
+      "required": [
+        "broker",
+        "reference"
+      ]
+    },
+    "RepositoryRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "base_commit": {
+          "type": "string",
+          "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+        },
+        "branch": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "repository_id",
+        "base_commit",
+        "branch"
+      ]
+    },
+    "Error": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ]
+    },
+    "Finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": [
+            "info",
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "line": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "severity",
+        "message",
+        "path",
+        "line"
+      ]
+    },
+    "Command": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "recipe_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "recipe_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "cwd": {
+          "type": "string",
+          "enum": [
+            ".",
+            "workspace"
+          ]
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        }
+      },
+      "required": [
+        "recipe_id",
+        "recipe_sha256",
+        "argv",
+        "cwd",
+        "timeout_seconds"
+      ]
+    },
+    "EnvironmentMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "image_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "os",
+        "architecture",
+        "tool_version",
+        "image_digest"
+      ]
+    },
+    "Actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "principal_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "human",
+            "project_manager",
+            "lead_clarifier",
+            "lead_planner",
+            "junior",
+            "reviewer",
+            "guardian",
+            "orchestrator",
+            "test_runner",
+            "action_broker"
+          ]
+        }
+      },
+      "required": [
+        "principal_id",
+        "role"
+      ]
+    },
+    "TaskSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "TaskSpec"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "repository": {
+          "$ref": "#/$defs/RepositoryRef"
+        },
+        "acceptance_criteria": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "allowed_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$"
+          },
+          "minItems": 1
+        },
+        "external_references": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "confirmed_by": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "revision",
+        "title",
+        "request",
+        "repository",
+        "acceptance_criteria",
+        "constraints",
+        "allowed_paths",
+        "external_references",
+        "confirmed_by"
+      ]
+    },
+    "ClarificationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "ClarificationRequest"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "spec": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "invocation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "question_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+              },
+              "question": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "question_id",
+              "question"
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "spec",
+        "invocation_id",
+        "questions"
+      ]
+    },
+    "ClarificationResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "ClarificationResponse"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "request": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        },
+        "answers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "question_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+              },
+              "answer": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "question_id",
+              "answer"
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "request",
+        "actor",
+        "answers"
+      ]
+    },
+    "ImplementationPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "ImplementationPlan"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "spec": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "repository": {
+          "$ref": "#/$defs/RepositoryRef"
+        },
+        "planner_invocation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "allowed_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$"
+          },
+          "minItems": 1
+        },
+        "permitted_tests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Command"
+          },
+          "minItems": 1
+        },
+        "risks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "max_changed_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "spec",
+        "repository",
+        "planner_invocation_id",
+        "steps",
+        "allowed_paths",
+        "permitted_tests",
+        "risks",
+        "max_changed_bytes",
+        "max_attempts"
+      ]
+    },
+    "WorkOrder": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "WorkOrder"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "spec": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "plan": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "plan_approval": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "repository": {
+          "$ref": "#/$defs/RepositoryRef"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "allowed_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$"
+          },
+          "minItems": 1
+        },
+        "permitted_tests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Command"
+          },
+          "minItems": 1
+        },
+        "allowed_capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "deadline": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "max_changed_bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "spec",
+        "plan",
+        "plan_approval",
+        "repository",
+        "attempt",
+        "workspace_id",
+        "allowed_paths",
+        "permitted_tests",
+        "allowed_capabilities",
+        "deadline",
+        "max_changed_bytes"
+      ]
+    },
+    "AgentInvocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "AgentInvocation"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "human",
+            "project_manager",
+            "lead_clarifier",
+            "lead_planner",
+            "junior",
+            "reviewer",
+            "guardian",
+            "orchestrator",
+            "test_runner",
+            "action_broker"
+          ]
+        },
+        "provider": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "adapter_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "system_instructions": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "supplied_artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ArtifactRef"
+          },
+          "minItems": 0
+        },
+        "context_manifest": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "workspace_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "allowed_capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "max_output_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expected_result_contract": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "role",
+        "provider",
+        "model",
+        "adapter_version",
+        "prompt_version",
+        "system_instructions",
+        "supplied_artifacts",
+        "context_manifest",
+        "workspace_id",
+        "allowed_capabilities",
+        "timeout_seconds",
+        "max_output_bytes",
+        "expected_result_contract"
+      ]
+    },
+    "AgentInvocationReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "AgentInvocationReceipt"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "invocation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "provider": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "ended_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stdout": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "stderr": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "output_truncated": {
+          "type": "boolean"
+        },
+        "structured_result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cost": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "amount": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "currency": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "amount",
+                "currency"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Error"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "invocation_id",
+        "provider",
+        "model",
+        "started_at",
+        "ended_at",
+        "exit_code",
+        "stdout",
+        "stderr",
+        "output_truncated",
+        "structured_result",
+        "input_tokens",
+        "output_tokens",
+        "cost",
+        "error"
+      ]
+    },
+    "ToolRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "ToolRequest"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "invocation_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        },
+        "work_order": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "workspace_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tool": {
+          "type": "string",
+          "enum": [
+            "apply_patch",
+            "test",
+            "git",
+            "github",
+            "jira",
+            "secret",
+            "network",
+            "container",
+            "infrastructure"
+          ]
+        },
+        "command": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Command"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$"
+          },
+          "minItems": 0
+        },
+        "payload": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "secret_references": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SecretRef"
+          },
+          "minItems": 0
+        },
+        "request_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "policy_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "operation_id",
+        "invocation_id",
+        "actor",
+        "work_order",
+        "workspace_id",
+        "tool",
+        "command",
+        "target_paths",
+        "payload",
+        "secret_references",
+        "request_sha256",
+        "policy_version"
+      ]
+    },
+    "ToolDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "ToolDecision"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "request": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "policy_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "deny",
+            "modify",
+            "require_human_approval"
+          ]
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "effective_request": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approval_request": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "operation_id",
+        "request",
+        "policy_version",
+        "decision",
+        "reasons",
+        "effective_request",
+        "approval_request",
+        "expires_at"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "decision": {
+                "const": "modify"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "effective_request": {
+                "$ref": "#/$defs/DocumentRef"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "decision": {
+                "const": "require_human_approval"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "approval_request": {
+                "$ref": "#/$defs/DocumentRef"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "PatchReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "PatchReceipt"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "work_order": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "producer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "principal_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            "role": {
+              "const": "action_broker"
+            }
+          },
+          "required": [
+            "principal_id",
+            "role"
+          ]
+        },
+        "repository": {
+          "$ref": "#/$defs/RepositoryRef"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "ended_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "requested_commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Command"
+          },
+          "minItems": 0
+        },
+        "executed_commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "argv": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1
+              },
+              "working_directory": {
+                "type": "string",
+                "minLength": 1
+              },
+              "started_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+              },
+              "ended_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+              },
+              "exit_code": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "stdout": {
+                "$ref": "#/$defs/ArtifactRef"
+              },
+              "stderr": {
+                "$ref": "#/$defs/ArtifactRef"
+              }
+            },
+            "required": [
+              "argv",
+              "working_directory",
+              "started_at",
+              "ended_at",
+              "exit_code",
+              "stdout",
+              "stderr"
+            ]
+          },
+          "minItems": 0
+        },
+        "snapshot_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "diff": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "changed_files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$"
+              },
+              "change": {
+                "type": "string",
+                "enum": [
+                  "add",
+                  "modify",
+                  "delete"
+                ]
+              },
+              "before_sha256": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "after_sha256": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "change",
+              "before_sha256",
+              "after_sha256"
+            ]
+          },
+          "minItems": 1
+        },
+        "changed_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "operation_id",
+        "work_order",
+        "producer",
+        "repository",
+        "started_at",
+        "ended_at",
+        "requested_commands",
+        "executed_commands",
+        "snapshot_sha256",
+        "diff",
+        "changed_files",
+        "changed_bytes"
+      ]
+    },
+    "TestRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "TestRequest"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "work_order": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "patch": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "snapshot_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "command": {
+          "$ref": "#/$defs/Command"
+        },
+        "runner_image_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "operation_id",
+        "work_order",
+        "patch",
+        "snapshot_sha256",
+        "command",
+        "runner_image_digest"
+      ]
+    },
+    "TestReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "TestReceipt"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "request": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "patch": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "snapshot_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "producer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "principal_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            "role": {
+              "const": "test_runner"
+            }
+          },
+          "required": [
+            "principal_id",
+            "role"
+          ]
+        },
+        "requested_command": {
+          "$ref": "#/$defs/Command"
+        },
+        "executed_argv": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "working_directory": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environment": {
+          "$ref": "#/$defs/EnvironmentMetadata"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "ended_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "failed",
+            "timeout",
+            "error"
+          ]
+        },
+        "stdout": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "stderr": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "output_truncated": {
+          "type": "boolean"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Error"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "operation_id",
+        "request",
+        "patch",
+        "snapshot_sha256",
+        "producer",
+        "requested_command",
+        "executed_argv",
+        "working_directory",
+        "environment",
+        "started_at",
+        "ended_at",
+        "exit_code",
+        "outcome",
+        "stdout",
+        "stderr",
+        "output_truncated",
+        "error"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "passed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "exit_code": {
+                "const": 0
+              },
+              "error": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ReviewRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "ReviewRequest"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "spec": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "plan": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "patch": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "test_receipts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DocumentRef"
+          },
+          "minItems": 1
+        },
+        "implementer_invocation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "reviewer_invocation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "spec",
+        "plan",
+        "patch",
+        "test_receipts",
+        "implementer_invocation_id",
+        "reviewer_invocation_id"
+      ]
+    },
+    "ReviewDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "ReviewDecision"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "request": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "reviewer_invocation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "ACCEPT",
+            "REJECT",
+            "NEEDS_CHANGES"
+          ]
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          },
+          "minItems": 0
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "request",
+        "reviewer_invocation_id",
+        "decision",
+        "findings",
+        "summary"
+      ]
+    },
+    "ApprovalRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "ApprovalRequest"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "plan",
+            "action"
+          ]
+        },
+        "subject": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "subject_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "task_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "policy_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DocumentRef"
+          },
+          "minItems": 1
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "kind",
+        "subject",
+        "subject_sha256",
+        "task_revision",
+        "policy_version",
+        "summary",
+        "evidence",
+        "expires_at"
+      ]
+    },
+    "ApprovalDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "ApprovalDecision"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "request": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "subject_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "actor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "principal_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            "role": {
+              "const": "human"
+            }
+          },
+          "required": [
+            "principal_id",
+            "role"
+          ]
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "approve",
+            "reject"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decided_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "request",
+        "subject_sha256",
+        "actor",
+        "decision",
+        "reason",
+        "decided_at"
+      ]
+    },
+    "ExternalActionReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "ExternalActionReceipt"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "request": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "approval": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "adapter": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "simulated": {
+          "type": "boolean"
+        },
+        "destination": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "succeeded",
+            "failed",
+            "unknown"
+          ]
+        },
+        "external_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "external_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "ended_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "response": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Error"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "operation_id",
+        "request",
+        "approval",
+        "adapter",
+        "simulated",
+        "destination",
+        "outcome",
+        "external_id",
+        "external_url",
+        "started_at",
+        "ended_at",
+        "response",
+        "error"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "simulated": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "external_url": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "TaskEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "TaskEvent"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "task_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "event_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "invocation_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "operation_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "from_state": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "DRAFT_SPEC",
+                "AWAITING_CLARIFICATION",
+                "SPEC_READY",
+                "PLANNING",
+                "AWAITING_PLAN_APPROVAL",
+                "READY_FOR_IMPLEMENTATION",
+                "IMPLEMENTING",
+                "TESTING",
+                "REVIEWING",
+                "CHANGES_REQUESTED",
+                "AWAITING_ACTION_APPROVAL",
+                "READY_FOR_PR",
+                "PR_CREATED",
+                "BLOCKED",
+                "FAILED",
+                "COMPLETED",
+                "CANCELLED"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "to_state": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "DRAFT_SPEC",
+                "AWAITING_CLARIFICATION",
+                "SPEC_READY",
+                "PLANNING",
+                "AWAITING_PLAN_APPROVAL",
+                "READY_FOR_IMPLEMENTATION",
+                "IMPLEMENTING",
+                "TESTING",
+                "REVIEWING",
+                "CHANGES_REQUESTED",
+                "AWAITING_ACTION_APPROVAL",
+                "READY_FOR_PR",
+                "PR_CREATED",
+                "BLOCKED",
+                "FAILED",
+                "COMPLETED",
+                "CANCELLED"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "payload": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ArtifactRef"
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "sequence",
+        "task_revision",
+        "event_type",
+        "actor",
+        "provider",
+        "model",
+        "invocation_id",
+        "operation_id",
+        "from_state",
+        "to_state",
+        "payload",
+        "artifacts"
+      ]
+    },
+    "TaskState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "TaskState"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "DRAFT_SPEC",
+            "AWAITING_CLARIFICATION",
+            "SPEC_READY",
+            "PLANNING",
+            "AWAITING_PLAN_APPROVAL",
+            "READY_FOR_IMPLEMENTATION",
+            "IMPLEMENTING",
+            "TESTING",
+            "REVIEWING",
+            "CHANGES_REQUESTED",
+            "AWAITING_ACTION_APPROVAL",
+            "READY_FOR_PR",
+            "PR_CREATED",
+            "BLOCKED",
+            "FAILED",
+            "COMPLETED",
+            "CANCELLED"
+          ]
+        },
+        "assigned_role": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "human",
+                "project_manager",
+                "lead_clarifier",
+                "lead_planner",
+                "junior",
+                "reviewer",
+                "guardian",
+                "orchestrator",
+                "test_runner",
+                "action_broker"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "active_invocation_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "active_operation_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "container_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resume_state": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "DRAFT_SPEC",
+                "AWAITING_CLARIFICATION",
+                "SPEC_READY",
+                "PLANNING",
+                "AWAITING_PLAN_APPROVAL",
+                "READY_FOR_IMPLEMENTATION",
+                "IMPLEMENTING",
+                "TESTING",
+                "REVIEWING",
+                "CHANGES_REQUESTED",
+                "AWAITING_ACTION_APPROVAL",
+                "READY_FOR_PR",
+                "PR_CREATED"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "work_order": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "patch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pending_approval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_event_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Error"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "revision",
+        "state",
+        "assigned_role",
+        "active_invocation_id",
+        "active_operation_id",
+        "container_id",
+        "resume_state",
+        "spec",
+        "plan",
+        "work_order",
+        "patch",
+        "pending_approval",
+        "last_event_sequence",
+        "error"
+      ]
+    }
+  }
+}
