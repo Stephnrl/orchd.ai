@@ -70,7 +70,8 @@ marker (preventing a late broker launch), and inspects/removes only the exact la
 operation container. A daemon error is not evidence of absence. Local fixture mode
 cannot independently prove an unknown orphan process exited, so it remains BLOCKED.
 Invalid existing journals are retained for investigation. Expired approvals are never
-bypassed; renewal, cancellation and general operator remediation remain future work.
+bypassed. Later milestones add [pending approval renewal](approval-renewal.md) and
+[quiescent cancellation](operator-cancellation.md); general remediation remains future work.
 
 The single-host dispatcher lock remains the scheduling boundary. Generations reject
 stale results but do not provide distributed consensus or exactly-once remote execution.
@@ -124,8 +125,9 @@ Backups do not copy live broker locks/journals or workspaces. Committed receipt 
 is already an artifact; unresolved restored operations remain blocked rather than
 assuming ownership of original-host processes. Manifests detect accidental corruption,
 not malicious replacement by someone who can rewrite both backup and manifest. Backups
-must be stored under trusted access controls. Interrupted backup/restore directories
-are left for inspection and are never implicitly reused or recursively removed.
+must be stored under trusted access controls. Interrupted backup directories remain
+for inspection. Restore now uses [verified staging publication](verified-restore.md),
+with handled-failure cleanup and separate instructions for abandoned staging directories.
 
 ## Validation and Docker gates
 

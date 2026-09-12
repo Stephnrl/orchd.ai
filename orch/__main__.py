@@ -12,12 +12,13 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "recover", "cancel", "doctor", "verify-runtime", "provider-check"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "recover", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
     parser.add_argument("--image", help="Preloaded digest-pinned Python image for Docker")
     parser.add_argument("--task")
+    parser.add_argument("--request-id", help="Expired pending approval request ID")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--destination")
     parser.add_argument("--expected-revision", type=int)
@@ -26,6 +27,10 @@ def main():
     parser.add_argument("--executable", help="Absolute provider executable path for read-only inventory")
     parser.add_argument("--expected-sha256", help="Approved executable digest for provider-check")
     args = parser.parse_args()
+    if args.command == "renew-approval" and (not args.task or not args.request_id or args.expected_revision is None):
+        parser.error("renew-approval requires --task, --request-id and --expected-revision")
+    if args.command == "renew-approval" and not (Path(args.data) / "orch.sqlite").is_file():
+        parser.error("renew-approval requires an existing workflow database")
     if args.command in ("backup", "restore") and not args.destination:
         parser.error(args.command + " requires --destination")
     if args.command == "cancel" and (not args.task or args.expected_revision is None or args.reason is None):
@@ -63,7 +68,7 @@ def main():
         finally:
             store.close()
         return
-    engine = Engine(args.data, Executor("trusted-fixture" if args.trusted_fixture or args.command == "cancel" else "docker", args.image), provider_factory=FixtureCliProvider if args.fixture_provider == "cli" else MockProvider)
+    engine = Engine(args.data, Executor("trusted-fixture" if args.trusted_fixture or args.command in ("cancel", "renew-approval") else "docker", args.image), provider_factory=FixtureCliProvider if args.fixture_provider == "cli" else MockProvider)
     try:
         if args.command == "serve":
             serve(engine, args.port)
@@ -73,6 +78,8 @@ def main():
             print(json.dumps(engine.recover(args.task, args.expected_revision)))
         elif args.command == "cancel":
             print(json.dumps(engine.cancel(args.task, args.expected_revision, args.reason)))
+        elif args.command == "renew-approval":
+            print(json.dumps(engine.renew_approval(args.task, args.request_id, args.expected_revision)))
         else:
             task = engine.create_task(scenario=Scenario(reviews=("NEEDS_CHANGES", "ACCEPT")))
             engine.run(task)

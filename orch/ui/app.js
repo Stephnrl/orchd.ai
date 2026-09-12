@@ -7,7 +7,11 @@ const pretty = value => JSON.stringify(value, null, 2);
 function notice(message) { $("notice").textContent = message; }
 function controls() {
   $("run").disabled = busy || !snapshot || !!snapshot.state.pending_approval || ["COMPLETED", "FAILED", "CANCELLED", "BLOCKED"].includes(snapshot.state.state);
-  $("approve").disabled = $("reject").disabled = busy || !approval || !$("reviewed").checked;
+  const expired = !!approval && Date.parse(approval.expires_at) <= Date.now();
+  $("approve").disabled = $("reject").disabled = busy || !approval || expired || !$("reviewed").checked;
+  $("renew-approval").hidden = !expired;
+  $("renew-approval").disabled = busy || !expired;
+  $("approval-expiry").textContent = expired ? "This request has expired. Request a fresh approval, then review its evidence and decide separately." : "";
   $("create").querySelector("button").disabled = busy;
   $("cancellation").hidden = !snapshot || ["COMPLETED", "FAILED", "CANCELLED", "PR_CREATED"].includes(snapshot.state.state);
   $("cancel-task").disabled = busy || !snapshot || !!snapshot.state.active_operation_id || !!snapshot.state.active_invocation_id || !!snapshot.state.container_id;
@@ -126,6 +130,11 @@ $("refresh").addEventListener("click", () => tasks().catch(e => notice(e.message
 $("more-tasks").addEventListener("click", () => tasks(true).catch(e => notice(e.message)));
 $("more-records").addEventListener("click", () => records(true).catch(e => notice(e.message)));
 $("reviewed").addEventListener("change", controls);
+$("renew-approval").addEventListener("click", () => {
+  if (busy || !approval || !snapshot) return;
+  const task = selected, payload = {request_id: approval.id, expected_revision: snapshot.state.revision};
+  mutate(() => api(`/tasks/${task}/renew-approval`, payload)).catch(e => notice(e.message));
+});
 $("create").addEventListener("submit", e => {
   e.preventDefault(); mutate(async () => { const result = await api("/tasks", {title: $("title").value}); epoch++; selected = result.task_id; cursor = 0; $("cancel-reason").value = ""; $("cancellation").open = false; $("events").replaceChildren(); $("evidence").hidden = true; $("empty").hidden = true; $("detail").hidden = false; }).catch(e => notice(e.message));
 });
@@ -140,4 +149,4 @@ for (const decision of ["approve", "reject"]) $(decision).addEventListener("clic
   const task = selected, payload = {request_id: approval.id, decision, expected_revision: snapshot.state.revision};
   mutate(() => api(`/tasks/${task}/approvals`, payload)).catch(e => notice(e.message));
 });
-setInterval(() => replay().catch(e => notice(e.message)), 2000);
+setInterval(() => { controls(); replay().catch(e => notice(e.message)); }, 2000);
