@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "recover", "doctor", "verify-runtime", "provider-check"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "recover", "cancel", "doctor", "verify-runtime", "provider-check"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -21,10 +21,15 @@ def main():
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--destination")
     parser.add_argument("--expected-revision", type=int)
+    parser.add_argument("--reason", help="One-line operator cancellation reason (1–500 characters)")
     parser.add_argument("--provider", choices=["github_copilot_cli", "abc_binary_ai_placeholder"])
     parser.add_argument("--executable", help="Absolute provider executable path for read-only inventory")
     parser.add_argument("--expected-sha256", help="Approved executable digest for provider-check")
     args = parser.parse_args()
+    if args.command == "cancel" and (not args.task or args.expected_revision is None or args.reason is None):
+        parser.error("cancel requires --task, --expected-revision and --reason")
+    if args.command == "cancel" and not (Path(args.data) / "orch.sqlite").is_file():
+        parser.error("cancel requires an existing workflow database")
     if args.command == "provider-check":
         if not args.provider:
             parser.error("provider-check requires --provider")
@@ -56,7 +61,7 @@ def main():
         finally:
             store.close()
         return
-    engine = Engine(args.data, Executor("trusted-fixture" if args.trusted_fixture else "docker", args.image), provider_factory=FixtureCliProvider if args.fixture_provider == "cli" else MockProvider)
+    engine = Engine(args.data, Executor("trusted-fixture" if args.trusted_fixture or args.command == "cancel" else "docker", args.image), provider_factory=FixtureCliProvider if args.fixture_provider == "cli" else MockProvider)
     try:
         if args.command == "serve":
             serve(engine, args.port)
@@ -64,6 +69,8 @@ def main():
             print(json.dumps([{ "event": e, "payload": json.loads(engine.store.read_artifact(e["payload"], args.task))} for e in engine.events(args.task)], indent=2))
         elif args.command == "recover":
             print(json.dumps(engine.recover(args.task, args.expected_revision)))
+        elif args.command == "cancel":
+            print(json.dumps(engine.cancel(args.task, args.expected_revision, args.reason)))
         else:
             task = engine.create_task(scenario=Scenario(reviews=("NEEDS_CHANGES", "ACCEPT")))
             engine.run(task)

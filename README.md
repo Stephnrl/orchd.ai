@@ -18,6 +18,8 @@ documented prompt/output preparation and read-only provider inventory without re
 either provider CLI on this workstation.
 Readiness now requires [five real Docker gates](docs/docker-resource-gates.md),
 including resource exhaustion and failure cleanup.
+Operators can [cancel a task between operations](docs/operator-cancellation.md)
+through the UI, API or CLI while retaining its audit evidence.
 
 ```sh
 python -m pip install -r requirements-dev.txt

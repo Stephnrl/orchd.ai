@@ -9,6 +9,8 @@ function controls() {
   $("run").disabled = busy || !snapshot || !!snapshot.state.pending_approval || ["COMPLETED", "FAILED", "CANCELLED", "BLOCKED"].includes(snapshot.state.state);
   $("approve").disabled = $("reject").disabled = busy || !approval || !$("reviewed").checked;
   $("create").querySelector("button").disabled = busy;
+  $("cancellation").hidden = !snapshot || ["COMPLETED", "FAILED", "CANCELLED", "PR_CREATED"].includes(snapshot.state.state);
+  $("cancel-task").disabled = busy || !snapshot || !!snapshot.state.active_operation_id || !!snapshot.state.active_invocation_id || !!snapshot.state.container_id;
 }
 async function api(path, payload) {
   const response = await fetch(path, {method: payload === undefined ? "GET" : "POST", headers: {Authorization: "Bearer " + token, "Content-Type": "application/json"}, body: payload === undefined ? undefined : JSON.stringify(payload), cache: "no-store", credentials: "omit"});
@@ -81,6 +83,7 @@ async function state() {
 async function select(task) {
   if (busy) return;
   epoch++; selected = task; cursor = 0; snapshot = null; approval = null;
+  $("cancel-reason").value = ""; $("cancellation").open = false;
   $("events").replaceChildren(); $("evidence").hidden = true; $("empty").hidden = true; $("detail").hidden = false; $("approval").hidden = true;
   for (const [id, b] of names) b.setAttribute("aria-current", String(id === task));
   controls(); await state(); await records(); await replay();
@@ -124,9 +127,14 @@ $("more-tasks").addEventListener("click", () => tasks(true).catch(e => notice(e.
 $("more-records").addEventListener("click", () => records(true).catch(e => notice(e.message)));
 $("reviewed").addEventListener("change", controls);
 $("create").addEventListener("submit", e => {
-  e.preventDefault(); mutate(async () => { const result = await api("/tasks", {title: $("title").value}); epoch++; selected = result.task_id; cursor = 0; $("events").replaceChildren(); $("evidence").hidden = true; $("empty").hidden = true; $("detail").hidden = false; }).catch(e => notice(e.message));
+  e.preventDefault(); mutate(async () => { const result = await api("/tasks", {title: $("title").value}); epoch++; selected = result.task_id; cursor = 0; $("cancel-reason").value = ""; $("cancellation").open = false; $("events").replaceChildren(); $("evidence").hidden = true; $("empty").hidden = true; $("detail").hidden = false; }).catch(e => notice(e.message));
 });
 $("run").addEventListener("click", () => mutate(() => api(`/tasks/${selected}/run`, {})).catch(e => notice(e.message)));
+$("cancel-form").addEventListener("submit", e => {
+  e.preventDefault(); if (busy || !snapshot) return;
+  const task = selected, payload = {expected_revision: snapshot.state.revision, reason: $("cancel-reason").value};
+  mutate(() => api(`/tasks/${task}/cancel`, payload)).catch(e => notice(e.message));
+});
 for (const decision of ["approve", "reject"]) $(decision).addEventListener("click", () => {
   if (!approval || !$("reviewed").checked || busy) return;
   const task = selected, payload = {request_id: approval.id, decision, expected_revision: snapshot.state.revision};

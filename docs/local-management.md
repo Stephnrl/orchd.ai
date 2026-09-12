@@ -23,6 +23,11 @@ request ID and task revision; the engine rejects stale, expired or mismatched de
 Reading evidence never changes the task. UI task creation uses the default fixture
 scenario; the CLI demo still supplies its separate NEEDS_CHANGES scenario.
 
+The UI now supports [operator cancellation](operator-cancellation.md) between
+operations. Expand **Cancel this task** and provide a reason; cancellation preserves
+evidence and permanently stops further task advancement. Unresolved execution must be
+reconciled first.
+
 Records link to their referenced contracts and artifacts. Event buttons open the
 persisted payload, including state/context and evidence references. Artifact reads
 check task ownership, metadata, length and SHA-256 through Store.read_artifact.
