@@ -39,6 +39,10 @@ class Application:
                 if set(payload) != {"request_id", "decision", "expected_revision"} or type(payload["expected_revision"]) is not int:
                     raise Rejected("Invalid approval fields")
                 return 200, self.engine.approve(task, **payload)
+            if method == "POST" and parts[2:] == ["recover"]:
+                if set(payload) != {"expected_revision"} or type(payload["expected_revision"]) is not int:
+                    raise Rejected("Invalid recovery fields")
+                return 200, self.engine.recover(task, payload["expected_revision"])
             return 404, {"error": "Unknown route"}
         except (Rejected, KeyError, TypeError):
             return 409, {"error": "Request rejected; inspect current task and approval"}

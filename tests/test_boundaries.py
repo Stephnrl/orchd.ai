@@ -71,7 +71,7 @@ class BoundaryTests(unittest.TestCase):
         self.approve(task)
         self.engine.advance(task)
         self.engine.advance(task)
-        with patch("orch.execution.subprocess.run", side_effect=subprocess.TimeoutExpired("fixed", 20)):
+        with patch.object(self.engine.executor.broker, "run", return_value={"command": ["fixed-test"], "started": "2026-09-12T14:00:00Z", "ended": "2026-09-12T14:00:10Z", "code": None, "stdout": "", "stderr": "deadline", "truncated": False, "failure": "timeout"}):
             self.engine.advance(task)
         receipt = self.engine.store.get(self.engine.task(task)["context"]["test"], task)
         self.assertEqual(receipt["outcome"], "timeout")
@@ -98,13 +98,13 @@ class BoundaryTests(unittest.TestCase):
 
     def test_docker_command_restrictions_and_untrusted_script(self):
         executor = Executor("docker", "python@sha256:" + "a" * 64)
-        with patch("orch.execution.subprocess.run", return_value=subprocess.CompletedProcess([], 0, b"", b"")) as run:
+        with patch("orch.execution.capture", return_value={"code": 0, "stdout": "", "stderr": "", "truncated": False, "failure": None}) as run:
             executor.run(self.temp.name, TEST_CODE, [], uid())
             command = run.call_args.args[0]
             for flag in ("--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user=65534:65534", "--pull=never"):
                 self.assertIn(flag, command)
             self.assertNotIn("/var/run/docker.sock", str(command))
-            self.assertFalse(run.call_args.kwargs["shell"])
+            self.assertIsInstance(command, list)
         with self.assertRaises(Rejected):
             executor.run(self.temp.name, "untrusted code", [], uid())
 
