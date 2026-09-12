@@ -11,6 +11,8 @@ The human control boundary also supports [durable cancellation](operator-cancell
 between operations.
 Backup/restore recovery now includes [verified restore publication](verified-restore.md),
 so a failed copy or audit does not expose a partially restored destination.
+Operators can [renew expired pending approvals](approval-renewal.md) while retaining
+the exact scope and a separate human decision.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

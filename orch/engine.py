@@ -2,7 +2,7 @@
 import asyncio
 import json
 from dataclasses import asdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from contracts.interfaces import ValidatedContract
 from .actors import FixtureGuardian, SimulatedPRAction
@@ -135,7 +135,7 @@ class Engine:
     def _approval(self, state, context, kind, subject, evidence):
         request = make("ApprovalRequest", state["task_id"], kind=kind, subject=subject, subject_sha256=digest({"subject": subject, "evidence": evidence, "task_id": state["task_id"], "revision": state["revision"] + 1, "policy": "fixture-v1"}),
                        task_revision=state["revision"] + 1, policy_version="fixture-v1", summary="Approve exact " + kind + " fixture scope",
-                       evidence=evidence, expires_at=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat().replace("+00:00", "Z"))
+                       evidence=evidence, expires_at=(datetime.fromisoformat(now().replace("Z", "+00:00")) + timedelta(hours=1)).isoformat().replace("+00:00", "Z"))
         state["pending_approval"] = self.store.put(request)
         context[kind + "_approval_request"] = ref(request)
         context.pop(kind + "_approval", None)
@@ -162,6 +162,41 @@ class Engine:
         for evidence in request["evidence"]:
             self.store.get(evidence, task)
         return decision
+
+    def renew_approval(self, task_id, request_id, expected_revision, principal="local-operator"):
+        """Replace an expired pending request without granting or extending a decision."""
+        if type(expected_revision) is not int or expected_revision < 0 or not isinstance(request_id, str):
+            raise Rejected("Invalid renewal request")
+        with self.store.exclusive(), self.store.transaction():
+            state, context = self.store.task(task_id)
+            prior = context.get("approval_renewal")
+            if prior and prior["request_id"] == request_id and prior["expected_revision"] == expected_revision and prior["principal"] == principal and state["pending_approval"] == prior["replacement"]:
+                return self.task(task_id)
+            if state["revision"] != expected_revision or not state["pending_approval"] or state["pending_approval"]["id"] != request_id:
+                raise Rejected("Renewal requires the current pending request")
+            request = self.store.get(state["pending_approval"], task_id, "ApprovalRequest")
+            kind = request["kind"]
+            required = "AWAITING_PLAN_APPROVAL" if kind == "plan" else "AWAITING_ACTION_APPROVAL"
+            unresolved = self.store.db.execute("SELECT 1 FROM operations WHERE task_id=? AND status='started' LIMIT 1", (task_id,)).fetchone()
+            if state["state"] != required or state["active_operation_id"] or state["active_invocation_id"] or state["container_id"] or unresolved:
+                raise Rejected("Renewal requires a quiescent approval pause")
+            if request["expires_at"] > now() or request["task_revision"] != expected_revision:
+                raise Rejected("Only expired pending requests can be renewed")
+            subject = state["plan"] if kind == "plan" else context["action_request"]
+            evidence = [state["spec"], state["plan"]]
+            if kind == "action":
+                evidence += [state["patch"], context["test"], context["review"]]
+            bound = digest({"subject": subject, "evidence": evidence, "task_id": task_id, "revision": expected_revision, "policy": "fixture-v1"})
+            if request["subject"] != subject or request["evidence"] != evidence or request["subject_sha256"] != bound or request["policy_version"] != "fixture-v1":
+                raise Rejected("Approval scope changed")
+            for document in [subject, *evidence]:
+                self.store.get(document, task_id)
+            self._approval(state, context, kind, subject, evidence)
+            state["revision"] += 1
+            context["approval_renewal"] = {"request_id": request_id, "expected_revision": expected_revision,
+                                           "principal": principal, "replacement": state["pending_approval"]}
+            self._event(state, context, "approval_renewed", context["approval_renewal"], role="human")
+            return self.task(task_id)
 
     def approve(self, task_id, request_id, decision, expected_revision, principal="local-operator"):
         """Human boundary only; no receipt/actor/identity accepted from agent payloads."""

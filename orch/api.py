@@ -83,6 +83,10 @@ class Application:
                 if set(payload) != {"request_id", "decision", "expected_revision"} or type(payload["expected_revision"]) is not int:
                     raise Rejected("Invalid approval fields")
                 return 200, self.engine.approve(task, **payload)
+            if method == "POST" and parts[2:] == ["renew-approval"]:
+                if set(payload) != {"request_id", "expected_revision"}:
+                    raise Rejected("Invalid renewal fields")
+                return 200, self.engine.renew_approval(task, **payload)
             if method == "POST" and parts[2:] == ["recover"]:
                 if set(payload) != {"expected_revision"} or type(payload["expected_revision"]) is not int:
                     raise Rejected("Invalid recovery fields")
