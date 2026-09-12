@@ -8,8 +8,8 @@ import sqlite3
 import tempfile
 import time
 
-from .contracts import Rejected, canonical, validate
-from .storage import Store
+from .contracts import Rejected, canonical, validate, now
+from .storage import Store, AUDIT_RESERVE_BYTES
 
 
 def plain(path):
@@ -116,6 +116,61 @@ def restore(source, destination):
             raise Rejected("Restore destination appeared during verification")
         staged.rename(destination)
     return {"restored": str(destination), "artifacts": len(hashes)}
+
+
+def storage_usage(store, task_id=None):
+    """Report quota accounting and orphan candidates without changing workflow data."""
+    with store.exclusive():
+        if task_id is not None:
+            store.task(task_id)
+        rows = store.db.execute("SELECT task_id,payload FROM artifacts").fetchall()
+        referenced = {}
+        logical_bytes = references = 0
+        for row in rows:
+            item = json.loads(row["payload"])
+            previous = referenced.setdefault(item["sha256"], item["size_bytes"])
+            if previous != item["size_bytes"]:
+                raise Rejected("Conflicting artifact sizes")
+            if task_id is None or row["task_id"] == task_id:
+                references += 1
+                logical_bytes += item["size_bytes"]
+        physical = orphan_bytes = orphan_count = eligible_bytes = eligible_count = unexpected = 0
+        present = {}
+        scanned_at = time.time()
+        for path in plain(store.root / "artifacts").iterdir():
+            plain(path)
+            if not path.is_file():
+                unexpected += 1
+                continue
+            stat = path.stat()
+            physical += stat.st_size
+            if path.name in referenced:
+                present[path.name] = stat.st_size
+            elif re.fullmatch(r"[a-f0-9]{64}(?:\.[a-f0-9]{32})?", path.name):
+                orphan_count += 1
+                orphan_bytes += stat.st_size
+                if scanned_at - stat.st_mtime >= 86400:
+                    eligible_count += 1
+                    eligible_bytes += stat.st_size
+            else:
+                unexpected += 1
+        database_bytes = {}
+        for name in ("orch.sqlite", "orch.sqlite-wal", "orch.sqlite-shm"):
+            path = plain(store.root / name)
+            database_bytes[name] = path.stat().st_size if path.is_file() else 0
+        return {"version": 1, "generated_at": now(), "task_id": task_id,
+                "references": references, "logical_bytes": logical_bytes,
+                "task_quota_bytes": store.task_quota,
+                "task_headroom_bytes": max(0, store.task_quota - logical_bytes) if task_id is not None else None,
+                "disk_quota_bytes": store.disk_quota, "physical_artifact_bytes": physical,
+                "disk_headroom_bytes": max(0, store.disk_quota - physical),
+                "audit_reserve_bytes": AUDIT_RESERVE_BYTES,
+                "orphan_files": orphan_count, "orphan_bytes": orphan_bytes,
+                "gc_eligible_files": eligible_count, "gc_eligible_bytes": eligible_bytes,
+                "gc_grace_seconds": 86400, "unexpected_entries": unexpected,
+                "missing_referenced_files": len(set(referenced) - set(present)),
+                "size_mismatches": sum(size != referenced[name] for name, size in present.items()),
+                "database_file_bytes": database_bytes}
 
 
 def collect_orphans(store, grace_seconds=86400):

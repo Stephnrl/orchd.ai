@@ -40,6 +40,9 @@ class Application:
                              "next": rows[limit-1]["rowid"] if len(rows) > limit else None}
             if query and not (method == "GET" and len(parts) == 3 and parts[2] in ("records", "stream")):
                 raise Rejected("Unexpected query")
+            if method == "GET" and parts == ["storage"]:
+                from .maintenance import storage_usage
+                return 200, storage_usage(self.engine.store)
             if method == "POST" and parts == ["tasks"]:
                 if set(payload) - {"title"}:
                     raise Rejected("Unknown create fields")
@@ -47,6 +50,9 @@ class Application:
             if len(parts) < 2 or parts[0] != "tasks":
                 return 404, {"error": "Unknown route"}
             task = parts[1]
+            if method == "GET" and parts[2:] == ["storage"]:
+                from .maintenance import storage_usage
+                return 200, storage_usage(self.engine.store, task)
             if method == "GET" and parts[2:] == ["records"]:
                 self.engine.task(task)
                 after, limit = page(query)
