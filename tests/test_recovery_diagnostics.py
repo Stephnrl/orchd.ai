@@ -30,6 +30,25 @@ class RecoveryDiagnosticsTests(unittest.TestCase):
         self.engine.recover(task, state["revision"])
         self.assertEqual(self.engine.recovery_diagnostics(task)["recovery_status"], "not_applicable")
 
+    def test_operator_api_recovery_rechecks_revision_and_runtime_then_pauses(self):
+        task, state = self.interrupted_broker()
+        app = Application(self.engine)
+        route = f"/tasks/{task}/recover"
+        payload = {"expected_revision": state["revision"]}
+        self.assertEqual(app.dispatch("POST", route, payload, "wrong")[0], 401)
+        self.assertEqual(app.dispatch("POST", route, {"expected_revision": state["revision"] - 1}, app.session)[0], 409)
+        self.assertEqual(app.dispatch("POST", route, {**payload, "principal": "agent"}, app.session)[0], 409)
+        events = self.engine.events(task)
+        with patch.object(self.engine.executor.broker, "result", side_effect=Rejected("Cannot establish completion")):
+            self.assertEqual(app.dispatch("POST", route, payload, app.session)[0], 409)
+        self.assertEqual(self.engine.events(task), events)
+        self.assertEqual(self.engine.task(task)["state"]["state"], "BLOCKED")
+        code, result = app.dispatch("POST", route, payload, app.session)
+        self.assertEqual(code, 200)
+        self.assertEqual(result["state"]["state"], "CHANGES_REQUESTED")
+        self.assertIsNone(result["state"]["active_operation_id"])
+        self.assertEqual(app.dispatch("POST", route, payload, app.session)[0], 409)
+
     def test_expired_approval_explains_recovery_limit(self):
         task, _ = self.interrupted_broker()
         context = self.engine.task(task)["context"]

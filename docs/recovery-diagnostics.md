@@ -27,6 +27,19 @@ uncoordinated report. The report is advisory and can become stale immediately.
 
 Recovery remains an explicit action using the existing API or CLI:
 
+The local UI now also provides **Attempt recovery**. Review the evidence and select
+the acknowledgement checkbox first. This action may stop the exact task container
+and retire the interrupted attempt. It is available only when diagnostics match the
+selected task and displayed revision and report `preconditions_met`. Refreshing task
+state clears the checkbox. Stale diagnostics, unavailable recovery and a busy UI
+disable the action; the server independently rechecks the submitted revision.
+
+A rejection refreshes the task view and leaves the operator to inspect the current
+evidence. Successful recovery also refreshes state and records; it does not call
+`run`. Review the resulting state before explicitly choosing to continue execution.
+
+The API request is:
+
 ```text
 POST /tasks/TASK_ID/recover
 Authorization: Bearer OPERATOR_SESSION
@@ -51,3 +64,11 @@ API authorization and proof that diagnostics do not probe or mutate runtime stat
 Both Node UI regression checks passed, including diagnostic text rendering and hiding
 using a DOM stub (not a rendered-browser test). Contract validation passed 19 examples
 and 366 negative cases; compilation, JavaScript syntax and whitespace checks passed.
+
+The subsequent UI recovery-control change passed 27 focused Python tests covering
+recovery, runtime reconciliation, management and HTTP boundaries, plus both Node UI
+checks. The expanded UI check covers explicit review, stale revisions, mismatched
+tasks, busy/unavailable states and the exact recovery request. The API regression
+checks failed runtime verification, stale requests and successful recovery without
+automatic continuation. These UI changes did not rerun the full Docker gate suite;
+the Node tests use DOM stubs rather than a rendered browser.
