@@ -23,6 +23,8 @@ through the UI, API or CLI while retaining its audit evidence.
 Restore now [verifies a staging copy before publishing its destination](docs/verified-restore.md).
 Expired pending requests support [fresh approval requests](docs/approval-renewal.md)
 without granting a decision or starting execution.
+Read-only [storage usage reports](docs/storage-usage.md) expose artifact quota headroom
+and orphan cleanup candidates through the CLI and authenticated API.
 
 ```sh
 python -m pip install -r requirements-dev.txt

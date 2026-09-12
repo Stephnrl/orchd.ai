@@ -13,6 +13,8 @@ Backup/restore recovery now includes [verified restore publication](verified-res
 so a failed copy or audit does not expose a partially restored destination.
 Operators can [renew expired pending approvals](approval-renewal.md) while retaining
 the exact scope and a separate human decision.
+[Storage usage reporting](storage-usage.md) now makes quota consumption and conservative
+orphan cleanup candidates visible without changing workflow data.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

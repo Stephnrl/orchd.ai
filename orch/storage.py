@@ -8,11 +8,20 @@ from pathlib import Path
 
 from .contracts import Rejected, canonical, redact, ref, uid, validate
 
+AUDIT_RESERVE_BYTES = 4 * 1024 * 1024
+
 
 class Store:
-    def __init__(self, root, task_quota=64 * 1024 * 1024, disk_quota=256 * 1024 * 1024):
+    def __init__(self, root, task_quota=64 * 1024 * 1024, disk_quota=256 * 1024 * 1024, read_only=False):
         self.task_quota, self.disk_quota = task_quota, disk_quota
         self.root = Path(root).resolve()
+        if read_only:
+            self.db = sqlite3.connect((self.root / "orch.sqlite").as_uri() + "?mode=ro", uri=True, isolation_level=None)
+            self.db.row_factory = sqlite3.Row
+            if self.db.execute("PRAGMA user_version").fetchone()[0] != 2:
+                self.db.close()
+                raise Rejected("Usage reporting requires an existing current-version database")
+            return
         self.root.mkdir(parents=True, exist_ok=True)
         (self.root / "artifacts").mkdir(exist_ok=True)
         self.db = sqlite3.connect(self.root / "orch.sqlite", isolation_level=None)
@@ -116,7 +125,7 @@ class Store:
             raise Rejected("Artifact quota exceeded")
         used = self.db.execute("SELECT coalesce(sum(json_extract(payload,'$.size_bytes')),0) FROM artifacts WHERE task_id=?", (task_id,)).fetchone()[0]
         # Small audit reserve lets the engine record a fail-closed quota incident.
-        reserve = 4 * 1024 * 1024 if producer == "orchestrator" and trust == "trusted_receipt" else 0
+        reserve = AUDIT_RESERVE_BYTES if producer == "orchestrator" and trust == "trusted_receipt" else 0
         if used + len(raw) > self.task_quota + reserve:
             raise Rejected("Task artifact quota exceeded")
         sha = hashlib.sha256(raw).hexdigest()

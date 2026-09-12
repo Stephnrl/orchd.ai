@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "recover", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "storage-usage", "recover", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -27,6 +27,18 @@ def main():
     parser.add_argument("--executable", help="Absolute provider executable path for read-only inventory")
     parser.add_argument("--expected-sha256", help="Approved executable digest for provider-check")
     args = parser.parse_args()
+    if args.command == "storage-usage":
+        from .maintenance import plain, storage_usage
+        from .storage import Store
+        root = plain(Path(args.data).absolute())
+        if not plain(root / "orch.sqlite").is_file():
+            parser.error("storage-usage requires an existing workflow database")
+        store = Store(root, read_only=True)
+        try:
+            print(json.dumps(storage_usage(store, args.task), indent=2))
+        finally:
+            store.close()
+        return
     if args.command == "renew-approval" and (not args.task or not args.request_id or args.expected_revision is None):
         parser.error("renew-approval requires --task, --request-id and --expected-revision")
     if args.command == "renew-approval" and not (Path(args.data) / "orch.sqlite").is_file():
