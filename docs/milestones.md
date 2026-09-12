@@ -15,6 +15,8 @@ Operators can [renew expired pending approvals](approval-renewal.md) while retai
 the exact scope and a separate human decision.
 [Storage usage reporting](storage-usage.md) now makes quota consumption and conservative
 orphan cleanup candidates visible without changing workflow data.
+[Recovery diagnostics](recovery-diagnostics.md) explain blocked-task preconditions
+in the UI and API; runtime recovery remains an explicit, separately checked action.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

@@ -50,6 +50,8 @@ class Application:
             if len(parts) < 2 or parts[0] != "tasks":
                 return 404, {"error": "Unknown route"}
             task = parts[1]
+            if method == "GET" and parts[2:] == ["recovery-diagnostics"]:
+                return 200, self.engine.recovery_diagnostics(task)
             if method == "GET" and parts[2:] == ["storage"]:
                 from .maintenance import storage_usage
                 return 200, storage_usage(self.engine.store, task)
