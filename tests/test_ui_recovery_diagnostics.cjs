@@ -98,7 +98,7 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, "../orch/ui/app.js"), "utf8
     assert.equal(JSON.stringify(call.payload), JSON.stringify({operation_id: "a".repeat(32), expected_revision: 6}));
   }
   assert.equal(context.calls.length, 2); // No automatic run request.
-  await vm.runInContext(`snapshot.state.spec = {id: "spec"}; api = async route => route.includes("/records/") ? {title: "Fixture"} : snapshot; state();`, context);
+  await vm.runInContext(`snapshot.state.spec = {id: "spec"}; globalThis.savedSnapshot = snapshot; api = async route => route.includes("/records/") ? {title: "Fixture"} : savedSnapshot; state();`, context);
   assert.equal(element("cleanup-reviewed").checked, false);
   element("cleanup-reviewed").checked = true;
   await assert.rejects(vm.runInContext(`api = async () => { throw new Error("refresh failed"); }; state();`, context), /refresh failed/);
