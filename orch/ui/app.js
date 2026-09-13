@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 let token = "", selected = null, snapshot = null, approval = null, recovery = null;
 let epoch = 0, cursor = 0, taskNext = null, recordNext = null, busy = false;
 let stateRequest = 0;
+let evidenceRequest = 0;
 const names = new Map();
 const pretty = value => JSON.stringify(value, null, 2);
 function notice(message) { $("notice").textContent = message; }
@@ -57,16 +58,29 @@ function references(value, target) {
   visit(value, "");
 }
 async function evidence(type, id) {
-  const version = epoch, task = selected;
-  const data = await api(`/tasks/${task}/${type}/${encodeURIComponent(id)}`);
-  if (version !== epoch) return;
+  const version = epoch, task = selected, request = ++evidenceRequest;
   $("evidence").hidden = false;
-  $("evidence-title").textContent = type === "records" ? data.contract_type : "Artifact content";
-  $("evidence-trust").textContent = type === "artifacts" ? `Trust: ${data.reference.trust} · Producer: ${data.reference.producer_id} · SHA-256: ${data.reference.sha256}` : "Persisted contract · " + id;
-  $("evidence-json").textContent = type === "artifacts" ? data.content : pretty(data);
-  let linked = data;
-  if (type === "artifacts") { try { linked = JSON.parse(data.content); } catch { linked = null; } }
-  references(linked, $("evidence-links"));
+  $("evidence-title").textContent = "Loading evidence…";
+  $("evidence-trust").textContent = type + " · " + id;
+  $("evidence-json").textContent = "";
+  $("evidence-links").replaceChildren();
+  try {
+    const data = await api(`/tasks/${task}/${type}/${encodeURIComponent(id)}`);
+    if (version !== epoch || request !== evidenceRequest) return;
+    $("evidence-title").textContent = type === "records" ? data.contract_type : "Artifact content";
+    $("evidence-trust").textContent = type === "artifacts" ? `Trust: ${data.reference.trust} · Producer: ${data.reference.producer_id} · SHA-256: ${data.reference.sha256}` : "Persisted contract · " + id;
+    $("evidence-json").textContent = type === "artifacts" ? data.content : pretty(data);
+    let linked = data;
+    if (type === "artifacts") { try { linked = JSON.parse(data.content); } catch { linked = null; } }
+    references(linked, $("evidence-links"));
+  } catch (error) {
+    if (version === epoch && request === evidenceRequest) {
+      $("evidence-title").textContent = "Evidence unavailable. Select the reference to retry.";
+      $("evidence-json").textContent = "";
+      $("evidence-links").replaceChildren();
+      throw error;
+    }
+  }
 }
 async function tasks(more = false) {
   const version = epoch;
