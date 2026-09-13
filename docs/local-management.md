@@ -6,6 +6,11 @@ replace a newer view with older state; responses and errors from a previous sele
 are ignored. If the current refresh fails, the last rendered details may remain visible,
 but workflow, approval, recovery and cleanup controls stay disabled until a successful
 refresh. Server-side revision and approval checks remain authoritative.
+The selected task includes a **Refresh task** button and a live status message for
+loading, success or failure. The message labels retained details as potentially stale
+while refresh is pending or failed. Retry remains available after a failed read without
+reselecting the task, but is disabled during other operations or without a session.
+It refreshes task state and approval evidence only; it never starts workflow execution.
 
 Start the server from the repository root and open the exact address it prints:
 
