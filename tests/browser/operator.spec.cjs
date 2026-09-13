@@ -8,15 +8,24 @@ const { createInterface } = require('node:readline');
 const test = base.extend({
   operator: async ({ page }, use) => {
     const data = await mkdtemp(path.join(tmpdir(), 'orchd-browser-'));
-    const server = spawn(process.env.ORCH_TEST_PYTHON || 'python', [
-      '-m', 'orch', 'serve', '--trusted-fixture', '--data', data, '--port', '0',
-    ], { cwd: path.resolve(__dirname, '../..'), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    // Read only startup metadata; never print the session or server output.
-    server.stderr.resume();
-    const lines = createInterface({ input: server.stdout });
-    const closed = new Promise(resolve => server.once('close', resolve));
-    let startupTimer;
-    try {
+    let server, lines, closed, startupTimer;
+    async function stop() {
+      clearTimeout(startupTimer);
+      lines?.close();
+      if (server) {
+        server.kill();
+        await closed;
+        server = null;
+      }
+    }
+    async function start() {
+      server = spawn(process.env.ORCH_TEST_PYTHON || 'python', [
+        '-m', 'orch', 'serve', '--trusted-fixture', '--data', data, '--port', '0',
+      ], { cwd: path.resolve(__dirname, '../..'), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      // Read only startup metadata; never print the session or server output.
+      server.stderr.resume();
+      lines = createInterface({ input: server.stdout });
+      closed = new Promise(resolve => server.once('close', resolve));
       const session = await new Promise((resolve, reject) => {
         let url;
         startupTimer = setTimeout(() => reject(new Error('Local test server startup timed out')), 10_000);
@@ -30,21 +39,94 @@ const test = base.extend({
         });
       });
       clearTimeout(startupTimer);
+      return session;
+    }
+    try {
+      const session = await start();
+      session.restart = async () => {
+        // Stop browser polling before replacing the process; preserve this test's store.
+        await page.goto('about:blank');
+        await stop();
+        Object.assign(session, await start());
+        await page.goto(session.url);
+      };
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
       await page.goto(session.url);
       await use(session);
       expect(errors).toEqual([]);
     } finally {
-      clearTimeout(startupTimer);
-      lines.close();
-      server.kill();
-      await closed;
+      await stop();
       // Only remove the unique directory allocated by this fixture.
       await rm(data, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     }
   },
 });
+
+async function readTask(page, operator, task) {
+  const response = await page.request.get(`${operator.url}/tasks/${task}`, {
+    headers: { Authorization: `Bearer ${operator.token}` },
+  });
+  expect(response.status()).toBe(200);
+  return response.json();
+}
+
+for (const outcome of ['COMPLETED', 'CANCELLED']) {
+  test(`${outcome.toLowerCase()} task survives server restart with evidence and replay`, async ({ page, operator }) => {
+    await connect(page, operator.token);
+    await page.locator('#create button').click();
+    await expect(page.locator('#task-id')).not.toBeEmpty();
+    const task = await page.locator('#task-id').textContent();
+    await page.locator('#run').click();
+    await expect(page.locator('#state')).toHaveText('AWAITING PLAN APPROVAL');
+    if (outcome === 'COMPLETED') {
+      for (const next of ['AWAITING ACTION APPROVAL', 'COMPLETED']) {
+        await page.locator('#reviewed').check();
+        await page.locator('#approve').click();
+        await expect(page.locator('#approval')).toBeHidden();
+        await page.locator('#run').click();
+        await expect(page.locator('#state')).toHaveText(next);
+      }
+    } else {
+      await page.locator('#cancellation summary').click();
+      await page.locator('#cancel-reason').fill('Stop this disposable browser fixture');
+      await page.locator('#cancel-task').click();
+      await expect(page.locator('#state')).toHaveText(outcome);
+    }
+    const before = await readTask(page, operator, task);
+    await expect(page.locator('#events li')).toHaveCount(before.state.last_event_sequence);
+    const events = await page.locator('#events button').allTextContents();
+    await page.locator('#records button').first().click();
+    await expect(page.locator('#evidence-json')).not.toBeEmpty();
+    const evidence = await page.locator('#evidence-json').textContent();
+    await page.locator('#events button').last().click();
+    await expect(page.locator('#evidence-title')).toHaveText('Artifact content');
+    await expect(page.locator('#evidence-json')).not.toBeEmpty();
+    const eventPayload = await page.locator('#evidence-json').textContent();
+    if (outcome === 'CANCELLED') expect(eventPayload).toContain('Stop this disposable browser fixture');
+    const oldToken = operator.token;
+
+    await operator.restart();
+    await page.locator('#token').fill(oldToken);
+    await page.locator('#connect button').click();
+    await expect(page.locator('#notice')).toContainText('Session expired');
+    await expect(page.locator('#workspace')).toBeHidden();
+    await connect(page, operator.token);
+    await page.locator('#tasks button').click();
+    await expect(page.locator('#task-id')).toHaveText(task);
+    await expect(page.locator('#state')).toHaveText(outcome);
+    await expect(page.locator('#run')).toBeDisabled();
+    await expect(page.locator('#approval')).toBeHidden();
+    await expect(page.locator('#cancellation')).toBeHidden();
+    await expect(page.locator('#events button')).toHaveText(events);
+    await page.locator('#records button').first().click();
+    await expect(page.locator('#evidence-json')).toHaveText(evidence);
+    await page.locator('#events button').last().click();
+    await expect(page.locator('#evidence-json')).toHaveText(eventPayload);
+    // Reconnection and replay must not advance the workflow or rewrite its context.
+    expect(await readTask(page, operator, task)).toEqual(before);
+  });
+}
 
 async function connect(page, token) {
   await page.locator('#token').fill(token);

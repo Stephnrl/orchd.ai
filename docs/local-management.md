@@ -37,6 +37,9 @@ Paste the process's operator session into the connection form. It is held only i
 page memory, never placed in a URL, cookie or web storage. Disconnect/reload clears
 the page; restarting the server rotates the session. Disconnect does not revoke the
 server's session for other clients; stop the server to revoke it everywhere.
+The Chromium regression suite verifies this rotation by restarting a fixture server
+with the same store, then reconnecting to completed and cancelled tasks. It checks
+that event replay and evidence inspection preserve the stored task state and context.
 
 Create a task to confirm the existing fixed greeting specification. Select a task,
 then **Run to next pause**. At plan or simulated-action approval, inspect the request
