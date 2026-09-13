@@ -3,6 +3,12 @@
 Operators can inspect artifact quota consumption without changing workflow records
 or deleting files:
 
+The connected local UI also offers **Check storage usage** in its store-wide
+maintenance panel. It displays artifact quota headroom, orphan/GC counts and missing
+or mismatched references, with the report timestamp and expandable JSON details.
+Reports are requested manually. A new request clears the previous report; busy or
+failed requests show no stale result. Storage reporting is not an integrity verdict.
+
 ```sh
 python -m orch storage-usage --data .runtime/managed
 python -m orch storage-usage --data .runtime/managed --task TASK_ID
