@@ -23,6 +23,8 @@ Recovery retries now preserve the committed outcome and separately record comple
 pending or deferred workspace cleanup, avoiding repeated runtime reconciliation.
 [Continuous validation](continuous-validation.md) runs offline checks on Windows/Linux
 and isolates the five mandatory Docker gates in a Linux CI job.
+It also includes a real Chromium operator workflow check against an isolated local
+fixture server, alongside the targeted DOM-stub regressions.
 [Verified backup publication](verified-backup.md) prevents handled copy/audit failures
 from leaving a partially populated backup at the requested destination.
 [On-demand integrity audits](integrity-audit.md) expose the existing backup consistency
