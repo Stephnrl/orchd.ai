@@ -63,5 +63,47 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, "../orch/ui/app.js"), "utf8
     assert.equal(element("recovery-outcome").hidden, false);
     assert.match(element("recovery-outcome").textContent, new RegExp(cleanup));
   }
-  console.log("PASS: recovery text, explicit review, stale-state guards and request binding");
+  vm.runInContext(`
+    globalThis.resetCleanup = () => {
+      selected = "task-one"; busy = false;
+      snapshot = {state: {task_id: selected, state: "CHANGES_REQUESTED", revision: 6, active_operation_id: null},
+        context: {operator_recovery: {operation_id: "a".repeat(32), completed_revision: 6, cleanup: "deferred"}}};
+    };
+    resetCleanup(); calls = [];
+    api = async (route, payload) => calls.push({route, payload});
+    controls();
+  `, context);
+  assert.equal(element("cleanup-retry").hidden, false);
+  assert.equal(element("retry-cleanup").disabled, true);
+  element("retry-cleanup").handlers.click();
+  assert.equal(context.calls.length, 0);
+  element("cleanup-reviewed").checked = true;
+  element("cleanup-reviewed").handlers.change();
+  assert.equal(element("retry-cleanup").disabled, false);
+  for (const invalid of ['busy = true', 'selected = "other"', 'snapshot.state.revision = 7',
+    'snapshot.state.state = "COMPLETED"', 'snapshot.state.active_operation_id = "active"',
+    'snapshot.context.operator_recovery.cleanup = "completed"', 'snapshot.context.operator_recovery.operation_id = "../bad"',
+    'snapshot.context.operator_recovery = null']) {
+    vm.runInContext('resetCleanup(); ' + invalid + '; controls();', context);
+    assert.equal(element("retry-cleanup").disabled, true, invalid);
+    element("retry-cleanup").handlers.click();
+    assert.equal(context.calls.length, 0, invalid);
+  }
+  for (const cleanup of ["pending", "deferred"]) {
+    vm.runInContext(`resetCleanup(); snapshot.context.operator_recovery.cleanup = "${cleanup}"; controls();`, context);
+    assert.equal(element("retry-cleanup").disabled, false);
+    element("retry-cleanup").handlers.click();
+    const call = context.calls.at(-1);
+    assert.equal(call.route, "/tasks/task-one/retry-cleanup");
+    assert.equal(JSON.stringify(call.payload), JSON.stringify({operation_id: "a".repeat(32), expected_revision: 6}));
+  }
+  assert.equal(context.calls.length, 2); // No automatic run request.
+  await vm.runInContext(`snapshot.state.spec = {id: "spec"}; api = async route => route.includes("/records/") ? {title: "Fixture"} : snapshot; state();`, context);
+  assert.equal(element("cleanup-reviewed").checked, false);
+  element("cleanup-reviewed").checked = true;
+  await assert.rejects(vm.runInContext(`api = async () => { throw new Error("refresh failed"); }; state();`, context), /refresh failed/);
+  // Even a failed refresh clears acknowledgement before awaiting the server.
+  assert.equal(element("cleanup-reviewed").checked, false);
+  assert.equal(element("retry-cleanup").disabled, true);
+  console.log("PASS: recovery and cleanup text, inspection, stale-state guards and request binding");
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -33,6 +33,8 @@ Integrity audits, backups and restores also cross-check persisted broker request
 execution-provenance bindings, including historical generations after recovery.
 An explicit CLI/API cleanup retry lets operators resolve deferred recovery cleanup
 after inspection, guarded by the recovered revision and completed operation.
+The local management UI exposes that cleanup retry with an inspection acknowledgement,
+revision checks and a refreshed outcome after the request.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |
