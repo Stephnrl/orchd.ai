@@ -47,6 +47,7 @@ broker journals, backups and nested unexpected content are outside these counter
 To remove eligible orphan files, invoke the existing `python -m orch gc --data ...`
 command separately. It takes a fresh lock and rechecks references and age. Reporting
 does not authorize deletion of referenced evidence or unexpected entries.
+Use `python -m orch gc --data ... --dry-run` to preview the same candidates first.
 
 Validated on Windows on September 12, 2026: all 103 Python tests passed with zero
 skips, including all five real Docker gates. Six new tests cover duplicate accounting,
