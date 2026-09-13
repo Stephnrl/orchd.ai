@@ -54,7 +54,42 @@ post-commit retry uses the API or CLI with the original revision in task context
 Completed cleanup is also recorded, and the UI shows the outcome. No unexpected
 files are implicitly removed and no task is automatically run afterward.
 
-The API request is:
+## Explicit cleanup retry after inspection
+
+After inspecting retained workspace files and resolving the cause of deferred cleanup,
+the operator can explicitly retry it while the task remains at its recovered
+`CHANGES_REQUESTED` revision:
+
+```sh
+python -m orch retry-cleanup --data .runtime/managed --task TASK_ID --operation-id OPERATION_ID --expected-revision RECOVERED_REVISION
+```
+
+The authenticated API equivalent is `POST /tasks/TASK_ID/retry-cleanup` with exactly
+`{"operation_id": "OPERATION_ID", "expected_revision": RECOVERED_REVISION}`.
+Use `operator_recovery.operation_id` and `operator_recovery.completed_revision` from
+task context. This revision is different from the original BLOCKED recovery revision.
+The local UI continues to show the cleanup outcome; this explicit retry is available
+through the CLI/API.
+
+The command requires an existing database, the original recovery operator, the matching
+operation, completed reconciliation, and no active or unresolved task operations.
+It takes the dispatcher lock, records a human `operator_cleanup_retry` event with the
+authenticated principal, then retries the existing nonrecursive workspace cleanup.
+Only the expected fixture file is eligible for removal; unexpected contents are retained
+and the outcome remains `deferred`. Filesystem errors also leave an audited deferred
+outcome. Inspect the returned cleanup status even when the request succeeds.
+
+A completed cleanup retry returns the saved outcome without another deletion or event.
+An interruption after recording intent leaves `pending`, which can be retried. No
+broker journal, process or container is probed, no generation advances, and no provider
+or workflow execution starts. An expired plan approval does not authorize new work;
+this command only cleans the already reconciled operation. Once the workflow advances,
+this cleanup route rejects the request. General cleanup of historical workspaces is
+outside this command's scope.
+
+## Original recovery request
+
+The recovery API request is:
 
 ```text
 POST /tasks/TASK_ID/recover
