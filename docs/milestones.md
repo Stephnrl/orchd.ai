@@ -41,6 +41,8 @@ The backup CLI likewise requires existing current-version storage and opens its 
 read-only, preventing source typos or backup requests from creating or migrating data.
 [Saved-backup verification](verify-backup.md) checks manifest, content and durable
 evidence consistency without restoring a snapshot or modifying its files.
+The local UI now exposes manual store-wide storage and integrity reports with explicit
+verdicts, timestamps and no automatic maintenance actions.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

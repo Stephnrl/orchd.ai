@@ -21,6 +21,7 @@ function canRetryCleanup() {
   return !busy && cleanupAvailable() && $("cleanup-reviewed").checked;
 }
 function controls() {
+  $("storage-report").disabled = $("integrity-report").disabled = busy || !token;
   $("cleanup-retry").hidden = !cleanupAvailable();
   $("retry-cleanup").disabled = !canRetryCleanup();
   $("recover-task").disabled = !canRecover();
@@ -151,6 +152,32 @@ async function mutate(action) {
   catch (e) { notice(e.message); if (selected && token) await state(); }
   finally { busy = false; controls(); }
 }
+async function maintenanceReport(kind) {
+  if (busy || !token || !["storage", "integrity"].includes(kind)) return;
+  busy = true; controls();
+  $("maintenance-summary").hidden = $("maintenance-details").hidden = true;
+  $("maintenance-summary").textContent = $("maintenance-json").textContent = "";
+  $("maintenance-status").textContent = kind === "storage" ? "Checking storage usage…" : "Checking persisted evidence…";
+  try {
+    const report = await api(kind === "storage" ? "/storage" : "/integrity-report");
+    if (kind === "integrity") {
+      if (!["passed", "failed"].includes(report.status)) throw new Error("Unrecognized audit result. No verdict available.");
+      $("maintenance-status").textContent = report.status === "passed" ? "Integrity audit passed." : "Integrity audit failed. Inspect retained evidence before continuing.";
+      $("maintenance-summary").textContent = report.status === "passed" ?
+        `Checked ${report.generated_at}\nTasks: ${report.tasks} · Records: ${report.records} · Artifact references: ${report.artifact_references}` :
+        `Checked ${report.generated_at}\nReason: ${report.reason}`;
+    } else {
+      $("maintenance-status").textContent = "Storage report ready. This is not an integrity audit.";
+      $("maintenance-summary").textContent = `Checked ${report.generated_at}\nArtifact bytes: ${report.physical_artifact_bytes} / ${report.disk_quota_bytes}\nOrdinary quota headroom: ${report.disk_headroom_bytes} bytes\nOrphan files: ${report.orphan_files} · Eligible for GC: ${report.gc_eligible_files}\nMissing referenced files: ${report.missing_referenced_files} · Size mismatches: ${report.size_mismatches}\nUnexpected entries: ${report.unexpected_entries}`;
+    }
+    $("maintenance-json").textContent = pretty(report);
+    $("maintenance-summary").hidden = $("maintenance-details").hidden = false;
+  } catch (error) {
+    $("maintenance-status").textContent = "Report unavailable. " + error.message;
+  } finally { busy = false; controls(); }
+}
+$("storage-report").addEventListener("click", () => maintenanceReport("storage"));
+$("integrity-report").addEventListener("click", () => maintenanceReport("integrity"));
 $("connect").addEventListener("submit", async e => {
   e.preventDefault(); token = $("token").value.trim(); $("token").value = "";
   try { await tasks(); $("login").hidden = true; $("workspace").hidden = false; $("disconnect").hidden = false; notice("Connected to the local operator session."); }

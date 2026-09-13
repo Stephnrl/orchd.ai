@@ -46,6 +46,8 @@ jobs:
         run: node tests/test_ui_approval_renewal.cjs
       - name: Check recovery controls
         run: node tests/test_ui_recovery_diagnostics.cjs
+      - name: Check maintenance reports
+        run: node tests/test_ui_maintenance.cjs
       - name: Check Python compilation
         run: python -m compileall -q orch tests scripts
       - name: Check whitespace

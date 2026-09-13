@@ -2,6 +2,12 @@
 
 Run the existing backup integrity checks without creating a snapshot:
 
+The connected local UI provides **Run integrity audit** in the store-wide maintenance
+panel. It distinguishes a passed audit, a failed audit returned by the API, and an
+unavailable request. Each request clears older results and shows the report timestamp.
+Audits are manual rather than periodically polled; workflow controls are disabled
+while the request is in flight. No repair, deletion, or workflow continuation follows.
+
 ```sh
 python -m orch audit --data .runtime/managed
 ```
