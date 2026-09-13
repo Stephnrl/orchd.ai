@@ -21,8 +21,16 @@ report is printed in the job log. It is temporary host-bound evidence, expires a
 24 hours and always reports `provider_authorized: false`. A CI result does not qualify
 a different workstation, WSL environment or corporate provider deployment.
 
-Actions are pinned to full commit hashes resolved from the official checkout v4,
-setup-python v5 and setup-node v4 tags. Repository token permissions are limited to
+Actions are pinned to full commit hashes resolved from the official checkout v7.0.1,
+setup-python v7.0.0 and setup-node v7.0.0 tags. All three actions declare the Node 24
+runtime, avoiding the deprecated Node 20 action runtime. This is separate from the
+Node 22 interpreter installed for the UI tests. Automatic package-manager caching is
+explicitly disabled because these tests have no npm dependencies.
+The action runtime requires Actions Runner 2.327.1 or newer; this workflow uses
+GitHub-hosted runners. See the official [checkout release](https://github.com/actions/checkout/releases/tag/v7.0.1),
+[setup-python release](https://github.com/actions/setup-python/releases/tag/v7.0.0),
+and [setup-node release](https://github.com/actions/setup-node/releases/tag/v7.0.0).
+Repository token permissions are limited to
 `contents: read`, checkout does not persist credentials, and jobs use hosted runners
 with 15-minute timeouts. No repository secrets, provider credentials, external action
 brokers, publishing steps or `pull_request_target` execution are configured. Dependency
