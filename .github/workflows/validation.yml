@@ -50,6 +50,8 @@ jobs:
         run: node tests/test_ui_maintenance.cjs
       - name: Check task refresh ordering
         run: node tests/test_ui_refresh.cjs
+      - name: Check evidence request ordering
+        run: node tests/test_ui_evidence.cjs
       - name: Check Python compilation
         run: python -m compileall -q orch tests scripts
       - name: Check whitespace

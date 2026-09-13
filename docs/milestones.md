@@ -47,6 +47,8 @@ Task refreshes now fence overlapping responses and clear actionable state on pen
 or failed reads so older responses cannot restore stale operator controls.
 An explicit task-refresh button and status message let operators retry failed reads
 while clearly marking retained details as potentially stale.
+Evidence reads likewise fence overlapping selections and clear stale contents during
+loading or failures, preventing older artifacts from replacing the selected evidence.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

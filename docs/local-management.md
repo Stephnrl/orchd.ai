@@ -11,6 +11,12 @@ loading, success or failure. The message labels retained details as potentially 
 while refresh is pending or failed. Retry remains available after a failed read without
 reselecting the task, but is disabled during other operations or without a session.
 It refreshes task state and approval evidence only; it never starts workflow execution.
+Evidence selection also follows the latest click. Selecting a record or artifact clears
+the previous content and links while loading; late responses or errors from an older
+selection cannot overwrite the current evidence. A failed selected read leaves a clear
+unavailable message and can be retried by selecting its reference again. Switching tasks
+prevents an old evidence response from reopening the panel. Content remains rendered
+as text, including untrusted markup.
 
 Start the server from the repository root and open the exact address it prints:
 
