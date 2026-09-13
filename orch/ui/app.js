@@ -2,6 +2,7 @@
 const $ = id => document.getElementById(id);
 let token = "", selected = null, snapshot = null, approval = null, recovery = null;
 let epoch = 0, cursor = 0, taskNext = null, recordNext = null, busy = false;
+let stateRequest = 0;
 const names = new Map();
 const pretty = value => JSON.stringify(value, null, 2);
 function notice(message) { $("notice").textContent = message; }
@@ -88,33 +89,40 @@ async function records(more = false) {
   recordNext = data.next; $("more-records").hidden = recordNext === null;
 }
 async function state() {
-  const version = epoch, task = selected;
-  recovery = null; $("recovery-reviewed").checked = false; $("cleanup-reviewed").checked = false; controls();
-  const data = await api(`/tasks/${task}`);
-  const spec = await api(`/tasks/${task}/records/${data.state.spec.id}`);
-  const pending = data.state.pending_approval ? await api(`/tasks/${task}/records/${data.state.pending_approval.id}`) : null;
-  const diagnostics = data.state.state === "BLOCKED" ? await api(`/tasks/${task}/recovery-diagnostics`) : null;
-  if (version !== epoch) return;
-  snapshot = data; approval = pending; recovery = diagnostics;
-  $("task-title").textContent = spec.title; $("task-id").textContent = task;
-  $("state").textContent = data.state.state.replaceAll("_", " "); $("revision").textContent = "Revision " + data.state.revision;
-  $("state-json").textContent = pretty(data); $("approval").hidden = !pending; $("reviewed").checked = false;
-  $("recovery-diagnostics").hidden = !diagnostics;
-  const outcome = data.context?.operator_recovery;
-  $("recovery-outcome").hidden = !outcome;
-  if (outcome) $("recovery-outcome").textContent = outcome.cleanup === "deferred" ?
-    "Recovery committed. Workspace cleanup was deferred; inspect the retained files before continuing." :
-    outcome.cleanup === "pending" ? "Recovery committed. Cleanup is pending; inspect the workspace before retrying cleanup." :
-    "Recovery committed and workspace cleanup completed.";
-  if (diagnostics) {
-    $("recovery-guidance").textContent = diagnostics.reasons.join(" ") + " " + diagnostics.next_step;
-    $("recovery-json").textContent = pretty(diagnostics);
-  }
-  if (pending) {
-    $("approval-summary").textContent = `${pending.kind === "plan" ? "Plan" : "Simulated action"} approval · Expires ${pending.expires_at}`;
-    $("approval-json").textContent = pretty(pending); references(pending, $("approval-links"));
-  }
+  const version = epoch, task = selected, request = ++stateRequest;
+  snapshot = null; approval = null; recovery = null;
+  $("reviewed").checked = $("recovery-reviewed").checked = $("cleanup-reviewed").checked = false;
   controls();
+  try {
+    const data = await api(`/tasks/${task}`);
+    const spec = await api(`/tasks/${task}/records/${data.state.spec.id}`);
+    const pending = data.state.pending_approval ? await api(`/tasks/${task}/records/${data.state.pending_approval.id}`) : null;
+    const diagnostics = data.state.state === "BLOCKED" ? await api(`/tasks/${task}/recovery-diagnostics`) : null;
+    if (version !== epoch || request !== stateRequest) return;
+    snapshot = data; approval = pending; recovery = diagnostics;
+    $("task-title").textContent = spec.title; $("task-id").textContent = task;
+    $("state").textContent = data.state.state.replaceAll("_", " "); $("revision").textContent = "Revision " + data.state.revision;
+    $("state-json").textContent = pretty(data); $("approval").hidden = !pending; $("reviewed").checked = false;
+    $("recovery-diagnostics").hidden = !diagnostics;
+    const outcome = data.context?.operator_recovery;
+    $("recovery-outcome").hidden = !outcome;
+    if (outcome) $("recovery-outcome").textContent = outcome.cleanup === "deferred" ?
+      "Recovery committed. Workspace cleanup was deferred; inspect the retained files before continuing." :
+      outcome.cleanup === "pending" ? "Recovery committed. Cleanup is pending; inspect the workspace before retrying cleanup." :
+      "Recovery committed and workspace cleanup completed.";
+    if (diagnostics) {
+      $("recovery-guidance").textContent = diagnostics.reasons.join(" ") + " " + diagnostics.next_step;
+      $("recovery-json").textContent = pretty(diagnostics);
+    }
+    if (pending) {
+      $("approval-summary").textContent = `${pending.kind === "plan" ? "Plan" : "Simulated action"} approval · Expires ${pending.expires_at}`;
+      $("approval-json").textContent = pretty(pending); references(pending, $("approval-links"));
+    }
+    controls();
+  } catch (error) {
+    // An obsolete request must not replace a newer view with an error either.
+    if (version === epoch && request === stateRequest) throw error;
+  }
 }
 async function select(task) {
   if (busy) return;

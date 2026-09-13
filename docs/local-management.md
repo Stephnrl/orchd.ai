@@ -1,5 +1,12 @@
 # Local management UI
 
+Task refreshes clear actionable state and inspection acknowledgements until the
+latest request finishes successfully. Overlapping responses for the same task cannot
+replace a newer view with older state; responses and errors from a previous selection
+are ignored. If the current refresh fails, the last rendered details may remain visible,
+but workflow, approval, recovery and cleanup controls stay disabled until a successful
+refresh. Server-side revision and approval checks remain authoritative.
+
 Start the server from the repository root and open the exact address it prints:
 
 ```sh

@@ -43,6 +43,8 @@ read-only, preventing source typos or backup requests from creating or migrating
 evidence consistency without restoring a snapshot or modifying its files.
 The local UI now exposes manual store-wide storage and integrity reports with explicit
 verdicts, timestamps and no automatic maintenance actions.
+Task refreshes now fence overlapping responses and clear actionable state on pending
+or failed reads so older responses cannot restore stale operator controls.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |
