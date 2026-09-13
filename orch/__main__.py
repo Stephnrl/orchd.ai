@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -29,6 +29,13 @@ def main():
     parser.add_argument("--executable", help="Absolute provider executable path for read-only inventory")
     parser.add_argument("--expected-sha256", help="Approved executable digest for provider-check")
     args = parser.parse_args()
+    if args.command == "verify-backup":
+        if args.destination or args.task:
+            parser.error("verify-backup checks the whole backup and accepts no destination or task")
+        from .maintenance import verify_backup
+        report = verify_backup(args.data)
+        print(json.dumps(report, indent=2))
+        raise SystemExit(0 if report["status"] == "passed" else 2)
     if args.command == "retry-cleanup":
         if not args.task or not args.operation_id or args.expected_revision is None:
             parser.error("retry-cleanup requires --task, --operation-id and --expected-revision")

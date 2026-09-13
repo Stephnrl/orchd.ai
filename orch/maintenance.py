@@ -131,12 +131,10 @@ def backup(store, destination):
         return manifest
 
 
-def restore(source, destination):
-    source, destination = Path(source).absolute(), Path(destination).absolute()
+def backup_manifest(source):
+    """Validate the manifest and saved bytes shared by verification and restore."""
+    source = Path(source).absolute()
     plain(source)
-    if destination.exists() or destination.is_symlink() or destination == source or source in destination.parents:
-        raise Rejected("Restore requires a new destination outside backup")
-    plain(destination.parent)
     manifest_file = plain(source / "manifest.json")
     if manifest_file.stat().st_size > 8 * 1024 * 1024:
         raise Rejected("Manifest too large")
@@ -155,6 +153,48 @@ def restore(source, destination):
     for sha in hashes:
         if hashlib.sha256(plain(source / "artifacts" / sha).read_bytes()).hexdigest() != sha:
             raise Rejected("Backup artifact digest mismatch")
+    return manifest
+
+
+def verify_backup(source):
+    """Report saved-backup consistency without restoring or repairing it."""
+    report = {"version": 1, "generated_at": now(), "status": "failed", "reason": None,
+              "artifacts": None, "tasks": None}
+    try:
+        source = Path(source).absolute()
+        manifest = backup_manifest(source)
+        # Published backups are quiescent database snapshots, not live WAL stores.
+        for suffix in ("-wal", "-shm", "-journal"):
+            path = source / ("orch.sqlite" + suffix)
+            plain(path)
+            if path.exists() and (not path.is_file() or (suffix != "-shm" and path.stat().st_size)):
+                raise Rejected("Backup has live database sidecars")
+        store = Store(source, read_only=True, immutable=True)
+        try:
+            referenced = {json.loads(row[0])["sha256"] for row in store.db.execute("SELECT payload FROM artifacts")}
+            if referenced != set(manifest["artifacts"]):
+                raise Rejected("Artifact manifest does not match database")
+            audit(store)
+            tasks = store.db.execute("SELECT count(*) FROM tasks").fetchone()[0]
+        finally:
+            store.close()
+        if backup_manifest(source) != manifest:
+            raise Rejected("Backup changed during verification")
+        report.update(status="passed", tasks=tasks, artifacts=len(referenced))
+    except (Rejected, OSError, sqlite3.DatabaseError, ValueError, TypeError, KeyError):
+        report["reason"] = "backup_integrity_failure"
+    return report
+
+
+def restore(source, destination):
+    source, destination = Path(source).absolute(), Path(destination).absolute()
+    plain(source)
+    if destination.exists() or destination.is_symlink() or destination == source or source in destination.parents:
+        raise Rejected("Restore requires a new destination outside backup")
+    plain(destination.parent)
+    manifest = backup_manifest(source)
+    hashes = manifest["artifacts"]
+    db_path = source / "orch.sqlite"
     # A failed copy or audit must never publish a runnable destination. Stage on
     # the same filesystem so the final directory rename publishes the whole copy.
     with tempfile.TemporaryDirectory(prefix=".orch-restore-", dir=destination.parent) as temporary:
