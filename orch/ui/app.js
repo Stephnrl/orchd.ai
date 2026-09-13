@@ -22,6 +22,7 @@ function canRetryCleanup() {
   return !busy && cleanupAvailable() && $("cleanup-reviewed").checked;
 }
 function controls() {
+  $("refresh-task").disabled = busy || !token || !selected;
   $("storage-report").disabled = $("integrity-report").disabled = busy || !token;
   $("cleanup-retry").hidden = !cleanupAvailable();
   $("retry-cleanup").disabled = !canRetryCleanup();
@@ -91,6 +92,7 @@ async function records(more = false) {
 async function state() {
   const version = epoch, task = selected, request = ++stateRequest;
   snapshot = null; approval = null; recovery = null;
+  $("task-refresh-status").textContent = "Refreshing task… Previous details may be out of date. Actions are disabled until refresh succeeds.";
   $("reviewed").checked = $("recovery-reviewed").checked = $("cleanup-reviewed").checked = false;
   controls();
   try {
@@ -118,10 +120,14 @@ async function state() {
       $("approval-summary").textContent = `${pending.kind === "plan" ? "Plan" : "Simulated action"} approval · Expires ${pending.expires_at}`;
       $("approval-json").textContent = pretty(pending); references(pending, $("approval-links"));
     }
+    $("task-refresh-status").textContent = "Task refreshed. Review the current evidence before taking action.";
     controls();
   } catch (error) {
     // An obsolete request must not replace a newer view with an error either.
-    if (version === epoch && request === stateRequest) throw error;
+    if (version === epoch && request === stateRequest) {
+      $("task-refresh-status").textContent = "Task refresh failed. Previous details may be out of date. Use Refresh task to try again.";
+      throw error;
+    }
   }
 }
 async function select(task) {
@@ -193,6 +199,10 @@ $("connect").addEventListener("submit", async e => {
 });
 $("disconnect").addEventListener("click", () => location.reload());
 $("refresh").addEventListener("click", () => tasks().catch(e => notice(e.message)));
+$("refresh-task").addEventListener("click", () => {
+  if (busy || !token || !selected) return;
+  return state().catch(e => notice(e.message));
+});
 $("more-tasks").addEventListener("click", () => tasks(true).catch(e => notice(e.message)));
 $("more-records").addEventListener("click", () => records(true).catch(e => notice(e.message)));
 $("reviewed").addEventListener("change", controls);
