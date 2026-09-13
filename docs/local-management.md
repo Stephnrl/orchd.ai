@@ -17,6 +17,11 @@ selection cannot overwrite the current evidence. A failed selected read leaves a
 unavailable message and can be retried by selecting its reference again. Switching tasks
 prevents an old evidence response from reopening the panel. Content remains rendered
 as text, including untrusted markup.
+Task and record lists also ignore superseded responses and errors. Only one next-page
+request is dispatched at a time; failed pages retain their cursor for an explicit retry.
+A fresh list request disables paging until it succeeds, preventing an older cursor from
+appending to a refreshed list. Switching tasks clears the previous record links before
+loading the new task's evidence list.
 
 Start the server from the repository root and open the exact address it prints:
 

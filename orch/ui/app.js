@@ -4,6 +4,7 @@ let token = "", selected = null, snapshot = null, approval = null, recovery = nu
 let epoch = 0, cursor = 0, taskNext = null, recordNext = null, busy = false;
 let stateRequest = 0;
 let evidenceRequest = 0;
+let taskListRequest = 0, recordListRequest = 0, tasksLoading = false, recordsLoading = false;
 const names = new Map();
 const pretty = value => JSON.stringify(value, null, 2);
 function notice(message) { $("notice").textContent = message; }
@@ -23,6 +24,8 @@ function canRetryCleanup() {
   return !busy && cleanupAvailable() && $("cleanup-reviewed").checked;
 }
 function controls() {
+  $("more-tasks").disabled = tasksLoading || taskNext === null;
+  $("more-records").disabled = recordsLoading || recordNext === null;
   $("refresh-task").disabled = busy || !token || !selected;
   $("storage-report").disabled = $("integrity-report").disabled = busy || !token;
   $("cleanup-retry").hidden = !cleanupAvailable();
@@ -83,25 +86,43 @@ async function evidence(type, id) {
   }
 }
 async function tasks(more = false) {
-  const version = epoch;
-  const data = await api("/tasks?after=" + (more ? taskNext : 0));
-  if (version !== epoch) return;
-  if (!more) { $("tasks").replaceChildren(); names.clear(); }
-  for (const item of data.items) {
-    const b = button(item.task_id.slice(0, 12), () => select(item.task_id));
-    b.className = "task-button"; b.setAttribute("aria-current", String(item.task_id === selected));
-    const small = document.createElement("small"); small.textContent = item.state.state.replaceAll("_", " "); b.append(small);
-    $("tasks").append(b); names.set(item.task_id, b);
+  if (more && (tasksLoading || taskNext === null)) return;
+  const version = epoch, request = ++taskListRequest, after = more ? taskNext : 0;
+  if (!more) taskNext = null;
+  tasksLoading = true; controls();
+  try {
+    const data = await api("/tasks?after=" + after);
+    if (version !== epoch || request !== taskListRequest) return;
+    if (!more) { $("tasks").replaceChildren(); names.clear(); }
+    for (const item of data.items) {
+      const b = button(item.task_id.slice(0, 12), () => select(item.task_id));
+      b.className = "task-button"; b.setAttribute("aria-current", String(item.task_id === selected));
+      const small = document.createElement("small"); small.textContent = item.state.state.replaceAll("_", " "); b.append(small);
+      $("tasks").append(b); names.set(item.task_id, b);
+    }
+    taskNext = data.next; $("more-tasks").hidden = taskNext === null;
+  } catch (error) {
+    if (version === epoch && request === taskListRequest) throw error;
+  } finally {
+    if (request === taskListRequest) { tasksLoading = false; controls(); }
   }
-  taskNext = data.next; $("more-tasks").hidden = taskNext === null;
 }
 async function records(more = false) {
-  const version = epoch, task = selected;
-  const data = await api(`/tasks/${task}/records?after=${more ? recordNext : 0}`);
-  if (version !== epoch) return;
-  if (!more) $("records").replaceChildren();
-  for (const item of data.items) $("records").append(button(item.kind + " · " + item.id.slice(0, 8), () => evidence("records", item.id)));
-  recordNext = data.next; $("more-records").hidden = recordNext === null;
+  if (more && (recordsLoading || recordNext === null)) return;
+  const version = epoch, task = selected, request = ++recordListRequest, after = more ? recordNext : 0;
+  if (!more) recordNext = null;
+  recordsLoading = true; controls();
+  try {
+    const data = await api(`/tasks/${task}/records?after=${after}`);
+    if (version !== epoch || request !== recordListRequest) return;
+    if (!more) $("records").replaceChildren();
+    for (const item of data.items) $("records").append(button(item.kind + " · " + item.id.slice(0, 8), () => evidence("records", item.id)));
+    recordNext = data.next; $("more-records").hidden = recordNext === null;
+  } catch (error) {
+    if (version === epoch && request === recordListRequest) throw error;
+  } finally {
+    if (request === recordListRequest) { recordsLoading = false; controls(); }
+  }
 }
 async function state() {
   const version = epoch, task = selected, request = ++stateRequest;
@@ -147,6 +168,7 @@ async function state() {
 async function select(task) {
   if (busy) return;
   epoch++; selected = task; cursor = 0; snapshot = null; approval = null; recovery = null;
+  recordNext = null; $("records").replaceChildren();
   $("cancel-reason").value = ""; $("cancellation").open = false;
   $("events").replaceChildren(); $("evidence").hidden = true; $("empty").hidden = true; $("detail").hidden = false; $("approval").hidden = true;
   for (const [id, b] of names) b.setAttribute("aria-current", String(id === task));
