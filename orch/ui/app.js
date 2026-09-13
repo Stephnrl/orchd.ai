@@ -10,7 +10,19 @@ function canRecover() {
     recovery.task_id === selected && recovery.revision === snapshot.state.revision &&
     recovery.recovery_status === "preconditions_met" && $("recovery-reviewed").checked;
 }
+function cleanupAvailable() {
+  const outcome = snapshot?.context?.operator_recovery;
+  return !!outcome && snapshot.state.task_id === selected && snapshot.state.state === "CHANGES_REQUESTED" &&
+    snapshot.state.revision === outcome.completed_revision && !snapshot.state.active_operation_id &&
+    typeof outcome.operation_id === "string" && /^[a-f0-9]{32}$/.test(outcome.operation_id) &&
+    ["pending", "deferred"].includes(outcome.cleanup);
+}
+function canRetryCleanup() {
+  return !busy && cleanupAvailable() && $("cleanup-reviewed").checked;
+}
 function controls() {
+  $("cleanup-retry").hidden = !cleanupAvailable();
+  $("retry-cleanup").disabled = !canRetryCleanup();
   $("recover-task").disabled = !canRecover();
   $("run").disabled = busy || !snapshot || !!snapshot.state.pending_approval || ["COMPLETED", "FAILED", "CANCELLED", "BLOCKED"].includes(snapshot.state.state);
   const expired = !!approval && Date.parse(approval.expires_at) <= Date.now();
@@ -76,7 +88,7 @@ async function records(more = false) {
 }
 async function state() {
   const version = epoch, task = selected;
-  recovery = null; $("recovery-reviewed").checked = false; controls();
+  recovery = null; $("recovery-reviewed").checked = false; $("cleanup-reviewed").checked = false; controls();
   const data = await api(`/tasks/${task}`);
   const spec = await api(`/tasks/${task}/records/${data.state.spec.id}`);
   const pending = data.state.pending_approval ? await api(`/tasks/${task}/records/${data.state.pending_approval.id}`) : null;
@@ -91,7 +103,7 @@ async function state() {
   $("recovery-outcome").hidden = !outcome;
   if (outcome) $("recovery-outcome").textContent = outcome.cleanup === "deferred" ?
     "Recovery committed. Workspace cleanup was deferred; inspect the retained files before continuing." :
-    outcome.cleanup === "pending" ? "Recovery committed. Cleanup is pending; retry the original recovery request to finish cleanup." :
+    outcome.cleanup === "pending" ? "Recovery committed. Cleanup is pending; inspect the workspace before retrying cleanup." :
     "Recovery committed and workspace cleanup completed.";
   if (diagnostics) {
     $("recovery-guidance").textContent = diagnostics.reasons.join(" ") + " " + diagnostics.next_step;
@@ -150,6 +162,12 @@ $("more-tasks").addEventListener("click", () => tasks(true).catch(e => notice(e.
 $("more-records").addEventListener("click", () => records(true).catch(e => notice(e.message)));
 $("reviewed").addEventListener("change", controls);
 $("recovery-reviewed").addEventListener("change", controls);
+$("cleanup-reviewed").addEventListener("change", controls);
+$("retry-cleanup").addEventListener("click", () => {
+  if (!canRetryCleanup()) return;
+  const task = selected, payload = {operation_id: snapshot.context.operator_recovery.operation_id, expected_revision: snapshot.state.revision};
+  mutate(() => api(`/tasks/${task}/retry-cleanup`, payload)).catch(e => notice(e.message));
+});
 $("recover-task").addEventListener("click", () => {
   if (!canRecover()) return;
   const task = selected, payload = {expected_revision: recovery.revision};

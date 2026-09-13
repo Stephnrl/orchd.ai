@@ -68,8 +68,13 @@ The authenticated API equivalent is `POST /tasks/TASK_ID/retry-cleanup` with exa
 `{"operation_id": "OPERATION_ID", "expected_revision": RECOVERED_REVISION}`.
 Use `operator_recovery.operation_id` and `operator_recovery.completed_revision` from
 task context. This revision is different from the original BLOCKED recovery revision.
-The local UI continues to show the cleanup outcome; this explicit retry is available
-through the CLI/API.
+The local UI offers **Retry cleanup** for pending or deferred cleanup at the matching
+recovered revision. Inspect the retained workspace and select the inspection checkbox
+first. Refresh clears that acknowledgement. A busy UI, different selected task,
+advanced revision, active operation or completed cleanup disables the control.
+The server independently checks operator identity and unresolved operations. Success
+or rejection refreshes the displayed state; the UI never starts workflow execution
+after a cleanup request. These UI guards are covered with DOM-stub regression tests.
 
 The command requires an existing database, the original recovery operator, the matching
 operation, completed reconciliation, and no active or unresolved task operations.
