@@ -35,6 +35,8 @@ An explicit CLI/API cleanup retry lets operators resolve deferred recovery clean
 after inspection, guarded by the recovered revision and completed operation.
 The local management UI exposes that cleanup retry with an inspection acknowledgement,
 revision checks and a refreshed outcome after the request.
+GC completes path validation before deletion and opens its database read-only,
+preventing scan failures from deleting earlier candidates or migrating storage.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

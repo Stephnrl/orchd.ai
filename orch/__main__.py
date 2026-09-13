@@ -58,8 +58,10 @@ def main():
         parser.error("renew-approval requires an existing workflow database")
     if args.command in ("backup", "restore") and not args.destination:
         parser.error(args.command + " requires --destination")
-    if args.command == "gc" and not (Path(args.data) / "orch.sqlite").is_file():
-        parser.error("gc requires an existing workflow database")
+    if args.command == "gc":
+        from .maintenance import plain
+        if not plain(Path(args.data).absolute() / "orch.sqlite").is_file():
+            parser.error("gc requires an existing workflow database")
     if args.command == "cancel" and (not args.task or args.expected_revision is None or args.reason is None):
         parser.error("cancel requires --task, --expected-revision and --reason")
     if args.command == "cancel" and not (Path(args.data) / "orch.sqlite").is_file():
@@ -89,7 +91,7 @@ def main():
     if args.command in ("backup", "gc"):
         from .storage import Store
         from .maintenance import backup, collect_orphans
-        store = Store(args.data)
+        store = Store(args.data, read_only=args.command == "gc")
         try:
             print(json.dumps(backup(store, args.destination) if args.command == "backup" else collect_orphans(store, dry_run=args.dry_run)))
         finally:

@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sqlite3
 import sys
 import tempfile
 import time
@@ -10,7 +11,7 @@ from unittest.mock import patch
 
 import test_workflow as helpers
 from orch.contracts import Rejected
-from orch.maintenance import collect_orphans
+from orch.maintenance import collect_orphans, plain
 
 
 class GCDryRunTests(unittest.TestCase):
@@ -62,6 +63,40 @@ class GCDryRunTests(unittest.TestCase):
             result = subprocess.run([sys.executable, "-m", "orch", "gc", "--data", str(missing), "--dry-run"], capture_output=True, text=True, timeout=20)
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(missing.exists())
+
+    def test_late_scan_rejection_preserves_all_candidates(self):
+        old = self.orphan("a" * 64)
+        late = self.orphan("f" * 64)
+        def reject_late(path):
+            if path == late:
+                raise Rejected("Unsafe late entry")
+            return plain(path)
+        for preview in (False, True):
+            with self.subTest(preview=preview), patch("orch.maintenance.plain", side_effect=reject_late):
+                with self.assertRaises(Rejected):
+                    collect_orphans(self.engine.store, dry_run=preview)
+            self.assertEqual(old.read_bytes(), b"orphan-data")
+            self.assertTrue(late.exists())
+
+    def test_invalid_grace_never_removes_files(self):
+        old = self.orphan("a" * 64)
+        for grace in (float("nan"), float("inf"), -float("inf"), True, None, "86400", 3599):
+            with self.subTest(grace=grace), self.assertRaises(Rejected):
+                collect_orphans(self.engine.store, grace_seconds=grace)
+            self.assertTrue(old.exists())
+
+    def test_cli_rejects_old_database_without_migration(self):
+        with tempfile.TemporaryDirectory() as base:
+            database = Path(base) / "orch.sqlite"
+            db = sqlite3.connect(database)
+            db.execute("PRAGMA user_version=1")
+            db.close()
+            before = database.read_bytes()
+            for extra in ([], ["--dry-run"]):
+                result = subprocess.run([sys.executable, "-m", "orch", "gc", "--data", base, *extra], capture_output=True, text=True, timeout=20)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(database.read_bytes(), before)
+                self.assertFalse((Path(base) / "artifacts").exists())
 
 
 if __name__ == "__main__":

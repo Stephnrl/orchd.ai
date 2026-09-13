@@ -1,6 +1,7 @@
 """Conservative offline lifecycle and verified backup/restore operations."""
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -239,22 +240,31 @@ def storage_usage(store, task_id=None):
 def collect_orphans(store, grace_seconds=86400, dry_run=False):
     if type(dry_run) is not bool:
         raise Rejected("Invalid GC dry-run flag")
-    if grace_seconds < 3600:
-        raise Rejected("Orphan grace must be at least one hour")
+    if type(grace_seconds) not in (int, float) or (type(grace_seconds) is float and not math.isfinite(grace_seconds)) or grace_seconds < 3600:
+        raise Rejected("Orphan grace must be finite and at least one hour")
     with store.exclusive():
         root = plain(store.root / "artifacts")
         retained = {json.loads(r[0])["sha256"] for r in store.db.execute("SELECT payload FROM artifacts")}
         removed = []
         candidates = []
-        for path in root.iterdir():
+        eligible = []
+        scanned_at = time.time()
+        # Finish all scan/path checks before the first unlink. A later invalid
+        # entry must not cause a partially executed cleanup during validation.
+        for path in sorted(root.iterdir()):
             plain(path)
             if not path.is_file() or not re.fullmatch(r"[a-f0-9]{64}(?:\.[a-f0-9]{32})?", path.name):
                 continue
-            if path.name in retained or time.time() - path.stat().st_mtime < grace_seconds:
+            stat = path.stat()
+            if path.name in retained or scanned_at - stat.st_mtime < grace_seconds:
                 continue
-            # Exact files only; never recurse or remove referenced audit evidence.
-            candidates.append({"name": path.name, "size_bytes": path.stat().st_size})
-            if not dry_run:
+            candidates.append({"name": path.name, "size_bytes": stat.st_size})
+            eligible.append(path)
+        if not dry_run:
+            for path in eligible:
+                # Exact files only; never recurse. Recheck paths immediately
+                # before deletion as well as during preflight.
+                plain(path)
                 path.unlink()
                 removed.append(path.name)
         return {"dry_run": dry_run, "candidates": candidates, "removed": removed,
