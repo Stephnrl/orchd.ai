@@ -7,7 +7,13 @@ python -m orch backup --data .runtime/managed --destination .runtime/backup-001
 ```
 
 The destination must be new, outside live data, under an existing operator-controlled
-parent directory. The command takes the dispatcher lock, audits live state, then
+parent directory. The CLI requires an existing current-version source database and
+opens it read-only. Missing sources are rejected without creating storage; legacy
+sources are rejected without migration. Source paths and ancestors are checked for
+links/junctions before opening SQLite. Upgrade legacy data through the normal
+application path before requesting a backup.
+
+The command takes the dispatcher lock, audits live state, then
 creates a unique `.orch-backup-*` sibling staging directory. SQLite's backup API copies
 the database and only referenced artifact blobs are copied.
 
@@ -21,6 +27,9 @@ Handled copy, audit, manifest-write or publication failures remove private stagi
 and do not publish a backup at the requested destination. A destination that appears
 during verification is rejected and preserved. The source workflow is not modified.
 The manifest format and restore command remain compatible with existing snapshots.
+Read-only describes the database connection, not every filesystem operation: the
+dispatcher lock and SQLite shared-memory handling can still touch source metadata.
+The destination receives the verified backup as before.
 
 The parent directory must remain operator-controlled; this does not defend against a
 hostile same-user process racing the final filesystem operation. A hard process kill
