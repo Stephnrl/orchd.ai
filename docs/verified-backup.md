@@ -6,6 +6,9 @@ Backup creation now follows the same staged-publication approach as restore:
 python -m orch backup --data .runtime/managed --destination .runtime/backup-001
 ```
 
+Use [saved-backup verification](verify-backup.md) to check the published snapshot
+without restoring it or selecting a destination.
+
 The destination must be new, outside live data, under an existing operator-controlled
 parent directory. The CLI requires an existing current-version source database and
 opens it read-only. Missing sources are rejected without creating storage; legacy

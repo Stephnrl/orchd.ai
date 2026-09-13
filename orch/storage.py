@@ -12,11 +12,13 @@ AUDIT_RESERVE_BYTES = 4 * 1024 * 1024
 
 
 class Store:
-    def __init__(self, root, task_quota=64 * 1024 * 1024, disk_quota=256 * 1024 * 1024, read_only=False):
+    def __init__(self, root, task_quota=64 * 1024 * 1024, disk_quota=256 * 1024 * 1024, read_only=False, immutable=False):
+        if immutable and not read_only:
+            raise Rejected("Immutable storage requires read-only mode")
         self.task_quota, self.disk_quota = task_quota, disk_quota
         self.root = Path(root).resolve()
         if read_only:
-            self.db = sqlite3.connect((self.root / "orch.sqlite").as_uri() + "?mode=ro", uri=True, isolation_level=None)
+            self.db = sqlite3.connect((self.root / "orch.sqlite").as_uri() + "?mode=ro" + ("&immutable=1" if immutable else ""), uri=True, isolation_level=None)
             self.db.row_factory = sqlite3.Row
             if self.db.execute("PRAGMA user_version").fetchone()[0] != 2:
                 self.db.close()
