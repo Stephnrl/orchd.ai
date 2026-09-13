@@ -21,7 +21,13 @@ uses a fresh temporary store, then stops that process and removes only its test 
 It reads the generated session from the server pipe without printing it or weakening
 production authentication. It checks invalid-session rejection, disconnect, rendered
 approval guards, evidence inspection, refresh review reset, separate approval/execution,
-and storage/integrity reports. Uncaught page errors fail the tests. These are functional
+and storage/integrity reports. Completion and cancellation tests also stop the server,
+restart it against the same test store, reject the old session, and reconnect with the
+new session. They compare persisted state/context, replayed event labels, a contract
+record and the final event's artifact content before and after restart. Cancellation
+retains its reason, and terminal controls remain unavailable. This exercises restart
+between operations, not a crash during a broker operation or Docker recovery.
+Uncaught page errors fail the tests. These are functional
 Chromium checks, not a visual-layout audit or coverage of every recovery/pagination race.
 Docker and live providers are not used by this job.
 
@@ -71,7 +77,12 @@ Once the checks have run successfully in the repository, they can be selected as
 required checks in repository policy. Actions availability and hosted minutes remain
 subject to the repository's existing settings.
 
-Browser milestone verification on September 13, 2026: both Chromium tests passed
+Restart milestone verification on September 13, 2026: all four Chromium tests passed
+on Windows, including completed and cancelled workflow restarts. JavaScript syntax
+and whitespace checks passed. The existing Linux browser CI job discovers these tests
+automatically; hosted results have not been awaited.
+
+Initial browser milestone verification on September 13, 2026: both Chromium tests passed
 on Windows, as did all six DOM-stub scripts and six focused HTTP/management Python
 tests. JavaScript syntax and whitespace checks passed. Hosted Linux browser results
 remain separate from this local verification.

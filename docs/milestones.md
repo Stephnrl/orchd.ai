@@ -25,6 +25,9 @@ pending or deferred workspace cleanup, avoiding repeated runtime reconciliation.
 and isolates the five mandatory Docker gates in a Linux CI job.
 It also includes a real Chromium operator workflow check against an isolated local
 fixture server, alongside the targeted DOM-stub regressions.
+Browser restart checks now cover completed and cancelled workflows: old sessions are
+rejected, evidence and event history remain readable, and reconnecting preserves the
+task state/context and disabled terminal controls.
 [Verified backup publication](verified-backup.md) prevents handled copy/audit failures
 from leaving a partially populated backup at the requested destination.
 [On-demand integrity audits](integrity-audit.md) expose the existing backup consistency
