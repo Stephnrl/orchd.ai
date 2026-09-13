@@ -27,6 +27,8 @@ and isolates the five mandatory Docker gates in a Linux CI job.
 from leaving a partially populated backup at the requested destination.
 [On-demand integrity audits](integrity-audit.md) expose the existing backup consistency
 checks without copying data or attempting repairs.
+[GC dry-run previews](gc-dry-run.md) expose exact eligible orphan candidates before
+the separate deletion command is invoked.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

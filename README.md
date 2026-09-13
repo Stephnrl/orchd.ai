@@ -33,6 +33,8 @@ Backup creation now [verifies a staged snapshot before publication](docs/verifie
 matching the existing restore safeguard.
 An [on-demand integrity audit](docs/integrity-audit.md) verifies stored artifacts and
 event replay through the CLI or authenticated API without creating a backup.
+Artifact cleanup supports an explicit [GC dry-run preview](docs/gc-dry-run.md) before
+deleting eligible orphan files.
 
 ```sh
 python -m pip install -r requirements-dev.txt

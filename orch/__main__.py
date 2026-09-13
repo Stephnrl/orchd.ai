@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--request-id", help="Expired pending approval request ID")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--destination")
+    parser.add_argument("--dry-run", action="store_true", help="For GC, report eligible orphan files without deleting them")
     parser.add_argument("--expected-revision", type=int)
     parser.add_argument("--reason", help="One-line operator cancellation reason (1–500 characters)")
     parser.add_argument("--provider", choices=["github_copilot_cli", "abc_binary_ai_placeholder"])
@@ -50,6 +51,8 @@ def main():
         parser.error("renew-approval requires an existing workflow database")
     if args.command in ("backup", "restore") and not args.destination:
         parser.error(args.command + " requires --destination")
+    if args.command == "gc" and not (Path(args.data) / "orch.sqlite").is_file():
+        parser.error("gc requires an existing workflow database")
     if args.command == "cancel" and (not args.task or args.expected_revision is None or args.reason is None):
         parser.error("cancel requires --task, --expected-revision and --reason")
     if args.command == "cancel" and not (Path(args.data) / "orch.sqlite").is_file():
@@ -81,7 +84,7 @@ def main():
         from .maintenance import backup, collect_orphans
         store = Store(args.data)
         try:
-            print(json.dumps(backup(store, args.destination) if args.command == "backup" else collect_orphans(store)))
+            print(json.dumps(backup(store, args.destination) if args.command == "backup" else collect_orphans(store, dry_run=args.dry_run)))
         finally:
             store.close()
         return

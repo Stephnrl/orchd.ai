@@ -205,13 +205,16 @@ def storage_usage(store, task_id=None):
                 "database_file_bytes": database_bytes}
 
 
-def collect_orphans(store, grace_seconds=86400):
+def collect_orphans(store, grace_seconds=86400, dry_run=False):
+    if type(dry_run) is not bool:
+        raise Rejected("Invalid GC dry-run flag")
     if grace_seconds < 3600:
         raise Rejected("Orphan grace must be at least one hour")
     with store.exclusive():
         root = plain(store.root / "artifacts")
         retained = {json.loads(r[0])["sha256"] for r in store.db.execute("SELECT payload FROM artifacts")}
         removed = []
+        candidates = []
         for path in root.iterdir():
             plain(path)
             if not path.is_file() or not re.fullmatch(r"[a-f0-9]{64}(?:\.[a-f0-9]{32})?", path.name):
@@ -219,6 +222,9 @@ def collect_orphans(store, grace_seconds=86400):
             if path.name in retained or time.time() - path.stat().st_mtime < grace_seconds:
                 continue
             # Exact files only; never recurse or remove referenced audit evidence.
-            path.unlink()
-            removed.append(path.name)
-        return {"removed": removed}
+            candidates.append({"name": path.name, "size_bytes": path.stat().st_size})
+            if not dry_run:
+                path.unlink()
+                removed.append(path.name)
+        return {"dry_run": dry_run, "candidates": candidates, "removed": removed,
+                "grace_seconds": grace_seconds}
