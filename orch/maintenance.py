@@ -8,7 +8,8 @@ import sqlite3
 import tempfile
 import time
 
-from .contracts import Rejected, canonical, validate, now
+from .contracts import Rejected, canonical, digest, validate, now
+from .broker import validate_wire
 from .storage import Store, AUDIT_RESERVE_BYTES
 
 
@@ -28,6 +29,35 @@ def copy_bytes(source, target):
         os.fsync(outgoing.fileno())
 
 
+def audit_provenance(store):
+    """Check persisted bindings without consulting journals or the current runtime."""
+    for row in store.db.execute("SELECT * FROM broker_requests"):
+        request = json.loads(row["request"])
+        validate_wire(request, "Request")
+        operation = store.db.execute("SELECT task_id,generation FROM operations WHERE id=?", (row["operation_id"],)).fetchone()
+        if (not operation or request["operation_id"] != row["operation_id"]
+                or request["generation"] != row["generation"]
+                or request["task_id"] != operation["task_id"]
+                or row["generation"] > operation["generation"]):
+            raise Rejected("Broker request binding mismatch")
+    for row in store.db.execute("SELECT * FROM execution_provenance"):
+        saved = store.db.execute("SELECT request FROM broker_requests WHERE operation_id=? AND generation=?",
+                                 (row["operation_id"], row["generation"])).fetchone()
+        if not saved:
+            raise Rejected("Execution provenance has no durable request")
+        request = json.loads(saved["request"])
+        reference = json.loads(row["artifact"])
+        envelope = json.loads(store.read_artifact(reference, request["task_id"]))
+        validate_wire(envelope, "Envelope")
+        if (reference["producer_id"] != "action_broker" or reference["trust"] != "trusted_receipt"
+                or digest(envelope) != row["envelope_sha256"]
+                or envelope["request_sha256"] != digest(request)):
+            raise Rejected("Execution provenance digest or producer mismatch")
+        for key in ("schema_version", "operation_id", "task_id", "generation", "nonce", "source_digest"):
+            if envelope[key] != request[key]:
+                raise Rejected("Execution provenance binding mismatch")
+
+
 def audit(store):
     if store.db.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or store.db.execute("PRAGMA foreign_key_check").fetchall():
         raise Rejected("Database integrity failure")
@@ -35,6 +65,7 @@ def audit(store):
         validate(json.loads(row[0]))
     for row in store.db.execute("SELECT task_id,payload FROM artifacts"):
         store.read_artifact(json.loads(row["payload"]), row["task_id"])
+    audit_provenance(store)
     for row in store.db.execute("SELECT id FROM tasks"):
         replay = store.reconstruct(row["id"])
         state, context = store.task(row["id"])

@@ -29,6 +29,8 @@ from leaving a partially populated backup at the requested destination.
 checks without copying data or attempting repairs.
 [GC dry-run previews](gc-dry-run.md) expose exact eligible orphan candidates before
 the separate deletion command is invoked.
+Integrity audits, backups and restores also cross-check persisted broker requests and
+execution-provenance bindings, including historical generations after recovery.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

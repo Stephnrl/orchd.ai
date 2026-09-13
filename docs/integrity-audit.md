@@ -21,6 +21,20 @@ with 409 and provides no verdict.
 The report checks SQLite integrity and foreign keys, validates stored contract shapes,
 verifies referenced artifact sizes and SHA-256 hashes, and compares each task projection
 with its event replay. This detects changed bytes even when file sizes are unchanged.
+Persisted broker requests are checked against their operation IDs, owning tasks and
+generations. Every stored execution-provenance row must resolve to its durable request
+and a task-authorized artifact produced by the action broker as a trusted receipt.
+The envelope must satisfy the broker wire schema and match its saved digest, request
+hash, nonce, generation, task, operation and source digest. Recomputing an artifact
+hash alone cannot conceal a broken request/envelope binding.
+
+These same checks run before backup publication and during staged restore validation.
+An interrupted request may legitimately have no committed provenance yet. Recovery
+may also advance an operation generation beyond its historical evidence; that older
+evidence remains valid. The audit compares persisted source digests with each other,
+not with currently installed code, so upgrading the runtime does not invalidate history.
+It does not contact Docker, read broker journals, or persist new evidence.
+
 On success it reports task, record and artifact-reference counts. On failure counts
 remain null and the reason is `database_artifact_or_replay_integrity_failure`.
 Artifact content, arbitrary paths, hashes and raw exception messages are excluded.
