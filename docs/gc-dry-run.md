@@ -17,6 +17,17 @@ includes `dry_run`, `candidates`, `removed` and `grace_seconds`; `removed` is al
 empty in preview mode. Names must match the existing hash or staging-file grammar and
 be unreferenced and at least one day old by default. The minimum configurable grace
 period remains one hour.
+Both modes open a current-version database read-only and never migrate it. Legacy
+databases must be upgraded through the normal application path first. Path checks run
+before opening storage, including checks for links and junctions in its ancestors.
+
+GC now completes its scan before deleting any candidates, so a path or scan failure
+found later in the directory leaves all candidates intact. Candidate order is stable
+by filename and the scan uses one age cutoff. Invalid, nonfinite or boolean grace
+values are rejected. Paths are rechecked immediately before each deletion.
+Deletion itself is not transactional: an unlink failure or an external filesystem
+change during deletion can still leave a partially completed cleanup. The dispatcher
+lock coordinates application writers, not arbitrary host processes.
 
 Links, junctions, directories and unexpected names are handled by the existing
 conservative scanner; no recursive traversal or implicit cleanup is added. Candidate
