@@ -49,6 +49,8 @@ An explicit task-refresh button and status message let operators retry failed re
 while clearly marking retained details as potentially stale.
 Evidence reads likewise fence overlapping selections and clear stale contents during
 loading or failures, preventing older artifacts from replacing the selected evidence.
+Task and record lists fence stale responses and serialize next-page requests to avoid
+duplicate entries, with retryable failed pages and cleared record links on task switches.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |
