@@ -411,6 +411,32 @@ class Engine:
                 self._transition(state, context, "CHANGES_REQUESTED")
             return self._finish_recovery_cleanup(state, context)
 
+    def retry_cleanup(self, task_id, operation_id, expected_revision, principal="local-operator"):
+        """Explicitly retry retained workspace cleanup after committed recovery."""
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise Rejected("Invalid cleanup revision")
+        with self.store.exclusive():
+            state, context = self.store.task(task_id)
+            recovery = context.get("operator_recovery")
+            if (not recovery or state["state"] != "CHANGES_REQUESTED"
+                    or state["revision"] != expected_revision
+                    or recovery["completed_revision"] != expected_revision
+                    or recovery["operation_id"] != operation_id or recovery["principal"] != principal):
+                raise Rejected("Cleanup requires the matching recovered task revision and operator")
+            op = self.store.db.execute("SELECT * FROM operations WHERE id=? AND task_id=?", (operation_id, task_id)).fetchone()
+            if (not op or op["status"] != "done"
+                    or json.loads(op["result"])["failure"] != "reconciled_interrupted_attempt"
+                    or state["active_operation_id"] is not None
+                    or self.store.db.execute("SELECT 1 FROM operations WHERE task_id=? AND status='started'", (task_id,)).fetchone()):
+                raise Rejected("Cleanup requires completed reconciliation and no unresolved operations")
+            if recovery["cleanup"] == "completed":
+                return self.task(task_id)
+            if recovery["cleanup"] not in ("pending", "deferred"):
+                raise Rejected("Unknown cleanup outcome")
+            recovery["cleanup"] = "pending"
+            self._event(state, context, "operator_cleanup_retry", {"principal": principal}, role="human", operation=operation_id)
+            return self._finish_recovery_cleanup(state, context)
+
     def _finish_recovery_cleanup(self, state, context):
         """Called under dispatcher lock, after workflow reconciliation committed."""
         recovery = context["operator_recovery"]

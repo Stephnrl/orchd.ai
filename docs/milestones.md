@@ -31,6 +31,8 @@ checks without copying data or attempting repairs.
 the separate deletion command is invoked.
 Integrity audits, backups and restores also cross-check persisted broker requests and
 execution-provenance bindings, including historical generations after recovery.
+An explicit CLI/API cleanup retry lets operators resolve deferred recovery cleanup
+after inspection, guarded by the recovered revision and completed operation.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

@@ -102,6 +102,10 @@ class Application:
                 if set(payload) != {"expected_revision"} or type(payload["expected_revision"]) is not int:
                     raise Rejected("Invalid recovery fields")
                 return 200, self.engine.recover(task, payload["expected_revision"])
+            if method == "POST" and parts[2:] == ["retry-cleanup"]:
+                if set(payload) != {"operation_id", "expected_revision"} or not isinstance(payload["operation_id"], str):
+                    raise Rejected("Invalid cleanup fields")
+                return 200, self.engine.retry_cleanup(task, **payload)
             if method == "POST" and parts[2:] == ["cancel"]:
                 if set(payload) != {"expected_revision", "reason"}:
                     raise Rejected("Invalid cancellation fields")

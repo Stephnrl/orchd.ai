@@ -12,12 +12,13 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "storage-usage", "audit", "recover", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
     parser.add_argument("--image", help="Preloaded digest-pinned Python image for Docker")
     parser.add_argument("--task")
+    parser.add_argument("--operation-id", help="Recovered operation whose workspace cleanup should be retried")
     parser.add_argument("--request-id", help="Expired pending approval request ID")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--destination")
@@ -28,6 +29,12 @@ def main():
     parser.add_argument("--executable", help="Absolute provider executable path for read-only inventory")
     parser.add_argument("--expected-sha256", help="Approved executable digest for provider-check")
     args = parser.parse_args()
+    if args.command == "retry-cleanup":
+        if not args.task or not args.operation_id or args.expected_revision is None:
+            parser.error("retry-cleanup requires --task, --operation-id and --expected-revision")
+        from .maintenance import plain
+        if not plain(Path(args.data).absolute() / "orch.sqlite").is_file():
+            parser.error("retry-cleanup requires an existing workflow database")
     if args.command in ("storage-usage", "audit"):
         from .maintenance import plain, storage_usage, integrity_report
         from .storage import Store
@@ -88,7 +95,7 @@ def main():
         finally:
             store.close()
         return
-    engine = Engine(args.data, Executor("trusted-fixture" if args.trusted_fixture or args.command in ("cancel", "renew-approval") else "docker", args.image), provider_factory=FixtureCliProvider if args.fixture_provider == "cli" else MockProvider)
+    engine = Engine(args.data, Executor("trusted-fixture" if args.trusted_fixture or args.command in ("cancel", "renew-approval", "retry-cleanup") else "docker", args.image), provider_factory=FixtureCliProvider if args.fixture_provider == "cli" else MockProvider)
     try:
         if args.command == "serve":
             serve(engine, args.port)
@@ -96,6 +103,8 @@ def main():
             print(json.dumps([{ "event": e, "payload": json.loads(engine.store.read_artifact(e["payload"], args.task))} for e in engine.events(args.task)], indent=2))
         elif args.command == "recover":
             print(json.dumps(engine.recover(args.task, args.expected_revision)))
+        elif args.command == "retry-cleanup":
+            print(json.dumps(engine.retry_cleanup(args.task, args.operation_id, args.expected_revision)))
         elif args.command == "cancel":
             print(json.dumps(engine.cancel(args.task, args.expected_revision, args.reason)))
         elif args.command == "renew-approval":
