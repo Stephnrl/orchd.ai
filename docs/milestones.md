@@ -37,6 +37,8 @@ The local management UI exposes that cleanup retry with an inspection acknowledg
 revision checks and a refreshed outcome after the request.
 GC completes path validation before deletion and opens its database read-only,
 preventing scan failures from deleting earlier candidates or migrating storage.
+The backup CLI likewise requires existing current-version storage and opens its source
+read-only, preventing source typos or backup requests from creating or migrating data.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |
