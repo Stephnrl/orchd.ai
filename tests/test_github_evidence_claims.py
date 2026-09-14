@@ -399,6 +399,54 @@ class EvidenceClaimsTests(unittest.TestCase):
             self.check()
         self.assertFalse(self.store.db.in_transaction)
 
+    def snapshot_result(self):
+        return json.loads(self.store.db.execute('SELECT result FROM operations WHERE id=?', ('c' * 32,)).fetchone()[0])
+
+    def set_snapshot_result(self, result):
+        self.store.db.execute('UPDATE operations SET result=? WHERE id=?', (canonical(result).decode(), 'c' * 32))
+
+    def test_missing_snapshot_reference_blocks(self):
+        self.persist()
+        result = self.snapshot_result()
+        del result['snapshot']
+        self.set_snapshot_result(result)
+        self.assertIn('patch_snapshot_missing', self.check()['binding']['claims']['blockers'])
+
+    def test_snapshot_must_match_patch_digest(self):
+        self.persist()
+        result = self.snapshot_result()
+        result['snapshot'] = self.store.artifact(self.task, 'different snapshot')
+        self.set_snapshot_result(result)
+        self.assertIn('patch_snapshot_mismatch', self.check()['binding']['claims']['blockers'])
+
+    def test_snapshot_artifact_must_belong_to_task(self):
+        self.persist()
+        other = 'b' * 32
+        self.store.db.execute('INSERT INTO tasks VALUES(?,?,?)', (other, '{}', '{}'))
+        result = self.snapshot_result()
+        result['snapshot'] = self.store.artifact(other, 'fixture snapshot', media_type='text/plain')
+        self.set_snapshot_result(result)
+        with self.assertRaises(Rejected):
+            self.check()
+
+    def test_snapshot_file_corruption_and_absence_reject(self):
+        self.persist()
+        path = self.store.root / 'artifacts' / self.snapshot_result()['snapshot']['sha256']
+        path.write_bytes(b'changed snapshot')
+        with self.assertRaises(Rejected):
+            self.check()
+        path.unlink()
+        with self.assertRaises(Rejected):
+            self.check()
+        self.assertFalse(self.store.db.in_transaction)
+
+    def test_snapshot_report_is_metadata_only(self):
+        self.persist()
+        report = self.check()
+        self.assertEqual(report['binding']['claims']['execution']['operations']['patch']['snapshot'], self.snapshot_result()['snapshot'])
+        self.assertNotIn('fixture snapshot', json.dumps(report))
+        self.assertFalse(report['live_authorized'])
+
     def test_current_generation_requires_its_own_broker_request(self):
         self.persist()
         self.store.db.execute('UPDATE operations SET generation=2 WHERE id=?', ('d' * 32,))

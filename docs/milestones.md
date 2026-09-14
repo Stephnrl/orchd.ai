@@ -76,6 +76,8 @@ A bounded read-only task catalog now exposes candidate receipt/policy references
 creation times, retaining multiple candidates for explicit record-assessment selection.
 An explicit review/policy anchor resolver now produces assessment-ready selections by
 following retained review links, rejecting ambiguity and conflicting patch references.
+Implementation snapshot artifacts now require task ownership, bounded byte verification
+and agreement with patch receipt digests, closing a gap beyond receipt-only hash claims.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

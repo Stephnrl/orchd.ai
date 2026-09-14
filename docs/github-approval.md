@@ -358,6 +358,15 @@ the combined assessment adds the binding described above.
 The combined approval command runs this stricter assessment fresh rather than trusting
 a saved report. `evidence_verified`, `live_authorized` and `retry_allowed` stay false.
 
+The completed implementation operation must retain a `snapshot` artifact reference in
+its result. That artifact must match canonical task-owned metadata, pass regular-file
+and hash/size checks under a separate 1 MiB read cap, and match the patch receipt's
+snapshot digest. An absent reference or a valid artifact with the wrong digest blocks
+assessment; malformed references and missing, corrupted or foreign-task artifacts fail
+without a report. The execution assessment includes snapshot metadata without its
+contents. This verifies retained snapshot bytes, not that a live workspace or repository
+commit matched them, or that the diff accurately describes the snapshot.
+
 Next steps require verifying evidence provenance and remaining dependencies, durable request/decision
 storage, authenticated approver identity, policy verification, expiry and single-use
 admission, plus reviewed provider/credential/remote-branch boundaries. A future broker

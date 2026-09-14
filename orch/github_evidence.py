@@ -317,6 +317,7 @@ def _execution_claims(store, task, work, patch, test):
             envelope_sha, envelope_blockers = _broker_envelope(store, task, receipt['operation_id'], row['generation'], request, role, receipt)
             blockers.extend(role + '_' + reason for reason in envelope_blockers)
         result_sha = None
+        snapshot = None
         if row['result'] is not None:
             try:
                 result = json.loads(row['result'])
@@ -325,12 +326,22 @@ def _execution_claims(store, task, work, patch, test):
                 result_sha = digest(result)
                 if result.get(role) != ref(receipt) or result.get('failure') is not None:
                     blockers.append(role + '_operation_result_mismatch')
+                if role == 'patch':
+                    snapshot = result.get('snapshot')
+                    if snapshot is None:
+                        blockers.append('patch_snapshot_missing')
+                    else:
+                        _artifact_bytes(store, snapshot, task)
+                        if snapshot['sha256'] != receipt['snapshot_sha256']:
+                            blockers.append('patch_snapshot_mismatch')
             except (ValueError, TypeError, RecursionError) as exc:
                 raise Rejected('Invalid execution result') from exc
         else:
             blockers.append(role + '_operation_result_missing')
         operations[role] = {'operation_id': receipt['operation_id'], 'result_sha256': result_sha,
                             'broker_request_sha256': request_sha, 'broker_envelope_sha256': envelope_sha}
+        if role == 'patch':
+            operations[role]['snapshot'] = snapshot
     if len(runtimes) == 2 and runtimes[0] != runtimes[1]:
         blockers.append('broker_runtime_mismatch')
     return {'operations': operations, 'blockers': blockers}
