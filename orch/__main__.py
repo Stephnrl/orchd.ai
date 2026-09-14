@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -27,7 +27,7 @@ def main():
     parser.add_argument("--reason", help="One-line operator cancellation reason (1–500 characters)")
     parser.add_argument("--provider", choices=["github_copilot_cli", "abc_binary_ai_placeholder"])
     parser.add_argument("--executable", help="Absolute provider executable path for read-only inventory")
-    parser.add_argument("--expected-sha256", help="Approved executable digest for provider inventory")
+    parser.add_argument("--expected-sha256", help="Expected executable digest or retained GitHub scope digest")
     parser.add_argument("--runtime-report", help="Existing runtime evidence to revalidate for deployment-check; may query Docker")
     parser.add_argument("--intent", help="Local JSON intent for offline github-preview")
     parser.add_argument("--allow-repository", help="Exact owner/name allowed for the GitHub preview")
@@ -35,6 +35,27 @@ def main():
     parser.add_argument("--observations", help="Offline JSON observations for GitHub assessment")
     parser.add_argument("--journal", help="Separate local GitHub operation journal database")
     args = parser.parse_args()
+    if args.command == "github-reconcile-journal":
+        if not args.journal or not args.operation_id or not args.expected_sha256 or not args.observations:
+            parser.error("github-reconcile-journal requires --journal, --operation-id, --expected-sha256 and --observations")
+        if args.intent or args.allow_repository or args.repository_id is not None:
+            parser.error("Journal reconciliation uses retained scope; intent and repository overrides are not accepted")
+        from .github_journal import GitHubJournal
+        from .github_preview import load_intent
+        from .contracts import Rejected
+        import sqlite3
+        journal = None
+        try:
+            observations = load_intent(args.observations)
+            journal = GitHubJournal(args.journal, read_only=True)
+            report = journal.reconcile(args.operation_id, args.expected_sha256, observations)
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error("Cannot reconcile GitHub journal; check retained reservation, expected digest and observations")
+        finally:
+            if journal is not None:
+                journal.close()
+        print(json.dumps(report, indent=2))
+        raise SystemExit(0 if report['status'] == 'candidate_observed' else 2)
     if args.command == "github-inspect":
         if not args.journal or not args.operation_id:
             parser.error("github-inspect requires --journal and --operation-id")
