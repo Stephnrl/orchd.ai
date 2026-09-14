@@ -3,6 +3,9 @@
 The next broker foundation step compares saved GitHub-shaped responses against an
 [intent preview](github-preview.md) and an explicit numeric repository ID. It performs
 no network calls and cannot verify who collected the responses or when they were read.
+The [combined preflight](github-preflight.md) can now bind these supplied responses to
+a journal scope and timestamp, assess their age and combine them with portable evidence
+review. The timestamp remains an unauthenticated caller claim.
 
 ```sh
 python -m orch github-check-refs --intent intent.json --allow-repository example/project --repository-id 123 --observations observations.json

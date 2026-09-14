@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -39,7 +39,39 @@ def main():
     parser.add_argument("--approval-preview", help="Saved GitHub approval preview JSON")
     parser.add_argument("--bundle", help="Portable offline GitHub evidence bundle file")
     parser.add_argument("--expected-bundle-sha256", help="Expected whole-file digest for journal-bound bundle review")
+    parser.add_argument("--expected-observations-sha256", help="Expected ref observation snapshot binding digest")
+    parser.add_argument("--observed-at", help="Supplied observation time in UTC, such as 2026-01-01T00:00:00Z")
     args = parser.parse_args()
+    if args.command in ("github-ref-observation-snapshot", "github-preflight"):
+        preparing = args.command == "github-ref-observation-snapshot"
+        if not args.journal or not args.expected_sha256 or not args.observations:
+            parser.error("Offline preflight requires --journal, --expected-sha256 and --observations")
+        if preparing and (not args.operation_id or not args.observed_at):
+            parser.error("Observation snapshot requires --operation-id and --observed-at")
+        if not preparing and (not args.approval_preview or not args.bundle or not args.expected_bundle_sha256 or not args.expected_observations_sha256):
+            parser.error("Preflight requires --approval-preview, --bundle, --expected-bundle-sha256 and --expected-observations-sha256")
+        from .github_preflight import prepare_observation_snapshot, assess_preflight
+        from .github_journal import GitHubJournal
+        from .github_preview import load_intent
+        from .contracts import Rejected, canonical
+        import sqlite3
+        journal = None
+        try:
+            journal = GitHubJournal(args.journal, read_only=True)
+            if preparing:
+                report = prepare_observation_snapshot(journal, args.operation_id, args.expected_sha256, load_intent(args.observations), args.observed_at)
+            else:
+                report = assess_preflight(journal, load_intent(args.approval_preview), args.expected_sha256,
+                                          args.bundle, args.expected_bundle_sha256, args.observations, args.expected_observations_sha256)
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error("Offline preflight failed; check inputs, expected digests, timestamps and journal scope")
+        finally:
+            if journal is not None:
+                journal.close()
+        print(canonical(report).decode() if preparing else json.dumps(report, indent=2))
+        if report.get('status') == 'blocked':
+            raise SystemExit(2)
+        return
     if args.command in ("github-bundle-approval-preview", "github-assess-bundle-approval"):
         if not args.journal or not args.bundle or not args.expected_bundle_sha256 or not args.expected_sha256:
             parser.error("Bundle review requires --journal, --bundle, --expected-bundle-sha256 and --expected-sha256")
