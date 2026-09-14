@@ -241,7 +241,8 @@ class JiraBackupTests(unittest.TestCase):
             code, out = run('jira-compare-journal-backup', [*expected, '--journal', str(self.source)])
             self.assertEqual(code, 2)
             self.assertEqual(json.loads(out)['status'], 'different')
-            for extra in ([], [*expected, '--journal', str(self.source)], [*expected, '--jira-author-key', 'override'], ['--expected-sha256', 'f'*64]):
+            for extra in ([], [*expected, '--journal', str(self.source)], [*expected, '--jira-author-key', 'override'],
+                          [*expected, '--jira-profile', 'override.json'], ['--expected-sha256', 'f'*64]):
                 code, out = run('jira-journal-recovery-drill', extra)
                 self.assertEqual(code, 2)
                 self.assertEqual(out, '')

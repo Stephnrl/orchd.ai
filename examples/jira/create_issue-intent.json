@@ -1,0 +1,1 @@
+{"action":"create_issue","issue":null,"operation_id":"00000000000000000000000000000065","parameters":{"description":"Synthetic Jira notes.","epic":{"id":"300","key":"ENG-9"},"epic_name":null,"issue_type":"story","summary":"Fixture story"},"schema_version":"1.0.0","task_id":"00000000000000000000000000000001"}

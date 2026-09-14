@@ -109,7 +109,9 @@ and `retry_allowed: false`. Identifiers do not prove task existence or authority
 update timestamp is a captured value, not an optimistic-concurrency guard. Before live
 use, this still needs deployment-specific conformance, credentials, authenticated human
 approval, fresh issue/permission checks, durable intent and uncertain-result recovery.
-Epic creation, transitions, linking and automatic task intake remain unimplemented.
+[The consolidated action package](jira-integration.md) now prepares Epic/Story/Task
+creation, transitions and links with explicit mappings and saved metadata. Automatic
+task intake and live actions remain unimplemented.
 
 [Offline comment recovery](jira-comment-recovery.md) now adds an exact read plan and
 bounded paginated comparison against the proposed text, visibility and expected author.

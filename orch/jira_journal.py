@@ -42,8 +42,12 @@ def bound_scope(intent, target, issue_observations, expected_preview_sha256, aut
 
 
 def _validated_scope(scope):
-    expected = bound_scope(scope['intent'], scope['target'], scope['issue_observations'],
-                           scope['preview_sha256'], scope['author_key'])
+    if isinstance(scope, dict) and scope.get('kind') == 'JiraActionScope':
+        from .jira_actions import action_scope
+        expected = action_scope(scope['intent'], scope['profile'], scope['capture'], scope['preview_sha256'])
+    else:
+        expected = bound_scope(scope['intent'], scope['target'], scope['issue_observations'],
+                               scope['preview_sha256'], scope['author_key'])
     if canonical(scope) != canonical(expected):
         raise Rejected('Invalid Jira journal scope')
     return expected
@@ -142,6 +146,8 @@ class JiraJournal:
         scope = record['scope']
         binding = {'schema_version': '1.0.0', **self._metadata(record), 'target': scope['target'],
                    'preview_sha256': scope['preview_sha256'], 'read_plan_sha256': scope['read_plan']['sha256']}
+        if scope.get('kind') == 'JiraActionScope':
+            binding['action'] = scope['intent']['action']
         return {'kind': 'JiraJournalRecord', 'binding': binding, 'sha256': digest(binding), **FLAGS}
 
     def usage(self):
@@ -157,6 +163,19 @@ class JiraJournal:
         if self.read_only:
             raise Rejected('Jira journal is read-only')
         scope = bound_scope(intent, target, issue_observations, expected_preview_sha256, author_key)
+        return self._stage_scope(scope)
+
+    def stage_action(self, intent, profile, capture, expected_preview_sha256):
+        from .jira_actions import action_scope
+        if self.read_only:
+            raise Rejected('Jira journal is read-only')
+        return self._stage_scope(action_scope(intent, profile, capture, expected_preview_sha256))
+
+    def _stage_scope(self, scope):
+        encoded = canonical(scope)
+        if len(encoded) > MAX_SCOPE_BYTES:
+            raise Rejected('Jira journal scope exceeds byte limit')
+        scope = json.loads(encoded)
         operation, task = scope['intent']['operation_id'], scope['intent']['task_id']
         encoded, sha = canonical(scope), digest(scope)
         self.db.execute('BEGIN IMMEDIATE')
@@ -204,11 +223,19 @@ class JiraJournal:
             scope = record['scope']
             binding = {'schema_version': '1.0.0', **self._metadata(record)}
             if capture is None:
-                binding['read_plan'] = scope['read_plan']
+                if scope.get('kind') == 'JiraActionScope':
+                    from .jira_actions import recovery_plan
+                    binding['read_plan'] = recovery_plan(scope)
+                else:
+                    binding['read_plan'] = scope['read_plan']
                 result = {'kind': 'JiraJournalRecoveryPlan', 'binding': binding, 'sha256': digest(binding), **FLAGS}
             else:
-                assessment = assess_comments(scope['intent'], scope['target'], scope['issue_observations'],
-                                              scope['preview_sha256'], scope['author_key'], capture)
+                if scope.get('kind') == 'JiraActionScope':
+                    from .jira_actions import reconcile_action
+                    assessment = reconcile_action(scope, capture)
+                else:
+                    assessment = assess_comments(scope['intent'], scope['target'], scope['issue_observations'],
+                                                  scope['preview_sha256'], scope['author_key'], capture)
                 binding['assessment'] = assessment
                 result = {'kind': 'JiraJournalReconciliation', 'binding': binding, 'sha256': digest(binding),
                           'status': assessment['status'], **FLAGS}

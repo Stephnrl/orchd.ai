@@ -1,0 +1,1 @@
+{"base_url":"https://jira.example.test/jira","codec":"jira-rest-8.5","epic_link_field":"customfield_10002","epic_name_field":"customfield_10001","github_repository":"example/project","issue_types":{"epic":"10","story":"11","task":"12"},"project_id":"100","project_key":"ENG","schema_version":"1.0.0"}

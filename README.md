@@ -26,6 +26,9 @@ against the exact preview and expected author without permitting automatic repos
 tracking, integrity audits and recovery from saved scope across restarts.
 [Jira recovery bundles](docs/jira-backups.md) add verified snapshots, stale-reservation
 comparison and disposable recovery drills without replacing active journals.
+[The consolidated Jira package](docs/jira-integration.md) adds Epic/Story/Task preparation,
+relationships, transitions, GitHub associations and review/preflight diagnostics, with
+synthetic examples and a complete offline acceptance scenario. Live activation remains gated.
 
 Phase 1 remains the design baseline below. Phase 2 implements the bounded offline
 vertical slice; see [running Phase 2](docs/phase2.md) for APIs, recovery and limitations.

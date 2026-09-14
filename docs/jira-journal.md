@@ -1,5 +1,10 @@
 # Retained Jira comment operations
 
+The [consolidated action package](jira-integration.md) extends this same journal to
+creation, transitions, Epic attachment and issue/GitHub links. Legacy comment records
+remain readable without migration. One operation per task and all reservation invariants
+apply across action types; metadata-only reports omit raw captures for both scope shapes.
+
 The offline Jira adapter has a separate SQLite operation journal. It retains the exact
 inputs behind a [comment preview](jira-preview.md) and its expected author, so
 [comment recovery](jira-comment-recovery.md) can use saved scope after restart. It does

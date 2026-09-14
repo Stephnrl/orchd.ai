@@ -1,0 +1,1 @@
+{"action":"issue_link","issue":{"id":"200","key":"ENG-7"},"operation_id":"00000000000000000000000000000067","parameters":{"direction":"outward","link_type_id":"30","other_issue":{"id":"400","key":"ENG-10"}},"schema_version":"1.0.0","task_id":"00000000000000000000000000000003"}
