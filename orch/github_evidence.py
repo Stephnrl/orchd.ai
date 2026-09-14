@@ -121,10 +121,19 @@ def _assess_contents(store, task, contents):
         except (ValueError, TypeError, RecursionError) as exc:
             raise Rejected("Invalid evidence contents") from exc
     patch, test, review, policy = (documents[role] for role in ('patch', 'test', 'review', 'policy'))
+    test_request = _stored_record(store, test['request'], task, 'TestRequest')
     review_request = _stored_record(store, review['request'], task, 'ReviewRequest')
     tool = _stored_record(store, policy['request'], task, 'ToolRequest')
     supporting = _check_supporting_artifacts(store, task, patch, test)
     blockers = []
+    if (test_request['operation_id'] != test['operation_id'] or test_request['patch'] != ref(patch)
+            or test_request['snapshot_sha256'] != test['snapshot_sha256']
+            or test_request['work_order'] != patch['work_order']):
+        blockers.append('test_request_binding_mismatch')
+    if test_request['command'] != test['requested_command']:
+        blockers.append('test_request_command_mismatch')
+    if test_request['runner_image_digest'] != test['environment']['image_digest']:
+        blockers.append('test_runner_image_mismatch')
     if test['patch'] != ref(patch) or test['snapshot_sha256'] != patch['snapshot_sha256']:
         blockers.append('test_patch_mismatch')
     if test['outcome'] != 'passed' or test['exit_code'] != 0 or test['output_truncated']:
@@ -145,11 +154,15 @@ def _assess_contents(store, task, contents):
             or policy['operation_id'] != tool['operation_id'] or policy['policy_version'] != tool['policy_version']):
         blockers.append('policy_request_mismatch')
     checked = now()
+    if not datetime.fromisoformat(patch['created_at']) <= datetime.fromisoformat(test_request['created_at']) <= datetime.fromisoformat(test['started_at']):
+        blockers.append('test_request_timeline_invalid')
+    if datetime.fromisoformat(test_request['created_at']) > datetime.fromisoformat(checked):
+        blockers.append('test_request_from_future')
     blockers.extend(_timeline_blockers(patch, test, review_request, review, tool, policy, checked))
     if not datetime.fromisoformat(policy['created_at']) <= datetime.fromisoformat(checked) < datetime.fromisoformat(policy['expires_at']):
         blockers.append('policy_not_current')
     return {"records": {role: ref(document) for role, document in documents.items()},
-            "review_request": ref(review_request), "tool_request": ref(tool), "checked_at": checked,
+            "test_request": ref(test_request), "review_request": ref(review_request), "tool_request": ref(tool), "checked_at": checked,
             "policy_window": {"issued_at": policy['created_at'], "expires_at": policy['expires_at']},
             "supporting_artifacts": supporting,
             "blockers": blockers}

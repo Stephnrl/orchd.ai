@@ -47,6 +47,8 @@ Evidence chronology now checks execution windows and patch/test/review/tool/poli
 ordering, rejects future records and contains reported commands within patch execution.
 Artifact evidence reads now reject Windows junctions as well as symbolic links, with
 a real directory-link regression and canonical-path mocking for Windows runner aliases.
+Strict assessments now resolve task-owned test requests and bind their operation,
+patch/work-order references, snapshot, complete command, runner image and creation time.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
