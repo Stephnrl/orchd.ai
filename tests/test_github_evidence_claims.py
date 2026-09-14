@@ -11,7 +11,7 @@ from unittest.mock import patch
 from orch.contracts import Rejected, digest, ref
 from orch.github_evidence import check_evidence_contents
 from orch.storage import Store
-from github_evidence_support import register_support
+from github_evidence_support import register_support, link_plan_evidence
 
 
 class EvidenceClaimsTests(unittest.TestCase):
@@ -23,10 +23,12 @@ class EvidenceClaimsTests(unittest.TestCase):
         examples = json.loads((Path(__file__).resolve().parents[1] / 'contracts/v1/examples.json').read_text())
         self.docs = {role: copy.deepcopy(examples[kind]) for role, kind in (
             ('patch', 'PatchReceipt'), ('test', 'TestReceipt'), ('review', 'ReviewDecision'),
-            ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'), ('test_request', 'TestRequest'), ('work_order', 'WorkOrder'))}
+            ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'), ('test_request', 'TestRequest'), ('work_order', 'WorkOrder'), ('plan', 'ImplementationPlan'), ('plan_request', 'ApprovalRequest'), ('plan_decision', 'ApprovalDecision'))}
         for role, document in self.docs.items():
             document.update(id=role, task_id=self.task)
         register_support(self.store, self.task, self.docs)
+        self.docs['plan_request']['expires_at'] = '2026-09-12T14:15:00Z'
+        link_plan_evidence(self.docs)
         self.docs['patch']['work_order'] = ref(self.docs['work_order'])
         self.docs['test_request']['work_order'] = ref(self.docs['work_order'])
         self.docs['test']['patch'] = ref(self.docs['patch'])
@@ -226,8 +228,83 @@ class EvidenceClaimsTests(unittest.TestCase):
         self.assert_work_blocked('work_order_repository_mismatch')
 
     def test_work_order_review_plan_mismatch_blocks(self):
-        self.docs['work_order']['plan']['sha256'] = 'b' * 64
+        self.docs['review_request']['plan'] = {'id': 'other-plan', 'sha256': 'b' * 64}
         self.assert_work_blocked('work_order_review_mismatch')
+
+    def assert_plan_blocked(self, reason):
+        self.relink()
+        self.persist()
+        report = self.check()
+        self.assertEqual(report['status'], 'blocked')
+        self.assertIn(reason, report['binding']['claims']['blockers'])
+        self.assertFalse(report['live_authorized'])
+
+    def test_missing_plan_rejects(self):
+        self.persist(omit='plan')
+        with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
+            self.check()
+
+    def test_missing_plan_decision_rejects(self):
+        self.persist(omit='plan_decision')
+        with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
+            self.check()
+
+    def test_missing_plan_request_rejects(self):
+        self.persist(omit='plan_request')
+        with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
+            self.check()
+
+    def test_foreign_task_plan_rejects(self):
+        other = 'b' * 32
+        self.store.db.execute('INSERT INTO tasks VALUES(?,?,?)', (other, '{}', '{}'))
+        self.docs['plan']['task_id'] = other
+        link_plan_evidence(self.docs)
+        self.relink()
+        self.persist()
+        with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
+            self.check()
+
+    def test_work_order_cannot_expand_plan_paths(self):
+        self.docs['work_order']['allowed_paths'].append('extra.txt')
+        self.assert_plan_blocked('plan_work_order_mismatch')
+
+    def test_work_order_cannot_exceed_plan_attempts(self):
+        self.docs['work_order']['attempt'] = 2
+        self.assert_plan_blocked('plan_work_order_mismatch')
+
+    def test_work_order_cannot_exceed_plan_byte_budget(self):
+        self.docs['work_order']['max_changed_bytes'] = 2
+        self.assert_plan_blocked('plan_work_order_mismatch')
+
+    def test_denied_plan_approval_blocks(self):
+        self.docs['plan_decision']['decision'] = 'reject'
+        link_plan_evidence(self.docs)
+        self.assert_plan_blocked('plan_approval_binding_mismatch')
+
+    def test_plan_approval_digest_mismatch_blocks(self):
+        self.docs['plan_decision']['subject_sha256'] = 'b' * 64
+        self.docs['work_order']['plan_approval'] = ref(self.docs['plan_decision'])
+        self.assert_plan_blocked('plan_approval_binding_mismatch')
+
+    def test_plan_approval_wrong_evidence_blocks(self):
+        self.docs['plan_request']['evidence'] = [ref(self.docs['plan'])]
+        self.docs['plan_decision']['request'] = ref(self.docs['plan_request'])
+        self.docs['work_order']['plan_approval'] = ref(self.docs['plan_decision'])
+        self.assert_plan_blocked('plan_approval_binding_mismatch')
+
+    def test_plan_approval_expired_at_work_creation_blocks(self):
+        self.docs['plan_request']['expires_at'] = self.docs['work_order']['created_at']
+        link_plan_evidence(self.docs)
+        self.assert_plan_blocked('plan_approval_timeline_invalid')
+
+    def test_plan_decision_before_request_blocks(self):
+        self.docs['plan_decision']['decided_at'] = '2026-09-12T13:59:59Z'
+        link_plan_evidence(self.docs)
+        self.assert_plan_blocked('plan_approval_timeline_invalid')
+
+    def test_work_deadline_cannot_extend_plan_approval(self):
+        self.docs['work_order']['deadline'] = '2026-09-12T14:15:00.001Z'
+        self.assert_plan_blocked('plan_approval_timeline_invalid')
 
     def test_work_order_test_limits_must_match(self):
         self.docs['work_order']['permitted_tests'][0]['timeout_seconds'] = 2
@@ -362,6 +439,7 @@ class EvidenceClaimsTests(unittest.TestCase):
                 if field in document:
                     document[field] = '2026-09-12T14:00:00.000Z'
         self.docs['patch']['started_at'] = '2026-09-12T14:00:00Z'
+        link_plan_evidence(self.docs)
         self.relink()
         self.docs['policy']['request'] = ref(self.docs['tool'])
         self.persist()

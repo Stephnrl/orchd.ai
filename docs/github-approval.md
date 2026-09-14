@@ -176,7 +176,7 @@ window, and none of the six records may claim creation after the assessment time
 Timeline violations produce fixed blockers and exit 2, including when artifact bytes,
 preview scope and policy expiry otherwise pass. These checks use claimed timestamps;
 they do not authenticate clocks or producers, impose an evidence age limit, or establish
-the chronology of unresolved dependencies such as plans and plan approvals.
+the chronology of unresolved dependencies such as task specifications and planner invocations.
 
 The test receipt must resolve to a canonical stored `TestRequest` for the same task.
 Its operation must match the receipt, its patch must match the assessed patch, its
@@ -198,7 +198,23 @@ Work-order creation must precede or equal patch execution start and cannot be in
 future; its deadline cannot predate creation, and patch/test completion cannot exceed it.
 Equality at the byte limit or deadline is accepted. The report binds the work-order
 reference. These checks do not recompute changes from the diff, authenticate the work
-order, resolve its plan approval or prove that execution enforced its capabilities.
+order or prove that execution enforced its capabilities.
+
+The work order's `ImplementationPlan`, plan `ApprovalDecision` and linked
+`ApprovalRequest` must resolve to canonical records owned by the task. Spec, repository,
+allowed-path list and permitted-test list must match the work order exactly; the work
+order's byte limit and attempt cannot exceed the plan's limits. The request must be for
+that plan, with exactly the spec and plan references as evidence. Its canonical subject
+digest binds those references, task, revision and declared policy version; the decision
+must approve that same digest. Plan creation, request creation, decision time, decision
+record creation and work-order creation must occur in order. The work order must be
+created before approval expiry and its deadline cannot extend that expiry.
+
+The report includes those three references and fixed blockers in `plan_approval`.
+This checks historical approval claims, not current approval validity: expiry after
+work-order creation does not by itself invalidate completed evidence. It does not
+authenticate the actor or policy, consult the approval registry for supersession, verify
+the task revision against historical state, or admit/consume a live approval.
 
 This is consistency checking of local claims, not authentication of execution, reviewer
 identity or policy authority. It does not validate every transitive dependency,

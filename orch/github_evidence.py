@@ -123,10 +123,12 @@ def _assess_contents(store, task, contents):
     patch, test, review, policy = (documents[role] for role in ('patch', 'test', 'review', 'policy'))
     test_request = _stored_record(store, test['request'], task, 'TestRequest')
     work = _stored_record(store, patch['work_order'], task, 'WorkOrder')
+    plan_claims = _plan_claims(store, task, work)
     review_request = _stored_record(store, review['request'], task, 'ReviewRequest')
     tool = _stored_record(store, policy['request'], task, 'ToolRequest')
     supporting = _check_supporting_artifacts(store, task, patch, test)
     blockers = []
+    blockers.extend(plan_claims['blockers'])
     if work['repository'] != patch['repository']:
         blockers.append('work_order_repository_mismatch')
     if work['spec'] != review_request['spec'] or work['plan'] != review_request['plan']:
@@ -181,10 +183,33 @@ def _assess_contents(store, task, contents):
     if not datetime.fromisoformat(policy['created_at']) <= datetime.fromisoformat(checked) < datetime.fromisoformat(policy['expires_at']):
         blockers.append('policy_not_current')
     return {"records": {role: ref(document) for role, document in documents.items()},
-            "work_order": ref(work), "test_request": ref(test_request), "review_request": ref(review_request), "tool_request": ref(tool), "checked_at": checked,
+            "plan_approval": plan_claims, "work_order": ref(work), "test_request": ref(test_request), "review_request": ref(review_request), "tool_request": ref(tool), "checked_at": checked,
             "policy_window": {"issued_at": policy['created_at'], "expires_at": policy['expires_at']},
             "supporting_artifacts": supporting,
             "blockers": blockers}
+
+
+def _plan_claims(store, task, work):
+    plan = _stored_record(store, work['plan'], task, 'ImplementationPlan')
+    decision = _stored_record(store, work['plan_approval'], task, 'ApprovalDecision')
+    request = _stored_record(store, decision['request'], task, 'ApprovalRequest')
+    blockers = []
+    if (plan['spec'] != work['spec'] or plan['repository'] != work['repository']
+            or plan['allowed_paths'] != work['allowed_paths'] or plan['permitted_tests'] != work['permitted_tests']
+            or work['max_changed_bytes'] > plan['max_changed_bytes'] or work['attempt'] > plan['max_attempts']):
+        blockers.append('plan_work_order_mismatch')
+    expected = digest({'subject': ref(plan), 'evidence': [work['spec'], ref(plan)], 'task_id': task,
+                       'revision': request['task_revision'], 'policy': request['policy_version']})
+    if (request['kind'] != 'plan' or request['subject'] != ref(plan)
+            or request['evidence'] != [work['spec'], ref(plan)] or request['subject_sha256'] != expected
+            or decision['subject_sha256'] != expected or decision['decision'] != 'approve'):
+        blockers.append('plan_approval_binding_mismatch')
+    instant = datetime.fromisoformat
+    if not (instant(plan['created_at']) <= instant(request['created_at']) <= instant(decision['decided_at'])
+            <= instant(decision['created_at']) <= instant(work['created_at']) < instant(request['expires_at'])
+            and instant(work['deadline']) <= instant(request['expires_at'])):
+        blockers.append('plan_approval_timeline_invalid')
+    return {'plan': ref(plan), 'request': ref(request), 'decision': ref(decision), 'blockers': blockers}
 
 
 def _timeline_blockers(patch, test, review_request, review, tool, policy, checked):
