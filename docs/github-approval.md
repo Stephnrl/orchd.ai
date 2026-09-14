@@ -176,7 +176,7 @@ window, and none of the six records may claim creation after the assessment time
 Timeline violations produce fixed blockers and exit 2, including when artifact bytes,
 preview scope and policy expiry otherwise pass. These checks use claimed timestamps;
 they do not authenticate clocks or producers, impose an evidence age limit, or establish
-the chronology of unresolved dependencies such as task specifications and planner invocations.
+the chronology of unresolved dependencies such as planner invocations.
 
 The test receipt must resolve to a canonical stored `TestRequest` for the same task.
 Its operation must match the receipt, its patch must match the assessed patch, its
@@ -215,6 +215,17 @@ This checks historical approval claims, not current approval validity: expiry af
 work-order creation does not by itself invalidate completed evidence. It does not
 authenticate the actor or policy, consult the approval registry for supersession, verify
 the task revision against historical state, or admit/consume a live approval.
+
+The plan's task-owned `TaskSpec` is resolved from its canonical stored record. It must
+have a non-null recorded confirmation, use the same repository as the plan and be
+created no later than the plan. Every plan path must exactly match an entry in the
+specification's allowed paths; the plan may narrow that list. The specification's
+original request artifact must pass task ownership, exact metadata, regular-file and
+hash/size checks, with a separate 1 MiB maximum read. Missing or corrupt specification
+evidence fails without a report. The `plan_approval` binding includes the specification
+reference and request artifact ID, hash and byte count, without request text or confirmer
+identity. This does not authenticate confirmation or evaluate whether the plan satisfies
+the specification's acceptance criteria and constraints.
 
 This is consistency checking of local claims, not authentication of execution, reviewer
 identity or policy authority. It does not validate every transitive dependency,

@@ -23,9 +23,10 @@ class EvidenceClaimsTests(unittest.TestCase):
         examples = json.loads((Path(__file__).resolve().parents[1] / 'contracts/v1/examples.json').read_text())
         self.docs = {role: copy.deepcopy(examples[kind]) for role, kind in (
             ('patch', 'PatchReceipt'), ('test', 'TestReceipt'), ('review', 'ReviewDecision'),
-            ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'), ('test_request', 'TestRequest'), ('work_order', 'WorkOrder'), ('plan', 'ImplementationPlan'), ('plan_request', 'ApprovalRequest'), ('plan_decision', 'ApprovalDecision'))}
+            ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'), ('test_request', 'TestRequest'), ('work_order', 'WorkOrder'), ('plan', 'ImplementationPlan'), ('plan_request', 'ApprovalRequest'), ('plan_decision', 'ApprovalDecision'), ('spec', 'TaskSpec'))}
         for role, document in self.docs.items():
             document.update(id=role, task_id=self.task)
+        self.docs['spec']['confirmed_by'] = 'fixture-operator'
         register_support(self.store, self.task, self.docs)
         self.docs['plan_request']['expires_at'] = '2026-09-12T14:15:00Z'
         link_plan_evidence(self.docs)
@@ -243,6 +244,79 @@ class EvidenceClaimsTests(unittest.TestCase):
         self.persist(omit='plan')
         with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
             self.check()
+
+    def test_missing_spec_rejects(self):
+        self.persist(omit='spec')
+        with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
+            self.check()
+        self.assertFalse(self.store.db.in_transaction)
+
+    def test_foreign_task_spec_rejects(self):
+        other = 'b' * 32
+        self.store.db.execute('INSERT INTO tasks VALUES(?,?,?)', (other, '{}', '{}'))
+        self.docs['spec']['task_id'] = other
+        link_plan_evidence(self.docs)
+        self.relink()
+        self.persist()
+        with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
+            self.check()
+
+    def test_changed_spec_hash_rejects(self):
+        self.docs['spec']['title'] = 'changed'
+        self.persist()
+        with self.assertRaises(Rejected):
+            self.check()
+
+    def test_unconfirmed_spec_blocks(self):
+        self.docs['spec']['confirmed_by'] = None
+        link_plan_evidence(self.docs)
+        self.assert_plan_blocked('spec_not_confirmed')
+
+    def test_spec_repository_mismatch_blocks(self):
+        self.docs['spec']['repository']['base_commit'] = 'c' * 40
+        link_plan_evidence(self.docs)
+        self.assert_plan_blocked('spec_plan_scope_mismatch')
+
+    def test_plan_cannot_expand_spec_paths(self):
+        self.docs['spec']['allowed_paths'] = ['different.txt']
+        link_plan_evidence(self.docs)
+        self.assert_plan_blocked('spec_plan_scope_mismatch')
+
+    def test_spec_created_after_plan_blocks(self):
+        self.docs['spec']['created_at'] = '2026-09-12T14:00:00.001Z'
+        link_plan_evidence(self.docs)
+        self.assert_plan_blocked('spec_created_after_plan')
+
+    def test_original_request_missing_or_corrupt_rejects(self):
+        self.persist()
+        path = self.store.root / 'artifacts' / self.docs['spec']['request']['sha256']
+        path.write_bytes(b'altered request')
+        with self.assertRaises(Rejected):
+            self.check()
+        path.unlink()
+        with self.assertRaises(Rejected):
+            self.check()
+        self.assertFalse(self.store.db.in_transaction)
+
+    def test_original_request_must_belong_to_task(self):
+        other = 'b' * 32
+        self.store.db.execute('INSERT INTO tasks VALUES(?,?,?)', (other, '{}', '{}'))
+        self.docs['spec']['request'] = self.store.artifact(other, 'original task request', media_type='text/plain')
+        link_plan_evidence(self.docs)
+        self.relink()
+        self.persist()
+        with self.assertRaisesRegex(Rejected, 'not owned'):
+            self.check()
+
+    def test_spec_request_report_contains_metadata_only(self):
+        self.persist()
+        report = self.check()
+        binding = report['binding']['claims']['plan_approval']
+        self.assertEqual(binding['spec'], ref(self.docs['spec']))
+        self.assertEqual(binding['spec_request']['sha256'], self.docs['spec']['request']['sha256'])
+        self.assertNotIn('original task request', json.dumps(report))
+        self.assertNotIn('fixture-operator', json.dumps(report))
+        self.assertEqual(report['sha256'], digest(report['binding']))
 
     def test_missing_plan_decision_rejects(self):
         self.persist(omit='plan_decision')

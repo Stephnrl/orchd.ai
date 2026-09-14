@@ -191,9 +191,17 @@ def _assess_contents(store, task, contents):
 
 def _plan_claims(store, task, work):
     plan = _stored_record(store, work['plan'], task, 'ImplementationPlan')
+    spec = _stored_record(store, plan['spec'], task, 'TaskSpec')
+    original_request = _artifact_bytes(store, spec['request'], task)
     decision = _stored_record(store, work['plan_approval'], task, 'ApprovalDecision')
     request = _stored_record(store, decision['request'], task, 'ApprovalRequest')
     blockers = []
+    if spec['confirmed_by'] is None:
+        blockers.append('spec_not_confirmed')
+    if spec['repository'] != plan['repository'] or any(path not in spec['allowed_paths'] for path in plan['allowed_paths']):
+        blockers.append('spec_plan_scope_mismatch')
+    if datetime.fromisoformat(spec['created_at']) > datetime.fromisoformat(plan['created_at']):
+        blockers.append('spec_created_after_plan')
     if (plan['spec'] != work['spec'] or plan['repository'] != work['repository']
             or plan['allowed_paths'] != work['allowed_paths'] or plan['permitted_tests'] != work['permitted_tests']
             or work['max_changed_bytes'] > plan['max_changed_bytes'] or work['attempt'] > plan['max_attempts']):
@@ -209,7 +217,9 @@ def _plan_claims(store, task, work):
             <= instant(decision['created_at']) <= instant(work['created_at']) < instant(request['expires_at'])
             and instant(work['deadline']) <= instant(request['expires_at'])):
         blockers.append('plan_approval_timeline_invalid')
-    return {'plan': ref(plan), 'request': ref(request), 'decision': ref(decision), 'blockers': blockers}
+    return {'spec': ref(spec), 'spec_request': {'artifact_id': spec['request']['artifact_id'],
+            'sha256': spec['request']['sha256'], 'size_bytes': len(original_request)},
+            'plan': ref(plan), 'request': ref(request), 'decision': ref(decision), 'blockers': blockers}
 
 
 def _timeline_blockers(patch, test, review_request, review, tool, policy, checked):

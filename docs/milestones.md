@@ -53,6 +53,8 @@ The referenced work order is now resolved and checked for repository/review bind
 exact allowed paths and tests, reported change-byte limits and execution deadlines.
 Plan and historical plan-approval records now resolve within the evidence snapshot,
 with scope/attempt limits, exact subject/evidence digests and approval chronology checks.
+Task specifications and their original request artifacts now anchor that chain, with
+recorded confirmation, repository/path containment and spec-before-plan chronology checks.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
