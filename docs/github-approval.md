@@ -350,7 +350,7 @@ verify the host interpreter for fixture execution or authenticate runtime claims
 
 This is consistency checking of local claims, not authentication of execution, reviewer
 identity or policy authority. It does not validate every transitive dependency,
-the meaning of diff/log contents, real GitHub commits, or the tool payload against a journal proposal.
+arbitrary repository diffs or log semantics, real GitHub commits, or the tool payload against a journal proposal.
 The current engine does not automatically export these records as evidence artifacts.
 The standalone claims check does not compare the tool payload to a journal proposal;
 the combined assessment adds the binding described above.
@@ -364,8 +364,18 @@ and hash/size checks under a separate 1 MiB read cap, and match the patch receip
 snapshot digest. An absent reference or a valid artifact with the wrong digest blocks
 assessment; malformed references and missing, corrupted or foreign-task artifacts fail
 without a report. The execution assessment includes snapshot metadata without its
-contents. This verifies retained snapshot bytes, not that a live workspace or repository
-commit matched them, or that the diff accurately describes the snapshot.
+contents. This verifies retained snapshot bytes without proving that a live workspace
+or repository commit matched them.
+
+For the current fixed edit fixture, the receipt must describe exactly one modification
+to `greeting.txt`, with the hash of `hello\n` before the edit and the retained snapshot's
+hash afterward. Its changed-byte count must equal the snapshot length. The diff artifact's
+hash and size must match the fixture's exact one-line diff header followed by the snapshot;
+the supporting-file checks independently verify that artifact's bytes. The broker edit
+argument must encode to the same snapshot bytes. Contradictions produce
+`fixture_patch_metadata_mismatch`, `fixture_patch_diff_mismatch` or
+`fixture_patch_argument_mismatch`. These checks cover the built-in fixture format only;
+they are not a general repository diff parser or authentication of execution history.
 
 Next steps require verifying evidence provenance and remaining dependencies, durable request/decision
 storage, authenticated approver identity, policy verification, expiry and single-use
