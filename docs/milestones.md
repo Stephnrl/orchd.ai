@@ -27,6 +27,8 @@ Disposable recovery drills exercise one-shot reservation behavior and reopening 
 verified backup copy, then remove scratch storage without replacing an active journal.
 Audits and journal mutations now gate on the supported schema and retention-trigger
 definitions; backup verification and drills reject altered protections as well.
+A [GitHub-specific approval preview](github-approval.md) binds prepared journal scope,
+evidence/policy digest claims and expiry without issuing a decision or authorizing dispatch.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

@@ -58,6 +58,9 @@ Every preview reports `live_authorized: false` and `remote_refs_verified: false`
 Task IDs and commit hashes are input claims; this function does not prove they match
 stored workflow evidence or existing GitHub objects. The current fixture action approval
 does not bind this new request and cannot authorize it.
+The [GitHub approval preview](github-approval.md) now binds the retained scope to explicit
+evidence and policy digest claims, a request ID and expiry; it remains unverified and is
+not an approval decision.
 
 A future broker must bind verified patch/test/review evidence and a new human approval
 to the preview digest; enforce an independently configured repository/credential policy;
