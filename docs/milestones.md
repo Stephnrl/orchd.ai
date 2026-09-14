@@ -102,6 +102,9 @@ review/policy selection, inspection, diagnostics, selection downloads and portab
 bundle downloads through authenticated API routes and the UI. Bundle downloads recheck
 the selected chain, verify bounded bytes in the browser and cancel obsolete requests;
 browser coverage includes standalone verification of the downloaded file.
+[Received bundle review](received-bundle-review.md) completes the receiving workflow:
+an empty local workspace can verify uploaded bytes against an explicit expected digest,
+reassess them in disposable storage and save the diagnostic without adopting a task.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

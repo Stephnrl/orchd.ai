@@ -11,6 +11,8 @@ The [Evidence review panel](evidence-review-ui.md) also offers **Download eviden
 bundle** after an explicit consistent assessment. It reuses the same bounded builder,
 rechecks evidence at download time and displays the complete file's SHA-256 after
 browser verification. Keep that digest for the standalone verifier below.
+Recipients can also use the [received bundle review panel](received-bundle-review.md)
+to verify the file and save a diagnostic assessment without the source store.
 
 Use the [record catalog and selection resolver](github-approval.md) to select the exact
 patch, test, review and policy records. Save the resolver's JSON as UTF-8 `records.json`.

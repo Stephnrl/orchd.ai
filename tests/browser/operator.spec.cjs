@@ -194,6 +194,17 @@ test('explicit evidence review checks and saves a selection without advancing', 
   expect(http.headers()['x-orch-bundle-sha256']).toBe(sha);
   expect(Number(http.headers()['content-length'])).toBe(bytes.length);
   await expect(page.locator('#bundle-digest')).toContainText(sha);
+  await page.locator('#bundle-file').setInputFiles(bundlePath);
+  await page.locator('#bundle-expected').fill(sha);
+  await page.locator('#verify-bundle').click();
+  await expect(page.locator('#bundle-review-status')).toContainText('retained claims are consistent');
+  const assessmentDownload = page.waitForEvent('download');
+  await page.locator('#save-bundle-review').click();
+  const assessmentFile = await assessmentDownload;
+  expect(assessmentFile.suggestedFilename()).toBe('orchd-bundle-assessment.json');
+  const assessment = JSON.parse(await readFile(await assessmentFile.path(), 'utf8'));
+  expect(assessment.binding.bundle_sha256).toBe(sha);
+  expect(assessment.live_authorized).toBe(false);
   const verified = JSON.parse(execFileSync(process.env.ORCH_TEST_PYTHON || 'python', ['-c', 'import json,sys; from orch.github_bundle import verify_bundle; print(json.dumps(verify_bundle(sys.argv[1],sys.argv[2])))', bundlePath, sha], {encoding: 'utf8', windowsHide: true}));
   expect(verified.status).toBe('claims_consistent');
   expect(verified.live_authorized).toBe(false);
@@ -212,6 +223,53 @@ test('explicit evidence review checks and saves a selection without advancing', 
   await expect(page.locator('#bundle-digest')).toBeEmpty();
   await expect(page.locator('#claim-review')).toHaveValue('');
   await expect(page.locator('#claims-details')).toBeHidden();
+});
+
+test('received bundle review works in an empty store and rejects changed bytes', async ({page, operator}) => {
+  const bundle = execFileSync(process.env.ORCH_TEST_PYTHON || 'python', ['-c', [
+    'import sys; sys.path.insert(0,"tests")',
+    'from unittest.mock import patch',
+    'from test_github_evidence_claims import EvidenceClaimsTests',
+    'from orch.github_bundle import build_bundle',
+    'fixture=EvidenceClaimsTests(); fixture.setUp()',
+    'try:',
+    ' fixture.persist()',
+    ' with patch("orch.github_evidence.now", return_value="2026-09-12T14:01:00Z"):',
+    '  raw,report=build_bundle(fixture.store,fixture.selection())',
+    ' sys.stdout.buffer.write(raw)',
+    'finally: fixture.tearDown()',
+  ].join('\n')], {windowsHide: true});
+  const sha = createHash('sha256').update(bundle).digest('hex');
+  await connect(page, operator.token);
+  await expect(page.locator('#tasks button')).toHaveCount(0);
+  await page.locator('#bundle-file').setInputFiles({name:'received.json', mimeType:'application/json', buffer:bundle});
+  await page.locator('#bundle-expected').fill(sha);
+  const response = page.waitForResponse(r => r.url().endsWith('/evidence-bundles/verify'));
+  await page.locator('#verify-bundle').click();
+  const received = await response;
+  expect(received.status()).toBe(200);
+  expect(received.headers()['cache-control']).toBe('no-store');
+  await expect(page.locator('#bundle-review-status')).toContainText('retained claims are blocked');
+  await expect(page.locator('#bundle-review-json')).toContainText('policy_not_current');
+  const tasks = await page.request.get(`${operator.url}/tasks`, {headers:{Authorization:`Bearer ${operator.token}`}});
+  expect((await tasks.json()).items).toEqual([]);
+  if (process.env.ORCH_REVIEW_SCREENSHOT) {
+    const panel = page.locator('section[aria-labelledby="bundle-review-title"]');
+    await panel.screenshot({path:process.env.ORCH_REVIEW_SCREENSHOT.replace('.png','-received.png')});
+    await page.setViewportSize({width:390,height:844});
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await panel.screenshot({path:process.env.ORCH_REVIEW_SCREENSHOT.replace('.png','-received-mobile.png')});
+  }
+  let uploads = 0;
+  page.on('request', request => { if (request.url().endsWith('/evidence-bundles/verify')) uploads++; });
+  await page.locator('#bundle-file').setInputFiles({name:'changed.json',mimeType:'application/json',buffer:Buffer.concat([bundle,Buffer.from(' ')])});
+  await expect(page.locator('#save-bundle-review')).toBeDisabled();
+  await page.locator('#verify-bundle').click();
+  await expect(page.locator('#bundle-review-status')).toContainText('Nothing was uploaded');
+  expect(uploads).toBe(0);
+  await page.locator('#clear-bundle-review').click();
+  await expect(page.locator('#bundle-expected')).toHaveValue('');
+  await expect(page.locator('#bundle-review-details')).toBeHidden();
 });
 
 test('task titles remain literal and duplicate titles select distinct tasks', async ({ page, operator }) => {

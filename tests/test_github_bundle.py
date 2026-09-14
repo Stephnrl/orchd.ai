@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import test_github_evidence_claims as fixture
 from orch.contracts import Rejected, canonical, digest
-from orch.github_bundle import export_bundle, verify_bundle
+from orch.github_bundle import export_bundle, verify_bundle, verify_bundle_bytes
 from orch.storage import Store
 
 
@@ -34,6 +34,36 @@ class EvidenceBundleTests(unittest.TestCase):
 
     def export(self):
         return export_bundle(self.store, self.fixture.selection(), self.destination)
+
+    def test_upload_scratch_is_removed_after_success_and_rejection(self):
+        report = self.export()
+        raw = self.destination.read_bytes()
+        original = tempfile.TemporaryDirectory
+        roots = []
+        def temporary(*args, **kwargs):
+            result = original(*args, **kwargs)
+            roots.append(Path(result.name))
+            return result
+        with patch('orch.github_bundle.tempfile.TemporaryDirectory', side_effect=temporary):
+            result = verify_bundle_bytes(raw, report['binding']['bundle_sha256'])
+            self.assertEqual(result['status'], 'claims_consistent')
+            self.assertEqual(len(roots), 2)
+            self.assertTrue(all(not root.exists() for root in roots))
+            with patch('orch.github_bundle._materialize', side_effect=Rejected('Invalid retained data')):
+                with self.assertRaises(Rejected):
+                    verify_bundle_bytes(raw, report['binding']['bundle_sha256'])
+            self.assertEqual(len(roots), 4)
+            self.assertTrue(all(not root.exists() for root in roots))
+
+    def test_upload_rejects_before_scratch_allocation(self):
+        raw = b'{}'
+        with patch('orch.github_bundle.tempfile.TemporaryDirectory', side_effect=AssertionError('No scratch')):
+            for content, sha in ((raw, 'a' * 64), (b'', hashlib.sha256(b'').hexdigest()), (raw, None), ('{}', 'a' * 64)):
+                with self.assertRaises(Rejected):
+                    verify_bundle_bytes(content, sha)
+            with patch('orch.github_bundle.MAX_BUNDLE_BYTES', 1):
+                with self.assertRaises(Rejected):
+                    verify_bundle_bytes(raw, hashlib.sha256(raw).hexdigest())
 
     def save_changed(self, bundle):
         bundle['sha256'] = digest(bundle['payload'])

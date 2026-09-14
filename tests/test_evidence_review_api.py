@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 import test_github_evidence_claims as fixtures
-from orch.api import Application, BundleDownload
+from orch.api import Application, BundleDownload, BundleUpload
 from orch.github_bundle import verify_bundle
 
 
@@ -31,6 +31,33 @@ class EvidenceReviewApiTests(unittest.TestCase):
 
     def bundle_selection(self):
         return {key: value for key, value in self.fixture.selection().items() if key != 'task_id'}
+
+    def test_received_bundle_verifies_without_original_store(self):
+        _, bundle = self.request('POST', '/evidence-bundle', self.bundle_selection())
+        reviewer = Application(SimpleNamespace())
+        with patch('subprocess.Popen', side_effect=AssertionError('No process')), patch('socket.socket', side_effect=AssertionError('No network')):
+            code, report = reviewer.dispatch('POST', '/evidence-bundles/verify', BundleUpload(bundle.content, bundle.sha256), reviewer.session)
+        self.assertEqual(code, 200)
+        self.assertEqual(report['status'], 'claims_consistent')
+        self.assertEqual(report['binding']['bundle_sha256'], bundle.sha256)
+        self.assertFalse(report['live_authorized'])
+
+    def test_received_bundle_auth_shape_hash_and_expiry(self):
+        _, bundle = self.request('POST', '/evidence-bundle', self.bundle_selection())
+        upload = BundleUpload(bundle.content, bundle.sha256)
+        def verify(value=upload, path='/evidence-bundles/verify', token=None):
+            return self.app.dispatch('POST', path, value, self.app.session if token is None else token)
+        self.assertEqual(verify(token='invalid')[0], 401)
+        self.assertEqual(verify(token='\u00e9')[0], 401)
+        self.assertEqual(verify({})[0], 409)
+        self.assertEqual(verify(path='/evidence-bundles/verify?task=override')[0], 409)
+        for value in (BundleUpload(bundle.content, 'a' * 64), BundleUpload(b'', bundle.sha256), BundleUpload(bundle.content + b' ', bundle.sha256)):
+            self.assertEqual(verify(value)[0], 409)
+        with patch('orch.github_evidence.now', return_value='2026-09-12T14:16:00Z'):
+            code, report = verify()
+        self.assertEqual(code, 200)
+        self.assertEqual(report['status'], 'blocked')
+        self.assertIn('policy_not_current', report['binding']['assessment']['binding']['claims']['blockers'])
 
     def test_bundle_download_is_readonly_and_standalone_verifiable(self):
         before = self.fixture.store.db.total_changes

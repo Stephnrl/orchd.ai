@@ -7,6 +7,7 @@ let evidenceRequest = 0;
 let evidenceDownload = null;
 let claimRequest = 0, claimLoading = false, claimResult = null;
 let claimDownloadController = null;
+let bundleReviewVersion = 0, bundleReviewController = null, bundleReviewResult = null;
 let claimChoices = {review: new Map(), policy: new Map()};
 let taskListRequest = 0, recordListRequest = 0, tasksLoading = false, recordsLoading = false;
 const names = new Map();
@@ -28,6 +29,7 @@ function canRetryCleanup() {
   return !busy && cleanupAvailable() && $("cleanup-reviewed").checked;
 }
 function controls() {
+  bundleReviewControls();
   claimControls();
   $("save-evidence").disabled = busy || !evidenceDownload || evidenceDownload.epoch !== epoch;
   $("more-tasks").disabled = tasksLoading || taskNext === null;
@@ -95,6 +97,58 @@ async function evidence(type, id) {
     }
   }
 }
+function bundleReviewControls() {
+  const file = $("bundle-file").files?.[0];
+  $("verify-bundle").disabled = busy || !token || !!bundleReviewController || !file || file.size < 1 || file.size > 16 * 1024 * 1024 || !/^[a-f0-9]{64}$/.test($("bundle-expected").value);
+  $("save-bundle-review").disabled = busy || !token || !bundleReviewResult;
+}
+function clearBundleReview(message) {
+  bundleReviewVersion++;
+  bundleReviewController?.abort(); bundleReviewController = null; bundleReviewResult = null;
+  $("bundle-review-status").textContent = message;
+  $("bundle-review-json").textContent = ""; $("bundle-review-details").hidden = true;
+  bundleReviewControls();
+}
+for (const [id, event] of [["bundle-file", "change"], ["bundle-expected", "input"]]) $(id).addEventListener(event, () => clearBundleReview("Inputs changed. Verify the selected file against its expected digest."));
+$("clear-bundle-review").addEventListener("click", () => {
+  $("bundle-file").value = ""; $("bundle-expected").value = "";
+  clearBundleReview("Review cleared. Select a bundle and enter its expected SHA-256.");
+});
+$("verify-bundle").addEventListener("click", async () => {
+  bundleReviewControls();
+  if ($("verify-bundle").disabled) return;
+  const file = $("bundle-file").files[0], expected = $("bundle-expected").value;
+  clearBundleReview("Checking file digest and verifying bundle…");
+  const version = bundleReviewVersion, controller = new AbortController();
+  bundleReviewController = controller; bundleReviewControls();
+  try {
+    const bytes = await file.arrayBuffer();
+    if (version !== bundleReviewVersion || controller.signal.aborted) return;
+    if (bytes.byteLength !== file.size) throw new Error("File size changed.");
+    const sha = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), byte => byte.toString(16).padStart(2, "0")).join("");
+    if (version !== bundleReviewVersion || controller.signal.aborted) return;
+    if (sha !== expected) throw new Error("The file does not match the expected SHA-256. Nothing was uploaded.");
+    const response = await fetch('/evidence-bundles/verify', {method: "POST", headers: {Authorization: "Bearer " + token, "Content-Type": "application/octet-stream", "X-Orch-Expected-SHA256": expected}, body: bytes, cache: "no-store", credentials: "omit", signal: controller.signal});
+    if (!response.ok) throw new Error(response.status === 401 ? "Session expired. Reconnect." : "The server rejected the bundle. Check the file and expected digest.");
+    const report = await response.json();
+    if (version !== bundleReviewVersion || controller.signal.aborted) return;
+    if (report.kind !== "GitHubEvidenceBundleAssessment" || report.binding?.bundle_sha256 !== expected || !["claims_consistent", "blocked"].includes(report.status) || report.live_authorized !== false || report.evidence_verified !== false) throw new Error("Unexpected verification response.");
+    bundleReviewResult = report;
+    $("bundle-review-status").textContent = (report.status === "claims_consistent" ? "Bundle bytes verified; retained claims are consistent." : "Bundle bytes verified; retained claims are blocked.") + " This does not authenticate the author or approve execution. See the diagnostic details.";
+    $("bundle-review-json").textContent = pretty(report); $("bundle-review-details").hidden = false;
+  } catch (error) {
+    if (version === bundleReviewVersion && !controller.signal.aborted) clearBundleReview("Verification unavailable. " + error.message);
+  } finally {
+    if (bundleReviewController === controller) bundleReviewController = null;
+    bundleReviewControls();
+  }
+});
+$("save-bundle-review").addEventListener("click", () => {
+  if (busy || !token || !bundleReviewResult) return;
+  const url = URL.createObjectURL(new Blob([pretty(bundleReviewResult)], {type: "application/json"})), link = document.createElement("a");
+  link.href = url; link.download = "orchd-bundle-assessment.json"; document.body.append(link);
+  try { link.click(); } finally { link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+});
 $("save-evidence").addEventListener("click", () => {
   if (busy || !evidenceDownload || evidenceDownload.epoch !== epoch) return;
   const url = URL.createObjectURL(new Blob([evidenceDownload.text], {type: "text/plain;charset=utf-8"}));

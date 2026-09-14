@@ -97,3 +97,6 @@ and clears its digest. Late results cannot offer a stale file. A failed download
 the assessment and requires another check. The displayed success means the bytes were
 prepared for the browser download, not that a filesystem save completed. Restart the
 local API after upgrading so the new route is available.
+
+Recipients can use [Verify a received bundle](received-bundle-review.md) in their own
+local workspace, with the file and expected digest. No original task store is needed.

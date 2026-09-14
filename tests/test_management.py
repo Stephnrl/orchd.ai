@@ -127,6 +127,26 @@ class ManagementHTTPTests(unittest.TestCase):
                     self.assertEqual(request("GET", "/tasks", {**auth, **changes})[0], 403)
                 self.assertEqual(request("GET", "/tasks", {**auth, "Authorization": token})[0], 401)
                 self.assertEqual(request("POST", "/tasks", {**auth, "Content-Type": "text/plain"}, '{}')[0], 400)
+                upload = {**auth, 'Content-Type': 'application/octet-stream', 'X-Orch-Expected-SHA256': 'a' * 64}
+                self.assertEqual(request('POST', '/evidence-bundles/verify', upload, b'{}')[0], 409)
+                for changes in ({'Content-Length': '16777217'}, {'Content-Length': '-1'}, {'Content-Length': '0'},
+                                {'Content-Type': 'application/json'}, {'X-Orch-Expected-SHA256': 'bad'},
+                                {'Content-Encoding': 'gzip'}, {'Transfer-Encoding': 'chunked'}):
+                    self.assertEqual(request('POST', '/evidence-bundles/verify', {**upload, **changes}, b'')[0], 400)
+                # No body is sent: authentication must reject before waiting for the declared upload.
+                self.assertEqual(request('POST', '/evidence-bundles/verify', {**upload, 'Authorization': 'Bearer invalid', 'Content-Length': '100'}, b'')[0], 401)
+                self.assertEqual(request('POST', '/evidence-bundles/verify', {**upload, 'Authorization': 'Bearer \u00e9'}, b'{}')[0], 401)
+                self.assertEqual(request('POST', '/evidence-bundles/verify', {**upload, 'Origin': 'https://evil.example'}, b'{}')[0], 403)
+                for duplicate in ('Content-Length', 'Content-Type', 'X-Orch-Expected-SHA256', 'Authorization'):
+                    conn.putrequest('POST', '/evidence-bundles/verify')
+                    for name, value in {**upload, 'Content-Length': '2'}.items():
+                        conn.putheader(name, value)
+                        if name == duplicate:
+                            conn.putheader(name, value)
+                    conn.endheaders()  # Reject ambiguous framing/identity before reading any bytes.
+                    response = conn.getresponse()
+                    self.assertEqual(response.status, 401 if duplicate == 'Authorization' else 400)
+                    response.read()
                 code, headers, body = request("GET", f"/tasks/{task}/stream", {**auth, "Last-Event-ID": "0"})
                 self.assertEqual(code, 200)
                 self.assertTrue(headers["Content-Type"].startswith("text/event-stream"))
