@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -35,6 +35,18 @@ def main():
     parser.add_argument("--observations", help="Offline JSON observations for GitHub assessment")
     parser.add_argument("--journal", help="Separate local GitHub operation journal database")
     args = parser.parse_args()
+    if args.command == "github-journal-recovery-drill":
+        if not args.destination or not args.expected_sha256 or args.journal:
+            parser.error("Recovery drill requires --destination and --expected-sha256, and accepts no active --journal")
+        from .github_backup import drill_journal_backup
+        from .contracts import Rejected
+        import sqlite3
+        try:
+            report = drill_journal_backup(args.destination, args.expected_sha256)
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error("Journal recovery drill failed; check bundle integrity, digest and scratch storage")
+        print(json.dumps(report, indent=2))
+        return
     if args.command == "github-compare-journal-backup":
         if not args.journal or not args.destination or not args.expected_sha256:
             parser.error("github-compare-journal-backup requires --journal, --destination and --expected-sha256")

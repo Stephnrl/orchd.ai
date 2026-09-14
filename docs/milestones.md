@@ -23,6 +23,8 @@ Verified journal backup bundles now preserve a consistent SQLite snapshot and bi
 bytes and audit report in a completion manifest; restore/adoption remains disabled.
 Read-only backup comparison now identifies missing operations and changed scope or
 reservation evidence against a verified, explicitly selected bundle.
+Disposable recovery drills exercise one-shot reservation behavior and reopening on a
+verified backup copy, then remove scratch storage without replacing an active journal.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
