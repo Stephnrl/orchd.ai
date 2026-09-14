@@ -48,6 +48,10 @@ digest; it is a scope identifier, not a signature or approval token.
 
 ## Required before live dispatch
 
+The [offline repository/ref assessment](github-ref-assessment.md) now compares supplied
+response observations to this preview. It remains separate from authenticated fetching
+and never upgrades the preview to live authorization.
+
 Every preview reports `live_authorized: false` and `remote_refs_verified: false`.
 Task IDs and commit hashes are input claims; this function does not prove they match
 stored workflow evidence or existing GitHub objects. The current fixture action approval

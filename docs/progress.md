@@ -17,7 +17,7 @@ an assumption that more UI features alone will make the system production-ready.
 | 4. Isolated Docker worker | Implemented for bounded fixture edits/tests, with five host-specific isolation gates |
 | 5. Guardian/tool broker and policies | Implemented for the fixture workflow; broader tools and external brokers remain |
 | 6. Local management UI | Substantially implemented, including restart/replay, evidence and operator controls |
-| 7. GitHub integration | Offline request preview with destination/payload binding; platform actions still simulated; no live PR creation |
+| 7. GitHub integration | Offline request preview and repository/ref observation comparison; platform actions still simulated; no live PR creation |
 | 8. Jira Data Center integration | Design only |
 | 9. Credential broker/auth hardening | Local session boundary implemented; production provider credentials/SSO remain |
 | 10. OWASP/ACS hardening and adversarial tests | Substantial boundary tests; independent deployment review and broader live-system testing remain |
@@ -28,7 +28,7 @@ PRs opened while developing this repository are collaboration through developmen
 tools, not evidence that orchd.ai itself has a GitHub integration. Deterministic
 fixture success also does not establish compatibility with live model providers.
 
-The latest full offline run completed 158 Python tests: 153 passed and five expected
+The latest full offline run completed 162 Python tests: 157 passed and five expected
 Docker skips. PR #37 also passed seven Chromium tests and seven targeted UI scripts.
 Those are dated local results, not a claim that every current host or hosted CI job has
 passed. Docker evidence expires and is tied to source, host, daemon and image.
