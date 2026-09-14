@@ -43,6 +43,8 @@ It also binds the policy's tool operation, request checksum and task-owned canon
 payload to the exact retained GitHub scope, rejecting simulated or mismatched requests.
 Strict evidence assessments now verify task-owned patch diffs and test/patch-command
 output artifacts under reference and byte budgets, without claiming execution provenance.
+Evidence chronology now checks execution windows and patch/test/review/tool/policy
+ordering, rejects future records and contains reported commands within patch execution.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

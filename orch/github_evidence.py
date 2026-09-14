@@ -144,6 +144,7 @@ def _assess_contents(store, task, contents):
             or policy['operation_id'] != tool['operation_id'] or policy['policy_version'] != tool['policy_version']):
         blockers.append('policy_request_mismatch')
     checked = now()
+    blockers.extend(_timeline_blockers(patch, test, review_request, review, tool, policy, checked))
     if not datetime.fromisoformat(policy['created_at']) <= datetime.fromisoformat(checked) < datetime.fromisoformat(policy['expires_at']):
         blockers.append('policy_not_current')
     return {"records": {role: ref(document) for role, document in documents.items()},
@@ -151,6 +152,28 @@ def _assess_contents(store, task, contents):
             "policy_window": {"issued_at": policy['created_at'], "expires_at": policy['expires_at']},
             "supporting_artifacts": supporting,
             "blockers": blockers}
+
+
+def _timeline_blockers(patch, test, review_request, review, tool, policy, checked):
+    instant = datetime.fromisoformat
+    blockers = []
+    for role, receipt in (('patch', patch), ('test', test)):
+        if not instant(receipt['started_at']) <= instant(receipt['ended_at']) <= instant(receipt['created_at']):
+            blockers.append(role + '_execution_window_invalid')
+    if not instant(patch['created_at']) <= instant(test['started_at']):
+        blockers.append('test_predates_patch')
+    if not instant(test['created_at']) <= instant(review_request['created_at']) <= instant(review['created_at']):
+        blockers.append('review_timeline_invalid')
+    if not instant(review['created_at']) <= instant(tool['created_at']) <= instant(policy['created_at']):
+        blockers.append('policy_timeline_invalid')
+    if any(instant(document['created_at']) > instant(checked)
+           for document in (patch, test, review_request, review, tool, policy)):
+        blockers.append('evidence_from_future')
+    if any(not instant(patch['started_at']) <= instant(command['started_at'])
+           <= instant(command['ended_at']) <= instant(patch['ended_at'])
+           for command in patch['executed_commands']):
+        blockers.append('patch_command_window_invalid')
+    return blockers
 
 
 def _check_supporting_artifacts(store, task, patch, test):

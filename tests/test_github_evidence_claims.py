@@ -150,6 +150,77 @@ class EvidenceClaimsTests(unittest.TestCase):
         with self.assertRaisesRegex(Rejected, 'byte budget'):
             self.check()
 
+    def assert_timeline_blocked(self, reason):
+        self.relink()
+        self.docs['policy']['request'] = ref(self.docs['tool'])
+        self.persist()
+        report = self.check()
+        self.assertEqual(report['status'], 'blocked')
+        self.assertIn(reason, report['binding']['claims']['blockers'])
+        self.assertFalse(report['live_authorized'])
+
+    def test_reversed_patch_window_blocks(self):
+        self.docs['patch']['started_at'] = '2026-09-12T14:00:01Z'
+        self.assert_timeline_blocked('patch_execution_window_invalid')
+
+    def test_test_receipt_before_execution_ends_blocks(self):
+        self.docs['test']['ended_at'] = '2026-09-12T14:00:01Z'
+        self.assert_timeline_blocked('test_execution_window_invalid')
+
+    def test_test_before_patch_receipt_blocks(self):
+        self.docs['test']['started_at'] = '2026-09-12T13:59:59Z'
+        self.assert_timeline_blocked('test_predates_patch')
+
+    def test_review_request_before_test_receipt_blocks(self):
+        self.docs['review_request']['created_at'] = '2026-09-12T13:59:59Z'
+        self.assert_timeline_blocked('review_timeline_invalid')
+
+    def test_review_decision_before_request_blocks(self):
+        self.docs['review']['created_at'] = '2026-09-12T13:59:59Z'
+        self.assert_timeline_blocked('review_timeline_invalid')
+
+    def test_tool_request_before_review_blocks(self):
+        self.docs['tool']['created_at'] = '2026-09-12T13:59:59Z'
+        self.assert_timeline_blocked('policy_timeline_invalid')
+
+    def test_policy_decision_before_request_blocks(self):
+        self.docs['policy']['created_at'] = '2026-09-12T13:59:59Z'
+        self.assert_timeline_blocked('policy_timeline_invalid')
+
+    def test_future_evidence_blocks(self):
+        self.docs['test']['created_at'] = '2026-09-12T14:01:00.001Z'
+        self.assert_timeline_blocked('evidence_from_future')
+
+    def test_command_before_patch_execution_blocks(self):
+        command = self.command()
+        command['started_at'] = '2026-09-12T13:59:59Z'
+        self.docs['patch']['executed_commands'] = [command]
+        self.assert_timeline_blocked('patch_command_window_invalid')
+
+    def test_command_after_patch_execution_blocks(self):
+        command = self.command()
+        command['ended_at'] = '2026-09-12T14:00:01Z'
+        self.docs['patch']['executed_commands'] = [command]
+        self.assert_timeline_blocked('patch_command_window_invalid')
+
+    def test_reversed_command_window_blocks(self):
+        self.docs['patch']['started_at'] = '2026-09-12T13:59:00Z'
+        command = self.command()
+        command['ended_at'] = '2026-09-12T13:59:30Z'
+        self.docs['patch']['executed_commands'] = [command]
+        self.assert_timeline_blocked('patch_command_window_invalid')
+
+    def test_equal_instants_with_different_fractional_precision_are_valid(self):
+        for document in self.docs.values():
+            for field in ('created_at', 'started_at', 'ended_at'):
+                if field in document:
+                    document[field] = '2026-09-12T14:00:00.000Z'
+        self.docs['patch']['started_at'] = '2026-09-12T14:00:00Z'
+        self.relink()
+        self.docs['policy']['request'] = ref(self.docs['tool'])
+        self.persist()
+        self.assertEqual(self.check('2026-09-12T14:00:00Z')['status'], 'claims_consistent')
+
     def test_snapshot_and_review_links_must_match(self):
         self.docs['test']['snapshot_sha256'] = 'b' * 64
         self.persist()

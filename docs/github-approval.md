@@ -163,8 +163,19 @@ Supporting references are limited to 32 entries, 1 MiB each and 8 MiB total; rep
 references count separately. Count and declared byte budgets are checked before reading
 supporting files. Missing, altered or foreign-task support fails without a report.
 
+Receipt chronology is also checked. Patch and test execution must start no later than
+they end, and end no later than their receipt creation. The patch receipt must exist
+before test execution starts. Test receipt, review request, review decision, GitHub tool
+request and policy decision must then occur in that order. Equal instants are permitted
+for coarse clocks. Every reported patch command must fit within the patch execution
+window, and none of the six records may claim creation after the assessment time.
+Timeline violations produce fixed blockers and exit 2, including when artifact bytes,
+preview scope and policy expiry otherwise pass. These checks use claimed timestamps;
+they do not authenticate clocks or producers, impose an evidence age limit, or establish
+the chronology of unresolved dependencies such as work orders and test requests.
+
 This is consistency checking of local claims, not authentication of execution, reviewer
-identity or policy authority. It does not validate every transitive dependency, referenced
+identity or policy authority. It does not validate every transitive dependency,
 the meaning of diff/log contents, real GitHub commits, or the tool payload against a journal proposal.
 The current engine does not automatically export these records as evidence artifacts.
 The standalone claims check does not compare the tool payload to a journal proposal;
