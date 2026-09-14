@@ -28,7 +28,7 @@ PRs opened while developing this repository are collaboration through developmen
 tools, not evidence that orchd.ai itself has a GitHub integration. Deterministic
 fixture success also does not establish compatibility with live model providers.
 
-The latest full offline run completed 416 Python tests: 411 passed and five expected
+The latest full offline run completed 436 Python tests: 431 passed and five expected
 Docker skips. PR #37 also passed seven Chromium tests and seven targeted UI scripts.
 Those are dated local results, not a claim that every current host or hosted CI job has
 passed. Docker evidence expires and is tied to source, host, daemon and image.
@@ -44,6 +44,8 @@ passed. Docker evidence expires and is tied to source, host, daemon and image.
    workflow approval binding, remote verification and dispatch remain.
    [Portable evidence bundles](github-evidence-bundles.md) now support complete offline
    review handoffs with standalone verification of selected records and artifacts.
+   [Journal-bound bundle review](github-bundle-approval.md) now prepares and reassesses
+   previews directly from verified bundles, including exact file and tool-scope binding.
 4. Complete deployment/auth hardening and adversarial release checks before concurrency.
 5. Define and implement bounded concurrent-worker and advanced-orchestration milestones.
 

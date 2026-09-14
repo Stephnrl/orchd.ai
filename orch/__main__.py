@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -38,7 +38,36 @@ def main():
     parser.add_argument("--evidence", help="Offline GitHub approval evidence digest envelope")
     parser.add_argument("--approval-preview", help="Saved GitHub approval preview JSON")
     parser.add_argument("--bundle", help="Portable offline GitHub evidence bundle file")
+    parser.add_argument("--expected-bundle-sha256", help="Expected whole-file digest for journal-bound bundle review")
     args = parser.parse_args()
+    if args.command in ("github-bundle-approval-preview", "github-assess-bundle-approval"):
+        if not args.journal or not args.bundle or not args.expected_bundle_sha256 or not args.expected_sha256:
+            parser.error("Bundle review requires --journal, --bundle, --expected-bundle-sha256 and --expected-sha256")
+        preparing = args.command == "github-bundle-approval-preview"
+        if (preparing and not args.operation_id) or (not preparing and not args.approval_preview):
+            parser.error("Bundle preview requires --operation-id; assessment requires --approval-preview")
+        from .github_bundle_approval import prepare_bundle_approval, assess_bundle_approval
+        from .github_journal import GitHubJournal
+        from .github_preview import load_intent
+        from .contracts import Rejected
+        import sqlite3
+        journal = None
+        try:
+            journal = GitHubJournal(args.journal, read_only=True)
+            if preparing:
+                report = prepare_bundle_approval(journal, args.operation_id, args.expected_sha256, args.bundle, args.expected_bundle_sha256)
+            else:
+                preview = load_intent(args.approval_preview)
+                report = assess_bundle_approval(journal, preview, args.expected_sha256, args.bundle, args.expected_bundle_sha256)
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error("Bundle review failed; check bundle, preview, expected digests and journal scope")
+        finally:
+            if journal is not None:
+                journal.close()
+        print(json.dumps(report, indent=2))
+        if report.get('status') == 'blocked':
+            raise SystemExit(2)
+        return
     if args.command in ("github-export-evidence-bundle", "github-verify-evidence-bundle"):
         from .github_bundle import export_bundle, verify_bundle
         from .github_preview import load_intent

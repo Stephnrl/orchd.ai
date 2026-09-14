@@ -10,6 +10,8 @@ The [offline GitHub request preview](docs/github-preview.md) begins external bro
 preparation with explicit destination checks and a digest of the proposed scope.
 [Portable evidence bundles](docs/github-evidence-bundles.md) package an explicitly
 selected workflow chain for bounded offline verification without the original store.
+[Journal-bound bundle review](docs/github-bundle-approval.md) prepares and rechecks an
+approval preview against that exact bundle and its intended GitHub operation scope.
 
 Phase 1 remains the design baseline below. Phase 2 implements the bounded offline
 vertical slice; see [running Phase 2](docs/phase2.md) for APIs, recovery and limitations.

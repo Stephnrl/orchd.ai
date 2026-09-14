@@ -80,6 +80,10 @@ supplied it. A coordinated forgery of internally consistent evidence is not rule
 This bundle and its report cannot replace `--evidence` in combined approval assessment
 or authorize a GitHub action.
 
+For journal-bound review, use the dedicated [bundle approval commands](github-bundle-approval.md).
+They derive evidence hashes from the verified selection, bind the exact bundle file in
+a saved preview and recheck its tool payload against the prepared journal scope.
+
 ## Bounds and handling
 
 The format allows at most 16 MiB per file, 4 MiB of contract records, forty artifact

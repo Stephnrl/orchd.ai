@@ -169,6 +169,8 @@ Run the following assessment to evaluate the selected evidence.
 For a review handoff, [export a portable evidence bundle](github-evidence-bundles.md)
 from that selection and verify it independently without the source workflow directory.
 Bundles are separate from the artifact-evidence envelope used by combined assessment.
+The [journal-bound bundle review flow](github-bundle-approval.md) prepares and rechecks
+a dedicated bundle-bound preview without requiring the source workflow store.
 
 ```sh
 python -m orch github-check-record-claims --data .runtime/phase2 --records records.json
