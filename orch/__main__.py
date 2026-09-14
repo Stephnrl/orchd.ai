@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -45,7 +45,27 @@ def main():
     parser.add_argument('--jira-target', help='Explicit Jira Data Center instance/project/issue target JSON')
     parser.add_argument('--jira-author-key', help='Explicit expected Jira comment author key; never inferred from captured comments')
     parser.add_argument('--jira-profile', help='Explicit Jira deployment mapping JSON; no credentials')
+    parser.add_argument('--release-lane', choices=['offline', 'browser', 'full'], default='full', help='Exact required release acceptance lane')
+    parser.add_argument('--release-report', help='Saved release verification report; requires its independently retained digest')
     args = parser.parse_args()
+    if args.command in ('verify-release', 'check-release'):
+        from .contracts import Rejected, canonical
+        from .release import verify_release, check_release
+        import sys
+        if args.command == 'verify-release' and not args.destination:
+            parser.error('verify-release requires a new --destination')
+        if args.command == 'check-release' and not (args.release_report and args.expected_sha256):
+            parser.error('check-release requires --release-report and --expected-sha256')
+        try:
+            report = (verify_release(args.destination, args.release_lane,
+                                    progress=lambda stage: print('Release check: ' + stage, file=sys.stderr, flush=True))
+                      if args.command == 'verify-release' else
+                      check_release(args.release_report, args.expected_sha256, args.release_lane))
+        except (Rejected, OSError):
+            parser.error('Release verification rejected; check report path, lane, digest, source and expiry')
+        print(canonical(report).decode())
+        if report['status'] == 'failed': raise SystemExit(2)
+        return
     if args.command in ('jira-action-read-plan', 'jira-action-preview', 'jira-stage-action', 'jira-deployment-check'):
         staging = args.command == 'jira-stage-action'
         if not args.jira_profile or (args.command != 'jira-deployment-check' and not args.intent):

@@ -6,6 +6,8 @@ deterministic mock actors, real fixture tests, and simulated PR receipts.
 See the [roadmap progress assessment](docs/progress.md) for implemented scope and
 remaining integrations, and [deployment readiness](docs/deployment-readiness.md) for
 an executable report of the gates still blocking live providers.
+[Offline release verification](docs/release-verification.md) runs the complete local
+acceptance package and checks retained evidence against its source, lane and expiry.
 The [offline GitHub request preview](docs/github-preview.md) begins external broker
 preparation with explicit destination checks and a digest of the proposed scope.
 [Portable evidence bundles](docs/github-evidence-bundles.md) package an explicitly

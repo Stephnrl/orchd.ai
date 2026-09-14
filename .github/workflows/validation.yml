@@ -36,32 +36,8 @@ jobs:
           package-manager-cache: false
       - name: Install test dependencies
         run: python -m pip install -r requirements-dev.txt
-      - name: Validate contracts
-        run: python scripts/validate_contracts.py
-      - name: Run offline suite with strict skip accounting
-        run: python scripts/ci_tests.py
-      - name: Check JavaScript syntax
-        run: node --check orch/ui/app.js
-      - name: Check approval controls
-        run: node tests/test_ui_approval_renewal.cjs
-      - name: Check recovery controls
-        run: node tests/test_ui_recovery_diagnostics.cjs
-      - name: Check maintenance reports
-        run: node tests/test_ui_maintenance.cjs
-      - name: Check task refresh ordering
-        run: node tests/test_ui_refresh.cjs
-      - name: Check evidence request ordering
-        run: node tests/test_ui_evidence.cjs
-      - name: Check evidence review selection and stale responses
-        run: node tests/test_ui_claims.cjs
-      - name: Check bundle download bounds and cancellation
-        run: node tests/test_ui_bundle.cjs
-      - name: Check received bundle review and cancellation
-        run: node tests/test_ui_bundle_review.cjs
-      - name: Check list request ordering
-        run: node tests/test_ui_lists.cjs
-      - name: Check event replay failures
-        run: node tests/test_ui_replay.cjs
+      - name: Verify complete offline acceptance lane
+        run: python -m orch verify-release --release-lane offline --destination .runtime/ci-offline-release.json
       - name: Check Python compilation
         run: python -m compileall -q orch tests scripts
       - name: Check whitespace
@@ -89,7 +65,7 @@ jobs:
       - name: Install Chromium and system dependencies
         run: npx playwright install --with-deps chromium
       - name: Check real browser operator workflow
-        run: npm run test:browser
+        run: python -m orch verify-release --release-lane browser --destination .runtime/ci-browser-release.json
 
   docker:
     name: Docker (Linux)
