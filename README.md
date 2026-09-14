@@ -24,6 +24,8 @@ and snapshot-bound comment previews using saved responses, with live actions dis
 against the exact preview and expected author without permitting automatic reposting.
 [Retained Jira operations](docs/jira-journal.md) add durable staging, one-use reservation
 tracking, integrity audits and recovery from saved scope across restarts.
+[Jira recovery bundles](docs/jira-backups.md) add verified snapshots, stale-reservation
+comparison and disposable recovery drills without replacing active journals.
 
 Phase 1 remains the design baseline below. Phase 2 implements the bounded offline
 vertical slice; see [running Phase 2](docs/phase2.md) for APIs, recovery and limitations.
