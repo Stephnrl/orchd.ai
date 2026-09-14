@@ -155,9 +155,17 @@ request's operation and policy version. Fixed blockers describe mismatches witho
 returning document contents. `claims_consistent` exits 0, `blocked` exits 2; invalid,
 missing or corrupt records exit 2 without a report.
 
+Both the standalone claims check and combined assessment also verify the patch diff,
+test stdout/stderr and each reported patch command's stdout/stderr. Every reference
+must exactly match task-owned artifact metadata and bounded file bytes. The report
+binds role, artifact ID, digest and byte count without returning supporting contents.
+Supporting references are limited to 32 entries, 1 MiB each and 8 MiB total; repeated
+references count separately. Count and declared byte budgets are checked before reading
+supporting files. Missing, altered or foreign-task support fails without a report.
+
 This is consistency checking of local claims, not authentication of execution, reviewer
 identity or policy authority. It does not validate every transitive dependency, referenced
-diff/log contents, real GitHub commits, or the tool payload against a journal proposal.
+the meaning of diff/log contents, real GitHub commits, or the tool payload against a journal proposal.
 The current engine does not automatically export these records as evidence artifacts.
 The standalone claims check does not compare the tool payload to a journal proposal;
 the combined assessment adds the binding described above.

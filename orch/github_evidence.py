@@ -10,6 +10,8 @@ from .github_approval import _validate_evidence, check_approval
 
 ARTIFACT = Draft202012Validator({'$defs': SCHEMA['$defs'], '$ref': '#/$defs/ArtifactRef'})
 MAX_BYTES = 1024 * 1024
+MAX_SUPPORT_REFERENCES = 32
+MAX_SUPPORT_BYTES = 8 * 1024 * 1024
 
 
 def assess_approval_evidence(journal, store, preview, expected_sha256, evidence):
@@ -120,6 +122,7 @@ def _assess_contents(store, task, contents):
     patch, test, review, policy = (documents[role] for role in ('patch', 'test', 'review', 'policy'))
     review_request = _stored_record(store, review['request'], task, 'ReviewRequest')
     tool = _stored_record(store, policy['request'], task, 'ToolRequest')
+    supporting = _check_supporting_artifacts(store, task, patch, test)
     blockers = []
     if test['patch'] != ref(patch) or test['snapshot_sha256'] != patch['snapshot_sha256']:
         blockers.append('test_patch_mismatch')
@@ -146,7 +149,28 @@ def _assess_contents(store, task, contents):
     return {"records": {role: ref(document) for role, document in documents.items()},
             "review_request": ref(review_request), "tool_request": ref(tool), "checked_at": checked,
             "policy_window": {"issued_at": policy['created_at'], "expires_at": policy['expires_at']},
+            "supporting_artifacts": supporting,
             "blockers": blockers}
+
+
+def _check_supporting_artifacts(store, task, patch, test):
+    if 3 + 2 * len(patch['executed_commands']) > MAX_SUPPORT_REFERENCES:
+        raise Rejected("Supporting evidence reference budget exceeded")
+    references = [('patch.diff', patch['diff']), ('test.stdout', test['stdout']), ('test.stderr', test['stderr'])]
+    for index, command in enumerate(patch['executed_commands']):
+        references.extend((f'patch.command.{index}.{channel}', command[channel]) for channel in ('stdout', 'stderr'))
+    total = 0
+    for label, item in references:
+        if not ARTIFACT.is_valid(item) or type(item['size_bytes']) is not int or not 0 <= item['size_bytes'] <= MAX_BYTES:
+            raise Rejected("Invalid supporting artifact reference")
+        total += item['size_bytes']
+    if total > MAX_SUPPORT_BYTES:
+        raise Rejected("Supporting evidence byte budget exceeded")
+    checked = []
+    for label, item in references:
+        raw = _artifact_bytes(store, item, task)
+        checked.append({"role": label, "artifact_id": item['artifact_id'], "sha256": item['sha256'], "size_bytes": len(raw)})
+    return checked
 
 
 def _check_evidence(store, evidence, contents_check=False):

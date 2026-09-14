@@ -14,6 +14,7 @@ from orch.github_evidence import assess_approval_evidence, check_evidence_conten
 from orch.github_journal import GitHubJournal
 from orch.storage import Store
 from test_github_preview import intent
+from github_evidence_support import register_support
 
 
 class CombinedAssessmentTests(unittest.TestCase):
@@ -31,6 +32,7 @@ class CombinedAssessmentTests(unittest.TestCase):
             ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'))}
         for role, document in self.docs.items():
             document.update(id=role, task_id=task, created_at='2026-01-01T00:00:00Z')
+        register_support(self.store, task, self.docs)
         self.docs['test']['patch'] = ref(self.docs['patch'])
         request = self.docs['review_request']
         request.update(patch=ref(self.docs['patch']), test_receipts=[ref(self.docs['test'])], implementer_invocation_id='implementer', reviewer_invocation_id='reviewer')
