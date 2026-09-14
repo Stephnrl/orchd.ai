@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -33,7 +33,27 @@ def main():
     parser.add_argument("--allow-repository", help="Exact owner/name allowed for the GitHub preview")
     parser.add_argument("--repository-id", type=int, help="Expected numeric GitHub repository identity")
     parser.add_argument("--observations", help="Offline JSON observations for GitHub assessment")
+    parser.add_argument("--journal", help="Separate local GitHub operation journal database")
     args = parser.parse_args()
+    if args.command == "github-stage":
+        if not args.intent or not args.allow_repository or args.repository_id is None or not args.journal:
+            parser.error("github-stage requires --intent, --allow-repository, --repository-id and --journal")
+        from .github_preview import load_intent
+        from .github_journal import GitHubJournal, bound_scope
+        from .contracts import Rejected
+        import sqlite3
+        journal = None
+        try:
+            intent = load_intent(args.intent)
+            bound_scope(intent, args.allow_repository, args.repository_id)
+            journal = GitHubJournal(args.journal)
+            print(json.dumps(journal.stage(intent, args.allow_repository, args.repository_id), indent=2))
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error("Cannot stage GitHub intent; check scope, journal identity and availability")
+        finally:
+            if journal is not None:
+                journal.close()
+        return
     if args.command in ("github-check-refs", "github-reconcile"):
         if not args.intent or not args.allow_repository or args.repository_id is None or not args.observations:
             parser.error(args.command + " requires --intent, --allow-repository, --repository-id and --observations")
