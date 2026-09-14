@@ -54,7 +54,33 @@ This enforces the preview window for this diagnostic check only. A `current` res
 still has unverified evidence and no approval, retry or live authority; the journal may
 change after the snapshot. The check neither persists nor consumes requests or decisions.
 
-Next steps require retrieving and validating workflow evidence, durable request/decision
+## Checking local artifact bytes
+
+```sh
+python -m orch github-check-evidence --data .runtime/phase2 --evidence evidence.json
+```
+
+This opens an existing version-2 workflow store read-only. Each patch/test/review/policy
+digest must identify an artifact registered to the envelope's task. The checker validates
+canonical artifact metadata against `ArtifactRef`, checks its row identity, and reads the
+content-addressed file with a 1 MiB limit per role. Recorded size and SHA-256 must match
+the bytes. Artifact-directory and file symlinks are rejected. Metadata queries share a
+read transaction; artifact files are checked sequentially and could change afterward.
+
+The result is `bytes_match` (exit 0) with `artifact_bytes_verified: true`; invalid or missing
+evidence exits 2 without a report. It binds the evidence-envelope digest and each role's
+artifact ID, digest and size, without returning contents or paths. If identical content has
+multiple registrations for the same task, the lowest artifact ID is selected deterministically.
+No missing directories, artifacts or workflow records are created.
+
+These digests refer to stored artifact bytes, not automatically to contract-record hashes.
+The policy artifact must also be registered to the task; the command does not invent one
+from `fixture-v1`. Matching bytes do not establish that a file is a patch, tests passed,
+a reviewer accepted the change, or a policy is trusted. Task ownership relies on the local
+store's records, not independent provenance. `evidence_verified`, `live_authorized` and
+`retry_allowed` remain false, and saved approval checks do not consume this report yet.
+
+Next steps require semantically validating workflow evidence, durable request/decision
 storage, authenticated approver identity, policy verification, expiry and single-use
 admission, plus reviewed provider/credential/remote-branch boundaries. A future broker
 must recheck journal state before admission because it can change after this read snapshot.
