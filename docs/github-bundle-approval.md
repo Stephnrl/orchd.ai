@@ -89,3 +89,8 @@ Tests cover preparation and reassessment without source artifacts, read-only jou
 query-only scratch storage, exact digest binding, nested-preview validation, altered
 evidence/tool scope, simulated payloads, expiry boundaries, reservations during both
 flows, failure cleanup and CLI exit/output behavior.
+
+For a complete offline diagnostic including repository identity and commit tips, use
+the [combined preflight](github-preflight.md). It adds explicitly supplied observation
+snapshots, checks their freshness at the final assessment time and keeps remote
+verification and execution authority disabled.

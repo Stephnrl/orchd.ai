@@ -93,6 +93,10 @@ the format neither restores a workflow nor grants execution authority.
 directly from verified bundles, checks their tool payloads against prepared scope and
 binds the exact bundle file in a saved preview. Reassessment checks expiry and journal
 state again after bundle/tool inspection; no approval decision or dispatch is enabled.
+[Combined offline preflight](github-preflight.md) now adds scope-bound repository and
+ref observation snapshots to that review, enforces a five-minute freshness window and
+rechecks journal state and policy/approval expiry after observation assessment. Supplied
+responses and timestamps remain unauthenticated; no remote fetch or dispatch is enabled.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
