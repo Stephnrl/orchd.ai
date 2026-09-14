@@ -102,7 +102,36 @@ has `evidence_verified`, `live_authorized` and `retry_allowed` false. Semantic e
 policy trust and authenticated approval admission remain separate requirements; no
 requests or decisions are persisted or consumed.
 
-Next steps require semantically validating workflow evidence, durable request/decision
+## Assessing workflow evidence claims
+
+```sh
+python -m orch github-check-evidence-claims --data .runtime/phase2 --evidence evidence.json
+```
+
+This stricter mode performs the byte checks above and parses those same verified bytes
+as canonical `PatchReceipt`, `TestReceipt`, `ReviewDecision` and `ToolDecision` contracts.
+Each must exactly match a schema-valid stored record for the same task. Linked
+`ReviewRequest` and `ToolRequest` records are resolved by task and document hash with
+bounded reads, within the artifact metadata read transaction. Ordinary log files and
+arbitrary JSON cannot satisfy these role requirements.
+
+The assessment checks the test's patch reference and snapshot, a passed/untruncated
+result, requested versus executed argv, successful reported patch commands, a clean
+ACCEPT review, and the review request's exact patch and single test-receipt reference.
+Reviewer invocation must match and differ from the implementer. Policy must currently
+require human approval, with no effective-request override, and match the GitHub tool
+request's operation and policy version. Fixed blockers describe mismatches without
+returning document contents. `claims_consistent` exits 0, `blocked` exits 2; invalid,
+missing or corrupt records exit 2 without a report.
+
+This is consistency checking of local claims, not authentication of execution, reviewer
+identity or policy authority. It does not validate every transitive dependency, referenced
+diff/log contents, real GitHub commits, or the tool payload against a journal proposal.
+The current engine does not automatically export these records as evidence artifacts.
+The existing combined approval command still checks bytes only; it does not consume
+this stricter report. `evidence_verified`, `live_authorized` and `retry_allowed` stay false.
+
+Next steps require verifying evidence provenance and remaining dependencies, durable request/decision
 storage, authenticated approver identity, policy verification, expiry and single-use
 admission, plus reviewed provider/credential/remote-branch boundaries. A future broker
 must recheck journal state before admission because it can change after this read snapshot.

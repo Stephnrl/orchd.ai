@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -61,10 +61,10 @@ def main():
                 journal.close()
         print(json.dumps(report, indent=2))
         raise SystemExit(0 if report['status'] == 'current' else 2)
-    if args.command == "github-check-evidence":
+    if args.command in ("github-check-evidence", "github-check-evidence-claims"):
         if not args.evidence:
             parser.error("github-check-evidence requires --evidence and an existing workflow --data directory")
-        from .github_evidence import check_evidence
+        from .github_evidence import check_evidence, check_evidence_contents
         from .github_preview import load_intent
         from .storage import Store
         from .contracts import Rejected
@@ -73,13 +73,15 @@ def main():
         try:
             evidence = load_intent(args.evidence)
             store = Store(args.data, read_only=True)
-            report = check_evidence(store, evidence)
+            report = check_evidence_contents(store, evidence) if args.command == "github-check-evidence-claims" else check_evidence(store, evidence)
         except (Rejected, OSError, sqlite3.Error):
             parser.error("Evidence check failed; check task ownership, metadata, artifact bytes and existing storage")
         finally:
             if store is not None:
                 store.close()
         print(json.dumps(report, indent=2))
+        if report['status'] == 'blocked':
+            raise SystemExit(2)
         return
     if args.command == "github-check-approval":
         if not args.journal or not args.approval_preview or not args.expected_sha256 or not args.evidence:
