@@ -3,6 +3,8 @@
 An interrupted create request does not establish whether GitHub created a PR. This
 milestone adds a comparison codec for saved list-PR observations. It performs no fetch,
 POST, retry, credential access or workflow update. Existing platform actions stay simulated.
+The separate [operation journal](github-journal.md) can retain staged scopes and consumed
+attempt reservations. This classifier cannot update or clear journal state.
 
 ```sh
 python -m orch github-reconcile --intent intent.json --allow-repository example/project --repository-id 123 --observations observations.json
