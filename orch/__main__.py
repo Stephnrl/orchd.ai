@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -29,7 +29,20 @@ def main():
     parser.add_argument("--executable", help="Absolute provider executable path for read-only inventory")
     parser.add_argument("--expected-sha256", help="Approved executable digest for provider inventory")
     parser.add_argument("--runtime-report", help="Existing runtime evidence to revalidate for deployment-check; may query Docker")
+    parser.add_argument("--intent", help="Local JSON intent for offline github-preview")
+    parser.add_argument("--allow-repository", help="Exact owner/name allowed for the GitHub preview")
     args = parser.parse_args()
+    if args.command == "github-preview":
+        if not args.intent or not args.allow_repository:
+            parser.error("github-preview requires --intent and --allow-repository")
+        from .github_preview import load_intent, prepare_pull_request
+        from .contracts import Rejected
+        try:
+            preview = prepare_pull_request(load_intent(args.intent), args.allow_repository)
+        except Rejected:
+            parser.error("GitHub intent rejected; check its schema, scope and content")
+        print(json.dumps(preview, indent=2))
+        return  # Success means a preview was prepared, never a remote effect.
     if args.command == "verify-backup":
         if args.destination or args.task:
             parser.error("verify-backup checks the whole backup and accepts no destination or task")
