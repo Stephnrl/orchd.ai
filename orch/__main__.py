@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -43,6 +43,31 @@ def main():
     parser.add_argument("--observed-at", help="Supplied observation time in UTC, such as 2026-01-01T00:00:00Z")
     parser.add_argument('--transcript', help='Offline JSON capture of the three planned GitHub GET responses')
     args = parser.parse_args()
+    if args.command in ('github-recovery-read-plan', 'github-reconcile-transcript'):
+        importing = args.command == 'github-reconcile-transcript'
+        if not args.journal or not args.operation_id or not args.expected_sha256 or (importing and not args.transcript):
+            parser.error('Recovery reads require --journal, --operation-id, --expected-sha256 and, for assessment, --transcript')
+        if any(value is not None for value in (args.intent, args.allow_repository, args.repository_id)):
+            parser.error('Recovery uses retained scope; repository and intent overrides are not accepted')
+        from .github_recovery_reads import prepare_recovery_plan, reconcile_transcript
+        from .github_journal import GitHubJournal
+        from .github_preview import load_intent
+        from .contracts import Rejected, canonical
+        import sqlite3
+        journal = None
+        try:
+            journal = GitHubJournal(args.journal, read_only=True)
+            report = (reconcile_transcript(journal, args.operation_id, args.expected_sha256, load_intent(args.transcript))
+                      if importing else prepare_recovery_plan(journal, args.operation_id, args.expected_sha256))
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error('Recovery read contract rejected; check transcript and retained reservation')
+        finally:
+            if journal is not None:
+                journal.close()
+        print(canonical(report).decode())
+        if report.get('status') == 'unresolved':
+            raise SystemExit(2)
+        return
     if args.command in ('github-ref-read-plan', 'github-ref-transcript-snapshot'):
         importing = args.command == 'github-ref-transcript-snapshot'
         if not args.journal or not args.operation_id or not args.expected_sha256:

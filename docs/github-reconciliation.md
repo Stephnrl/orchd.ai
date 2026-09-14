@@ -52,3 +52,8 @@ trusted operation provenance, approval binding, branch-race handling, authoritat
 response verification and an operator recovery policy. Tests here use synthetic responses
 only. Closed, merged, edited or no-longer-draft PRs intentionally remain unresolved for
 review rather than being automatically adopted or recreated.
+
+[Paginated recovery transcripts](github-recovery-transcripts.md) now derive exact lookup
+requests from an uncertain journal operation, validate captured Link continuations and
+response bytes, and recheck the reservation before running this classifier. Truncated
+captures remain unresolved and no retry or adoption authority is added.
