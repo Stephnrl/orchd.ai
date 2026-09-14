@@ -5,10 +5,23 @@ import json
 from jsonschema import Draft202012Validator
 
 from .contracts import Rejected, SCHEMA, canonical, digest
-from .github_approval import _validate_evidence
+from .github_approval import _validate_evidence, check_approval
 
 ARTIFACT = Draft202012Validator({'$defs': SCHEMA['$defs'], '$ref': '#/$defs/ArtifactRef'})
 MAX_BYTES = 1024 * 1024
+
+
+def assess_approval_evidence(journal, store, preview, expected_sha256, evidence):
+    """Compose fresh checks, then recheck approval after artifact I/O."""
+    approval = check_approval(journal, preview, expected_sha256, evidence)
+    artifacts = None
+    if approval['status'] == 'current':
+        artifacts = check_evidence(store, evidence)
+        approval = check_approval(journal, preview, expected_sha256, evidence)
+    binding = {"schema_version": "1.0.0", "approval": approval, "artifact_evidence": artifacts}
+    return {"kind": "GitHubCombinedApprovalAssessment", "binding": binding, "sha256": digest(binding),
+            "status": approval['status'], "artifact_bytes_verified": artifacts is not None,
+            "evidence_verified": False, "live_authorized": False, "retry_allowed": False}
 
 
 def check_evidence(store, evidence):
