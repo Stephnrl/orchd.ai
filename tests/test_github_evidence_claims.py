@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from orch.contracts import Rejected, canonical, digest, ref
-from orch.github_evidence import check_evidence_contents, check_record_claims
+from orch.github_evidence import check_evidence_contents, check_record_claims, list_evidence_records
 from orch.storage import Store
 from github_evidence_support import register_support, link_plan_evidence, register_operations
 
@@ -76,6 +76,50 @@ class EvidenceClaimsTests(unittest.TestCase):
 
     def selection(self):
         return {'task_id': self.task, **{role: ref(self.docs[role]) for role in ('patch', 'test', 'review', 'policy')}}
+
+    def test_record_catalog_returns_exact_references_without_contents(self):
+        self.persist()
+        before = self.store.db.total_changes
+        report = list_evidence_records(self.store, self.task)
+        selected = {item['role']: item['record'] for item in report['binding']['records']}
+        self.assertEqual({'task_id': self.task, **selected}, self.selection())
+        self.assertEqual(report['sha256'], digest(report['binding']))
+        self.assertEqual(self.store.db.total_changes, before)
+        self.assertFalse(report['evidence_verified'])
+        self.assertNotIn('summary', json.dumps(report))
+
+    def test_record_catalog_keeps_multiple_candidates(self):
+        self.persist()
+        other = {**self.docs['review'], 'id': 'other-review'}
+        self.store.put(other)
+        reviews = [item for item in list_evidence_records(self.store, self.task)['binding']['records'] if item['role'] == 'review']
+        self.assertEqual(len(reviews), 2)
+        self.assertEqual({item['record']['id'] for item in reviews}, {'review', 'other-review'})
+
+    def test_record_catalog_rejects_unknown_task_and_over_budget(self):
+        with self.assertRaises(Rejected):
+            list_evidence_records(self.store, 'b' * 32)
+        self.store.db.executemany('INSERT INTO records VALUES(?,?,?,?)',
+                                 [(f'candidate-{i}', self.task, 'ReviewDecision', '{}') for i in range(201)])
+        with self.assertRaisesRegex(Rejected, 'record budget'):
+            list_evidence_records(self.store, self.task)
+        self.assertFalse(self.store.db.in_transaction)
+
+    def test_record_catalog_rejects_noncanonical_payload(self):
+        self.persist()
+        self.store.db.execute('DROP TRIGGER records_update')
+        self.store.db.execute('UPDATE records SET payload=? WHERE id=?', (json.dumps(self.docs['review'], indent=2), 'review'))
+        with self.assertRaises(Rejected):
+            list_evidence_records(self.store, self.task)
+
+    def test_record_catalog_cli_is_read_only(self):
+        from orch.__main__ import main
+        self.persist()
+        output = io.StringIO()
+        argv = ['orch', 'github-list-evidence-records', '--task', self.task, '--data', str(self.store.root)]
+        with patch.object(sys, 'argv', argv), redirect_stdout(output), patch('orch.__main__.Engine', side_effect=AssertionError('No workflow')):
+            main()
+        self.assertEqual(len(json.loads(output.getvalue())['binding']['records']), 4)
 
     def test_direct_record_claims_need_no_primary_receipt_artifacts(self):
         self.persist()

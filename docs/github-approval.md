@@ -138,6 +138,19 @@ it does not authenticate the policy or approver, bind a human decision, or grant
 To inspect stored records before receipt artifacts have been exported, use:
 
 ```sh
+python -m orch github-list-evidence-records --data .runtime/phase2 --task TASK_ID
+```
+
+This read-only catalog lists patch, test, review and policy candidates for the exact
+task, ordered by contract kind and record ID. Each entry contains its role, canonical
+document reference and creation time; record contents are omitted. Multiple candidates
+are retained rather than selecting the latest. Unknown tasks, malformed/noncanonical
+records, records over 1 MiB or more than 200 candidates fail without a partial catalog.
+The catalog hash binds the complete metadata list. It does not inspect dependencies or
+artifacts, assess outcomes, export records or authorize execution. Use the intended
+record references in the selection file below.
+
+```sh
 python -m orch github-check-record-claims --data .runtime/phase2 --records records.json
 ```
 
