@@ -17,6 +17,8 @@ Journal-bound offline reconciliation now derives scope from a retained uncertain
 reservation and binds the complete assessment to it without resetting the attempt.
 Journal admission now has record and scope-byte ceilings, with read-only usage reporting
 and no eviction of retained attempt evidence.
+A whole-journal audit validates every bounded retained record in one consistent read
+snapshot and reports a digest of scope/reservation metadata without proposal text.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

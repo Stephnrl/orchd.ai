@@ -139,6 +139,29 @@ class GitHubJournal:
                 "status": assessment['status'], "retry_allowed": False,
                 "remote_effect_confirmed": False, "live_authorized": False}
 
+    def audit(self):
+        """Validate a bounded, consistent snapshot; emit no proposal text."""
+        self.db.execute("BEGIN")
+        try:
+            usage = self.usage()
+            if usage['records'] > MAX_RECORDS or usage['scope_bytes'] > MAX_TOTAL_SCOPE_BYTES:
+                raise Rejected("Journal exceeds audit budget")
+            if self.db.execute("PRAGMA quick_check(1)").fetchone()[0] != 'ok':
+                raise Rejected("Journal storage check failed")
+            records = []
+            for row in self.db.execute("SELECT operation_id FROM intents ORDER BY operation_id").fetchall():
+                record = self.get(row['operation_id'])
+                records.append({key: record[key] for key in ('operation_id', 'task_id', 'sha256', 'state', 'reserved_at')})
+            binding = {"schema_version": "1.0.0", "records": records,
+                       "record_count": usage['records'], "scope_bytes": usage['scope_bytes']}
+            result = {"kind": "GitHubJournalAudit", "binding": binding, "sha256": digest(binding),
+                      "status": "valid", "live_authorized": False, "retry_allowed": False}
+            self.db.execute("COMMIT")
+            return result
+        except BaseException:
+            self.db.execute("ROLLBACK")
+            raise
+
     def stage(self, intent, allowed_repository, repository_id):
         if self.read_only:
             raise Rejected("Journal is read-only")
