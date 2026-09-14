@@ -95,9 +95,9 @@ async function tasks(more = false) {
     if (version !== epoch || request !== taskListRequest) return;
     if (!more) { $("tasks").replaceChildren(); names.clear(); }
     for (const item of data.items) {
-      const b = button(item.task_id.slice(0, 12), () => select(item.task_id));
+      const b = button(item.title, () => select(item.task_id));
       b.className = "task-button"; b.setAttribute("aria-current", String(item.task_id === selected));
-      const small = document.createElement("small"); small.textContent = item.state.state.replaceAll("_", " "); b.append(small);
+      const small = document.createElement("small"); small.textContent = item.task_id.slice(0, 12) + " · " + item.state.state.replaceAll("_", " "); b.append(small);
       $("tasks").append(b); names.set(item.task_id, b);
     }
     taskNext = data.next; $("more-tasks").hidden = taskNext === null;

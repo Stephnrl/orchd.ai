@@ -22,6 +22,11 @@ request is dispatched at a time; failed pages retain their cursor for an explici
 A fresh list request disables paging until it succeeds, preventing an older cursor from
 appending to a refreshed list. Switching tasks clears the previous record links before
 loading the new task's evidence list.
+Task entries display the verified specification title, followed by a shortened task ID
+and current state. Duplicate titles still select by the full task ID. Titles are rendered
+as text, so markup is never interpreted. The authenticated task-list response includes
+`title`; each returned title is read from the task-bound, hash-verified TaskSpec. A missing
+or corrupt specification rejects that page rather than displaying an unverified title.
 
 Start the server from the repository root and open the exact address it prints:
 
