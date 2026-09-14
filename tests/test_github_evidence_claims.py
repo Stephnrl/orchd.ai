@@ -23,10 +23,12 @@ class EvidenceClaimsTests(unittest.TestCase):
         examples = json.loads((Path(__file__).resolve().parents[1] / 'contracts/v1/examples.json').read_text())
         self.docs = {role: copy.deepcopy(examples[kind]) for role, kind in (
             ('patch', 'PatchReceipt'), ('test', 'TestReceipt'), ('review', 'ReviewDecision'),
-            ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'), ('test_request', 'TestRequest'))}
+            ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'), ('test_request', 'TestRequest'), ('work_order', 'WorkOrder'))}
         for role, document in self.docs.items():
             document.update(id=role, task_id=self.task)
         register_support(self.store, self.task, self.docs)
+        self.docs['patch']['work_order'] = ref(self.docs['work_order'])
+        self.docs['test_request']['work_order'] = ref(self.docs['work_order'])
         self.docs['test']['patch'] = ref(self.docs['patch'])
         self.docs['test_request']['patch'] = ref(self.docs['patch'])
         self.docs['test']['request'] = ref(self.docs['test_request'])
@@ -74,6 +76,8 @@ class EvidenceClaimsTests(unittest.TestCase):
         self.assertIn('review_not_clean_accept', report['binding']['claims']['blockers'])
 
     def relink(self):
+        self.docs['patch']['work_order'] = ref(self.docs['work_order'])
+        self.docs['test_request']['work_order'] = ref(self.docs['work_order'])
         self.docs['test']['patch'] = ref(self.docs['patch'])
         self.docs['test_request']['patch'] = ref(self.docs['patch'])
         self.docs['test']['request'] = ref(self.docs['test_request'])
@@ -186,6 +190,74 @@ class EvidenceClaimsTests(unittest.TestCase):
         with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
             self.check()
         self.assertFalse(self.store.db.in_transaction)
+
+    def assert_work_blocked(self, reason):
+        self.relink()
+        self.persist()
+        report = self.check()
+        self.assertEqual(report['status'], 'blocked')
+        self.assertIn(reason, report['binding']['claims']['blockers'])
+        self.assertEqual(report['binding']['claims']['work_order'], ref(self.docs['work_order']))
+        self.assertFalse(report['live_authorized'])
+
+    def test_missing_work_order_rejects(self):
+        self.persist(omit='work_order')
+        with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
+            self.check()
+        self.assertFalse(self.store.db.in_transaction)
+
+    def test_foreign_task_work_order_rejects(self):
+        other = 'b' * 32
+        self.store.db.execute('INSERT INTO tasks VALUES(?,?,?)', (other, '{}', '{}'))
+        self.docs['work_order']['task_id'] = other
+        self.relink()
+        self.persist()
+        with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
+            self.check()
+
+    def test_work_order_hash_mismatch_rejects(self):
+        self.docs['work_order']['max_changed_bytes'] = 2
+        self.persist()
+        with self.assertRaises(Rejected):
+            self.check()
+
+    def test_work_order_repository_mismatch_blocks(self):
+        self.docs['work_order']['repository']['base_commit'] = 'c' * 40
+        self.assert_work_blocked('work_order_repository_mismatch')
+
+    def test_work_order_review_plan_mismatch_blocks(self):
+        self.docs['work_order']['plan']['sha256'] = 'b' * 64
+        self.assert_work_blocked('work_order_review_mismatch')
+
+    def test_work_order_test_limits_must_match(self):
+        self.docs['work_order']['permitted_tests'][0]['timeout_seconds'] = 2
+        self.assert_work_blocked('work_order_test_not_permitted')
+
+    def test_work_order_paths_are_exact(self):
+        self.docs['patch']['changed_files'][0]['path'] = 'example/child.txt'
+        self.assert_work_blocked('work_order_path_not_permitted')
+
+    def test_work_order_byte_limit_blocks(self):
+        self.docs['patch']['changed_bytes'] = 2
+        self.assert_work_blocked('work_order_byte_limit_exceeded')
+
+    def test_work_order_created_after_patch_start_blocks(self):
+        self.docs['work_order']['created_at'] = '2026-09-12T14:00:00.001Z'
+        self.assert_work_blocked('work_order_created_after_patch_start')
+
+    def test_work_order_deadline_blocks_late_test(self):
+        self.docs['test']['ended_at'] = '2026-09-12T14:00:01Z'
+        self.assert_work_blocked('work_order_deadline_exceeded')
+
+    def test_work_order_future_creation_blocks(self):
+        self.docs['work_order']['created_at'] = '2026-09-12T14:02:00Z'
+        self.assert_work_blocked('work_order_from_future')
+
+    def test_work_order_exact_byte_and_deadline_limits_pass(self):
+        self.docs['patch']['changed_bytes'] = self.docs['work_order']['max_changed_bytes']
+        self.relink()
+        self.persist()
+        self.assertEqual(self.check()['status'], 'claims_consistent')
 
     def test_foreign_task_test_request_rejects(self):
         other = 'b' * 32

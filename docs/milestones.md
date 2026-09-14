@@ -49,6 +49,8 @@ Artifact evidence reads now reject Windows junctions as well as symbolic links, 
 a real directory-link regression and canonical-path mocking for Windows runner aliases.
 Strict assessments now resolve task-owned test requests and bind their operation,
 patch/work-order references, snapshot, complete command, runner image and creation time.
+The referenced work order is now resolved and checked for repository/review bindings,
+exact allowed paths and tests, reported change-byte limits and execution deadlines.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

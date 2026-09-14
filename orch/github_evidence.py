@@ -122,10 +122,21 @@ def _assess_contents(store, task, contents):
             raise Rejected("Invalid evidence contents") from exc
     patch, test, review, policy = (documents[role] for role in ('patch', 'test', 'review', 'policy'))
     test_request = _stored_record(store, test['request'], task, 'TestRequest')
+    work = _stored_record(store, patch['work_order'], task, 'WorkOrder')
     review_request = _stored_record(store, review['request'], task, 'ReviewRequest')
     tool = _stored_record(store, policy['request'], task, 'ToolRequest')
     supporting = _check_supporting_artifacts(store, task, patch, test)
     blockers = []
+    if work['repository'] != patch['repository']:
+        blockers.append('work_order_repository_mismatch')
+    if work['spec'] != review_request['spec'] or work['plan'] != review_request['plan']:
+        blockers.append('work_order_review_mismatch')
+    if test_request['command'] not in work['permitted_tests']:
+        blockers.append('work_order_test_not_permitted')
+    if any(item['path'] not in work['allowed_paths'] for item in patch['changed_files']):
+        blockers.append('work_order_path_not_permitted')
+    if patch['changed_bytes'] > work['max_changed_bytes']:
+        blockers.append('work_order_byte_limit_exceeded')
     if (test_request['operation_id'] != test['operation_id'] or test_request['patch'] != ref(patch)
             or test_request['snapshot_sha256'] != test['snapshot_sha256']
             or test_request['work_order'] != patch['work_order']):
@@ -154,6 +165,14 @@ def _assess_contents(store, task, contents):
             or policy['operation_id'] != tool['operation_id'] or policy['policy_version'] != tool['policy_version']):
         blockers.append('policy_request_mismatch')
     checked = now()
+    if not datetime.fromisoformat(work['created_at']) <= datetime.fromisoformat(patch['started_at']):
+        blockers.append('work_order_created_after_patch_start')
+    if (datetime.fromisoformat(work['deadline']) < datetime.fromisoformat(work['created_at'])
+            or any(datetime.fromisoformat(receipt['ended_at']) > datetime.fromisoformat(work['deadline'])
+                   for receipt in (patch, test))):
+        blockers.append('work_order_deadline_exceeded')
+    if datetime.fromisoformat(work['created_at']) > datetime.fromisoformat(checked):
+        blockers.append('work_order_from_future')
     if not datetime.fromisoformat(patch['created_at']) <= datetime.fromisoformat(test_request['created_at']) <= datetime.fromisoformat(test['started_at']):
         blockers.append('test_request_timeline_invalid')
     if datetime.fromisoformat(test_request['created_at']) > datetime.fromisoformat(checked):
@@ -162,7 +181,7 @@ def _assess_contents(store, task, contents):
     if not datetime.fromisoformat(policy['created_at']) <= datetime.fromisoformat(checked) < datetime.fromisoformat(policy['expires_at']):
         blockers.append('policy_not_current')
     return {"records": {role: ref(document) for role, document in documents.items()},
-            "test_request": ref(test_request), "review_request": ref(review_request), "tool_request": ref(tool), "checked_at": checked,
+            "work_order": ref(work), "test_request": ref(test_request), "review_request": ref(review_request), "tool_request": ref(tool), "checked_at": checked,
             "policy_window": {"issued_at": policy['created_at'], "expires_at": policy['expires_at']},
             "supporting_artifacts": supporting,
             "blockers": blockers}

@@ -142,7 +142,7 @@ python -m orch github-check-evidence-claims --data .runtime/phase2 --evidence ev
 This stricter mode performs the byte checks above and parses those same verified bytes
 as canonical `PatchReceipt`, `TestReceipt`, `ReviewDecision` and `ToolDecision` contracts.
 Each must exactly match a schema-valid stored record for the same task. Linked
-`TestRequest`, `ReviewRequest` and `ToolRequest` records are resolved by task and document hash with
+`WorkOrder`, `TestRequest`, `ReviewRequest` and `ToolRequest` records are resolved by task and document hash with
 bounded reads, within the artifact metadata read transaction. Ordinary log files and
 arbitrary JSON cannot satisfy these role requirements.
 
@@ -176,7 +176,7 @@ window, and none of the six records may claim creation after the assessment time
 Timeline violations produce fixed blockers and exit 2, including when artifact bytes,
 preview scope and policy expiry otherwise pass. These checks use claimed timestamps;
 they do not authenticate clocks or producers, impose an evidence age limit, or establish
-the chronology of unresolved dependencies such as work orders.
+the chronology of unresolved dependencies such as plans and plan approvals.
 
 The test receipt must resolve to a canonical stored `TestRequest` for the same task.
 Its operation must match the receipt, its patch must match the assessed patch, its
@@ -187,7 +187,18 @@ receipt's environment image digest. Request creation must fall between patch rec
 creation and test execution start and cannot be in the future. Mismatches block both
 strict assessment commands; missing, corrupt or foreign-task requests fail without a
 report. The resolved request reference is included in the assessment binding. This
-does not verify the work order itself, an image's provenance, or the real runner's behavior.
+does not verify an image's provenance or the real runner's behavior.
+
+The patch's `WorkOrder` must also resolve to a canonical stored record for the task.
+Its repository object must equal the patch's, and its spec/plan references must match
+the review request's. The requested test must exactly match a permitted command contract.
+Every reported changed path must exactly match an allowed path (no prefix or glob
+expansion), and the reported changed-byte count must not exceed the work-order limit.
+Work-order creation must precede or equal patch execution start and cannot be in the
+future; its deadline cannot predate creation, and patch/test completion cannot exceed it.
+Equality at the byte limit or deadline is accepted. The report binds the work-order
+reference. These checks do not recompute changes from the diff, authenticate the work
+order, resolve its plan approval or prove that execution enforced its capabilities.
 
 This is consistency checking of local claims, not authentication of execution, reviewer
 identity or policy authority. It does not validate every transitive dependency,
