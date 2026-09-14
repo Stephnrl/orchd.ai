@@ -235,6 +235,17 @@ reference and request artifact ID, hash and byte count, without request text or 
 identity. This does not authenticate confirmation or evaluate whether the plan satisfies
 the specification's acceptance criteria and constraints.
 
+Patch and test receipts must also resolve to task-owned `operations` rows in the same
+evidence snapshot. Their stages must be `implementation` and `tests`, their slots must
+equal the work-order attempt, status must be `done`, and generation must be a positive
+integer. A canonical JSON result, read with a 1 MiB cap, must name the exact receipt
+under `patch` or `test` and include `failure: null`. Missing operations fail without a
+report; wrong state/binding and absent or oversized results block; malformed or
+noncanonical results fail without a report. The `execution` binding reports operation
+IDs, result hashes and fixed blockers without result contents. This establishes local
+completion records only: broker request/envelope provenance, generation fencing and
+the actual execution environment remain independently unverified.
+
 This is consistency checking of local claims, not authentication of execution, reviewer
 identity or policy authority. It does not validate every transitive dependency,
 the meaning of diff/log contents, real GitHub commits, or the tool payload against a journal proposal.

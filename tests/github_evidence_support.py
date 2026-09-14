@@ -1,5 +1,13 @@
 """Register supporting files before test fixtures compute receipt references."""
-from orch.contracts import digest, ref
+from orch.contracts import canonical, digest, ref
+
+
+def register_operations(store, documents):
+    for role, stage in (('patch', 'implementation'), ('test', 'tests')):
+        receipt = documents[role]
+        store.db.execute('INSERT INTO operations(id,task_id,stage,slot,status,result) VALUES(?,?,?,?,?,?)',
+                         (receipt['operation_id'], receipt['task_id'], stage, str(documents['work_order']['attempt']),
+                          'done', canonical({role: ref(receipt), 'failure': None}).decode()))
 
 
 def link_plan_evidence(documents):
