@@ -21,6 +21,31 @@ DOCUMENT_REF = Draft202012Validator({'$defs': SCHEMA['$defs'], '$ref': '#/$defs/
 MAX_CATALOG_RECORDS = 200
 
 
+def resolve_record_selection(store, anchors):
+    if (not isinstance(anchors, dict) or set(anchors) != {'task_id', 'review', 'policy'}
+            or not isinstance(anchors['task_id'], str) or not re.fullmatch(r'[a-f0-9]{32}', anchors['task_id'])
+            or any(not DOCUMENT_REF.is_valid(anchors[role]) for role in ('review', 'policy'))):
+        raise Rejected('Invalid evidence selection anchors')
+    store.db.execute('BEGIN')
+    try:
+        task = anchors['task_id']
+        review = _stored_record(store, anchors['review'], task, 'ReviewDecision')
+        policy = _stored_record(store, anchors['policy'], task, 'ToolDecision')
+        request = _stored_record(store, review['request'], task, 'ReviewRequest')
+        if len(request['test_receipts']) != 1:
+            raise Rejected('Evidence selection requires exactly one test receipt')
+        patch = _stored_record(store, request['patch'], task, 'PatchReceipt')
+        test = _stored_record(store, request['test_receipts'][0], task, 'TestReceipt')
+        if test['patch'] != ref(patch):
+            raise Rejected('Review and test select different patches')
+        selection = {'task_id': task, 'patch': ref(patch), 'test': ref(test), 'review': ref(review), 'policy': ref(policy)}
+        store.db.execute('COMMIT')
+        return selection
+    except BaseException:
+        store.db.execute('ROLLBACK')
+        raise
+
+
 def list_evidence_records(store, task):
     if not isinstance(task, str) or not re.fullmatch(r'[a-f0-9]{32}', task):
         raise Rejected('Invalid evidence task')

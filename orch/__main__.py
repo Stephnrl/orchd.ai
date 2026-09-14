@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -38,6 +38,26 @@ def main():
     parser.add_argument("--evidence", help="Offline GitHub approval evidence digest envelope")
     parser.add_argument("--approval-preview", help="Saved GitHub approval preview JSON")
     args = parser.parse_args()
+    if args.command == "github-resolve-evidence-selection":
+        if not args.records:
+            parser.error("github-resolve-evidence-selection requires --records and existing --data")
+        from .github_evidence import resolve_record_selection
+        from .github_preview import load_intent
+        from .storage import Store
+        from .contracts import Rejected
+        import sqlite3
+        store = None
+        try:
+            anchors = load_intent(args.records)
+            store = Store(args.data, read_only=True)
+            selection = resolve_record_selection(store, anchors)
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error("Cannot resolve evidence selection; check chosen records and their links")
+        finally:
+            if store is not None:
+                store.close()
+        print(json.dumps(selection, indent=2))
+        return
     if args.command == "github-list-evidence-records":
         if not args.task:
             parser.error("github-list-evidence-records requires --task and existing --data")

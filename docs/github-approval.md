@@ -150,6 +150,22 @@ The catalog hash binds the complete metadata list. It does not inspect dependenc
 artifacts, assess outcomes, export records or authorize execution. Use the intended
 record references in the selection file below.
 
+You can resolve the patch/test pair from an explicitly chosen review instead of copying
+all four references manually. Create a UTF-8 `anchors.json` containing only `task_id`,
+`review` and `policy`, using exact `{id, sha256}` references from the catalog, then run:
+
+```sh
+python -m orch github-resolve-evidence-selection --data .runtime/phase2 --records anchors.json
+```
+
+Save the JSON stdout as UTF-8 `records.json`. The resolver validates the chosen records,
+follows the review request's patch and single test reference, and requires that test to
+name the same patch. It never chooses a newer review or a policy automatically. Missing,
+corrupt, foreign-task or conflicting records and reviews with multiple test references
+fail without partial output. The resolver is read-only and deliberately does not assess
+outcomes, policy compatibility or artifacts; a rejected review can still be selected.
+Run the following assessment to evaluate the selected evidence.
+
 ```sh
 python -m orch github-check-record-claims --data .runtime/phase2 --records records.json
 ```
