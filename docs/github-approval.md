@@ -30,6 +30,30 @@ always carry `evidence_verified: false`, `live_authorized: false` and `retry_all
 The expiry is part of the proposed scope, not an enforced authorization: no component
 accepts this preview as a decision or capability. The local clock is not trusted attestation.
 
+## Checking a saved preview
+
+```sh
+python -m orch github-check-approval --journal .runtime/github-journal.sqlite --approval-preview approval.json --expected-sha256 <preview-digest> --evidence evidence.json
+```
+
+Supply the saved preview's outer digest, not its journal scope digest. Both files use
+the bounded strict JSON loader. The checker reconstructs the closed preview structure,
+including scope, IDs, evidence, false authority flags and exactly 15 minutes of validity.
+It then compares the saved scope and supplied current evidence claims to a read-only
+journal snapshot. The expected digest identifies the selected preview; it is not a signature.
+
+The assessment is `current` (exit 0) only when the local clock is at or after issue time
+and strictly before expiry, the journal remains prepared with the same scope, and the
+evidence envelope matches. Fixed blockers `not_yet_valid`, `expired`,
+`journal_not_prepared`, `scope_mismatch` and `evidence_mismatch` produce `blocked`
+(exit 2). Malformed previews, unknown operations and invalid journals also exit 2 without
+an assessment. The report binds the preview digest, current scope/state, supplied evidence
+digest, check time and blockers without echoing proposal text.
+
+This enforces the preview window for this diagnostic check only. A `current` result
+still has unverified evidence and no approval, retry or live authority; the journal may
+change after the snapshot. The check neither persists nor consumes requests or decisions.
+
 Next steps require retrieving and validating workflow evidence, durable request/decision
 storage, authenticated approver identity, policy verification, expiry and single-use
 admission, plus reviewed provider/credential/remote-branch boundaries. A future broker
