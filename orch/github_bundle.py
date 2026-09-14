@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import sqlite3
 import tempfile
+from contextlib import contextmanager
 
 from .contracts import Rejected, canonical, digest, validate
 from .github_evidence import (
@@ -222,8 +223,9 @@ def _materialize(store, payload):
     store.db.execute('INSERT INTO approvals VALUES(?,?)', (approval['request_id'], approval['decision_id']))
 
 
-def verify_bundle(source, expected_sha256):
-    """Reassess untrusted bundle claims in disposable storage; never adopt the database."""
+@contextmanager
+def _verified_bundle(source, expected_sha256):
+    """Keep verified, query-only scratch storage alive for composed local checks."""
     try:
         payload = _load(source, expected_sha256)
         with tempfile.TemporaryDirectory(prefix='orch-evidence-verify-') as root:
@@ -237,8 +239,14 @@ def verify_bundle(source, expected_sha256):
                 if canonical(collected) != canonical(payload):
                     raise Rejected('Bundle includes missing, extra or inconsistent dependencies')
                 store.db.execute('COMMIT')
-                return _report(payload, assessment, expected_sha256)
+                yield store, payload, _report(payload, assessment, expected_sha256)
             finally:
                 store.close()
     except (ValueError, TypeError, KeyError, RecursionError, OverflowError, sqlite3.Error) as exc:
         raise Rejected('Invalid evidence bundle') from exc
+
+
+def verify_bundle(source, expected_sha256):
+    """Reassess untrusted bundle claims in disposable storage; never adopt the database."""
+    with _verified_bundle(source, expected_sha256) as (_, _, report):
+        return report

@@ -89,6 +89,10 @@ handoff: explicit selection, read-only dependency collection, bounded canonical 
 exclusive publication and standalone verification in disposable storage. Verification
 rechecks current claims and expiry and rejects missing, extra or altered dependencies;
 the format neither restores a workflow nor grants execution authority.
+[Journal-bound bundle review](github-bundle-approval.md) now derives approval evidence
+directly from verified bundles, checks their tool payloads against prepared scope and
+binds the exact bundle file in a saved preview. Reassessment checks expiry and journal
+state again after bundle/tool inspection; no approval decision or dispatch is enabled.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
