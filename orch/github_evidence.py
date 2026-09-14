@@ -283,6 +283,7 @@ def _execution_claims(store, task, work, patch, test):
         completed = (row['stage'] == stage and row['slot'] == str(work['attempt']) and row['status'] == 'done'
                      and type(row['generation']) is int and row['generation'] >= 1)
         request_sha = None
+        request = None
         envelope_sha = None
         if not completed:
             blockers.append(role + '_operation_not_completed')
@@ -331,9 +332,19 @@ def _execution_claims(store, task, work, patch, test):
                     if snapshot is None:
                         blockers.append('patch_snapshot_missing')
                     else:
-                        _artifact_bytes(store, snapshot, task)
+                        snapshot_bytes = _artifact_bytes(store, snapshot, task)
                         if snapshot['sha256'] != receipt['snapshot_sha256']:
                             blockers.append('patch_snapshot_mismatch')
+                        expected_change = {'path': 'greeting.txt', 'change': 'modify',
+                                           'before_sha256': hashlib.sha256(b'hello\n').hexdigest(),
+                                           'after_sha256': snapshot['sha256']}
+                        if receipt['changed_files'] != [expected_change] or receipt['changed_bytes'] != len(snapshot_bytes):
+                            blockers.append('fixture_patch_metadata_mismatch')
+                        expected_diff = b'--- greeting.txt\n+++ greeting.txt\n@@ -1 +1 @@\n-hello\n+' + snapshot_bytes
+                        if receipt['diff']['sha256'] != hashlib.sha256(expected_diff).hexdigest() or receipt['diff']['size_bytes'] != len(expected_diff):
+                            blockers.append('fixture_patch_diff_mismatch')
+                        if request is not None and (len(request['args']) != 1 or request['args'][0].encode() != snapshot_bytes):
+                            blockers.append('fixture_patch_argument_mismatch')
             except (ValueError, TypeError, RecursionError) as exc:
                 raise Rejected('Invalid execution result') from exc
         else:

@@ -1,5 +1,6 @@
 """Register supporting files before test fixtures compute receipt references."""
 from orch.contracts import canonical, digest, ref
+import hashlib
 
 
 def register_operations(store, documents):
@@ -8,7 +9,7 @@ def register_operations(store, documents):
         command = receipt if role == 'test' else (receipt['executed_commands'] or [documents['test']])[0]
         result = {role: ref(receipt), 'failure': None}
         if role == 'patch':
-            result['snapshot'] = store.artifact(receipt['task_id'], 'fixture snapshot', media_type='text/plain')
+            result['snapshot'] = store.artifact(receipt['task_id'], 'hello world\n', media_type='text/plain')
         store.db.execute('INSERT INTO operations(id,task_id,stage,slot,status,result) VALUES(?,?,?,?,?,?)',
                          (receipt['operation_id'], receipt['task_id'], stage, str(documents['work_order']['attempt']),
                           'done', canonical(result).decode()))
@@ -42,11 +43,18 @@ def link_plan_evidence(documents):
 
 
 def register_support(store, task, documents):
-    snapshot = store.artifact(task, 'fixture snapshot', media_type='text/plain')
+    snapshot = store.artifact(task, 'hello world\n', media_type='text/plain')
+    for role in ('spec', 'plan', 'work_order'):
+        documents[role]['allowed_paths'] = ['greeting.txt']
+    for role in ('plan', 'work_order'):
+        documents[role]['max_changed_bytes'] = snapshot['size_bytes']
+    documents['patch']['changed_bytes'] = snapshot['size_bytes']
+    documents['patch']['changed_files'] = [dict(path='greeting.txt', change='modify',
+        before_sha256=hashlib.sha256(b'hello\n').hexdigest(), after_sha256=snapshot['sha256'])]
     for role in ('patch', 'test', 'test_request'):
         documents[role]['snapshot_sha256'] = snapshot['sha256']
     documents['spec']['request'] = store.artifact(task, 'original task request', media_type='text/plain')
-    documents['patch']['diff'] = store.artifact(task, 'fixture diff', media_type='text/plain')
+    documents['patch']['diff'] = store.artifact(task, '--- greeting.txt\n+++ greeting.txt\n@@ -1 +1 @@\n-hello\n+hello world\n', media_type='text/x-diff')
     for channel in ('stdout', 'stderr'):
         documents['test'][channel] = store.artifact(task, channel, media_type='text/plain')
     if not documents['patch']['executed_commands']:

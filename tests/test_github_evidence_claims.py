@@ -367,7 +367,7 @@ class EvidenceClaimsTests(unittest.TestCase):
             self.check()
 
     def test_work_order_hash_mismatch_rejects(self):
-        self.docs['work_order']['max_changed_bytes'] = 2
+        self.docs['work_order']['max_changed_bytes'] += 1
         self.persist()
         with self.assertRaises(Rejected):
             self.check()
@@ -444,7 +444,48 @@ class EvidenceClaimsTests(unittest.TestCase):
         self.persist()
         report = self.check()
         self.assertEqual(report['binding']['claims']['execution']['operations']['patch']['snapshot'], self.snapshot_result()['snapshot'])
-        self.assertNotIn('fixture snapshot', json.dumps(report))
+        self.assertNotIn('hello world', json.dumps(report))
+        self.assertFalse(report['live_authorized'])
+
+    def test_fixture_changed_byte_count_must_match_snapshot(self):
+        self.docs['patch']['changed_bytes'] -= 1
+        self.relink()
+        self.persist()
+        self.assertIn('fixture_patch_metadata_mismatch', self.check()['binding']['claims']['blockers'])
+
+    def test_fixture_before_hash_must_match_base(self):
+        self.docs['patch']['changed_files'][0]['before_sha256'] = 'b' * 64
+        self.relink()
+        self.persist()
+        self.assertIn('fixture_patch_metadata_mismatch', self.check()['binding']['claims']['blockers'])
+
+    def test_fixture_after_hash_must_match_snapshot(self):
+        self.docs['patch']['changed_files'][0]['after_sha256'] = 'b' * 64
+        self.relink()
+        self.persist()
+        self.assertIn('fixture_patch_metadata_mismatch', self.check()['binding']['claims']['blockers'])
+
+    def test_fixture_duplicate_change_is_not_consistent(self):
+        self.docs['patch']['changed_files'].append(copy.deepcopy(self.docs['patch']['changed_files'][0]))
+        self.relink()
+        self.persist()
+        self.assertIn('fixture_patch_metadata_mismatch', self.check()['binding']['claims']['blockers'])
+
+    def test_valid_artifact_with_contradictory_diff_blocks(self):
+        self.docs['patch']['diff'] = self.store.artifact(
+            self.task, '--- greeting.txt\n+++ greeting.txt\n@@ -1 +1 @@\n-hello\n+wrong\n', media_type='text/x-diff')
+        self.relink()
+        self.persist()
+        report = self.check()
+        self.assertIn('fixture_patch_diff_mismatch', report['binding']['claims']['blockers'])
+        self.assertNotIn('+wrong', json.dumps(report))
+        self.assertFalse(report['live_authorized'])
+
+    def test_rehashed_broker_argument_must_match_snapshot(self):
+        self.persist()
+        self.replace_runtime_request('patch', args=['wrong\n'])
+        report = self.check()
+        self.assertEqual(report['binding']['claims']['blockers'], ['fixture_patch_argument_mismatch'])
         self.assertFalse(report['live_authorized'])
 
     def test_current_generation_requires_its_own_broker_request(self):
@@ -840,7 +881,7 @@ class EvidenceClaimsTests(unittest.TestCase):
         self.assert_plan_blocked('plan_work_order_mismatch')
 
     def test_work_order_cannot_exceed_plan_byte_budget(self):
-        self.docs['work_order']['max_changed_bytes'] = 2
+        self.docs['work_order']['max_changed_bytes'] += 1
         self.assert_plan_blocked('plan_work_order_mismatch')
 
     def test_denied_plan_approval_blocks(self):
@@ -882,7 +923,7 @@ class EvidenceClaimsTests(unittest.TestCase):
         self.assert_work_blocked('work_order_path_not_permitted')
 
     def test_work_order_byte_limit_blocks(self):
-        self.docs['patch']['changed_bytes'] = 2
+        self.docs['patch']['changed_bytes'] = self.docs['work_order']['max_changed_bytes'] + 1
         self.assert_work_blocked('work_order_byte_limit_exceeded')
 
     def test_work_order_created_after_patch_start_blocks(self):
