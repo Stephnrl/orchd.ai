@@ -29,12 +29,13 @@ class CombinedAssessmentTests(unittest.TestCase):
         examples = json.loads((Path(__file__).resolve().parents[1] / 'contracts/v1/examples.json').read_text())
         self.docs = {role: examples[kind] for role, kind in (
             ('patch', 'PatchReceipt'), ('test', 'TestReceipt'), ('review', 'ReviewDecision'),
-            ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'), ('test_request', 'TestRequest'), ('work_order', 'WorkOrder'), ('plan', 'ImplementationPlan'), ('plan_request', 'ApprovalRequest'), ('plan_decision', 'ApprovalDecision'))}
+            ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'), ('test_request', 'TestRequest'), ('work_order', 'WorkOrder'), ('plan', 'ImplementationPlan'), ('plan_request', 'ApprovalRequest'), ('plan_decision', 'ApprovalDecision'), ('spec', 'TaskSpec'))}
         for role, document in self.docs.items():
             document.update(id=role, task_id=task, created_at='2026-01-01T00:00:00Z')
             for field in ('started_at', 'ended_at'):
                 if field in document:
                     document[field] = document['created_at']
+        self.docs['spec']['confirmed_by'] = 'fixture-operator'
         register_support(self.store, task, self.docs)
         self.docs['work_order']['deadline'] = '2026-01-01T00:00:00Z'
         self.docs['plan_request']['expires_at'] = '2026-01-01T00:15:00Z'

@@ -5,6 +5,7 @@ from orch.contracts import digest, ref
 def link_plan_evidence(documents):
     work, plan = documents['work_order'], documents['plan']
     request, decision = documents['plan_request'], documents['plan_decision']
+    work['spec'] = plan['spec'] = documents['review_request']['spec'] = ref(documents['spec'])
     request.update(subject=ref(plan), evidence=[work['spec'], ref(plan)])
     request['subject_sha256'] = digest({'subject': request['subject'], 'evidence': request['evidence'],
                                       'task_id': work['task_id'], 'revision': request['task_revision'], 'policy': request['policy_version']})
@@ -14,6 +15,7 @@ def link_plan_evidence(documents):
 
 
 def register_support(store, task, documents):
+    documents['spec']['request'] = store.artifact(task, 'original task request', media_type='text/plain')
     documents['patch']['diff'] = store.artifact(task, 'fixture diff', media_type='text/plain')
     for channel in ('stdout', 'stderr'):
         documents['test'][channel] = store.artifact(task, channel, media_type='text/plain')
