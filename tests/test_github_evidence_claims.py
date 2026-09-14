@@ -272,6 +272,75 @@ class EvidenceClaimsTests(unittest.TestCase):
         with self.assertRaisesRegex(Rejected, 'Missing or oversized broker request'):
             self.check()
 
+    def saved_envelope(self):
+        row = self.store.db.execute('SELECT artifact FROM execution_provenance WHERE operation_id=?', ('d' * 32,)).fetchone()
+        item = json.loads(row[0])
+        return json.loads((self.store.root / 'artifacts' / item['sha256']).read_bytes()), item
+
+    def replace_envelope(self, envelope, owner=None):
+        item = self.store.artifact(owner or self.task, envelope)
+        self.store.db.execute('DROP TRIGGER IF EXISTS execution_provenance_update')
+        self.store.db.execute('UPDATE execution_provenance SET envelope_sha256=?,artifact=? WHERE operation_id=?',
+                              (digest(envelope), canonical(item).decode(), 'd' * 32))
+
+    def test_missing_broker_envelope_rejects(self):
+        self.persist()
+        self.store.db.execute('DROP TRIGGER execution_provenance_delete')
+        self.store.db.execute('DELETE FROM execution_provenance WHERE operation_id=?', ('d' * 32,))
+        with self.assertRaisesRegex(Rejected, 'Missing or oversized broker envelope'):
+            self.check()
+
+    def test_envelope_identity_nonce_source_and_request_digest_must_match(self):
+        self.persist()
+        original, _ = self.saved_envelope()
+        for field, value in (('task_id', 'b' * 32), ('operation_id', 'f' * 32), ('generation', 2),
+                             ('nonce', 'f' * 32), ('source_digest', 'b' * 64), ('request_sha256', 'b' * 64)):
+            with self.subTest(field=field):
+                self.replace_envelope({**original, field: value})
+                self.assertIn('test_broker_envelope_binding_mismatch', self.check()['binding']['claims']['blockers'])
+
+    def test_failed_or_truncated_broker_result_blocks(self):
+        self.persist()
+        original, _ = self.saved_envelope()
+        for field, value in (('code', 1), ('code', None), ('failure', 'cleanup_uncertain'), ('truncated', True)):
+            self.replace_envelope({**original, 'result': {**original['result'], field: value}})
+            self.assertIn('test_broker_execution_not_successful', self.check()['binding']['claims']['blockers'])
+
+    def test_envelope_artifact_must_belong_to_task(self):
+        self.persist()
+        original, _ = self.saved_envelope()
+        other = 'b' * 32
+        self.store.db.execute('INSERT INTO tasks VALUES(?,?,?)', (other, '{}', '{}'))
+        self.replace_envelope(original, owner=other)
+        with self.assertRaises(Rejected):
+            self.check()
+
+    def test_envelope_corruption_or_missing_file_rejects(self):
+        self.persist()
+        _, item = self.saved_envelope()
+        path = self.store.root / 'artifacts' / item['sha256']
+        path.write_bytes(b'changed envelope')
+        with self.assertRaises(Rejected):
+            self.check()
+        path.unlink()
+        with self.assertRaises(Rejected):
+            self.check()
+        self.assertFalse(self.store.db.in_transaction)
+
+    def test_envelope_registered_digest_must_match(self):
+        self.persist()
+        self.store.db.execute('DROP TRIGGER execution_provenance_update')
+        self.store.db.execute('UPDATE execution_provenance SET envelope_sha256=? WHERE operation_id=?', ('b' * 64, 'd' * 32))
+        with self.assertRaises(Rejected):
+            self.check()
+
+    def test_envelope_output_budget_counts_utf8_bytes(self):
+        self.persist()
+        original, _ = self.saved_envelope()
+        self.replace_envelope({**original, 'result': {**original['result'], 'stdout': '\u00e9' * 131073}})
+        with self.assertRaisesRegex(Rejected, 'output exceeds byte budget'):
+            self.check()
+
     def test_broker_request_identity_recipe_and_args_must_match(self):
         self.persist()
         original = json.loads(self.store.db.execute('SELECT request FROM broker_requests WHERE operation_id=?', ('d' * 32,)).fetchone()[0])
