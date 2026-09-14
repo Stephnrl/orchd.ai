@@ -25,6 +25,8 @@ Read-only backup comparison now identifies missing operations and changed scope 
 reservation evidence against a verified, explicitly selected bundle.
 Disposable recovery drills exercise one-shot reservation behavior and reopening on a
 verified backup copy, then remove scratch storage without replacing an active journal.
+Audits and journal mutations now gate on the supported schema and retention-trigger
+definitions; backup verification and drills reject altered protections as well.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

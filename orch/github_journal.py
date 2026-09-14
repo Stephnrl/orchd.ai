@@ -11,6 +11,12 @@ from .github_preview import prepare_pull_request
 MAX_RECORDS = 1000
 MAX_TOTAL_SCOPE_BYTES = 16 * 1024 * 1024
 MAX_SCOPE_BYTES = 65536
+SCHEMA_SQL = (
+    "CREATE TABLE intents(operation_id TEXT PRIMARY KEY, task_id TEXT NOT NULL UNIQUE, scope TEXT NOT NULL, sha256 TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('prepared','uncertain')), reserved_at TEXT)",
+    "CREATE TRIGGER immutable_scope BEFORE UPDATE OF operation_id,task_id,scope,sha256 ON intents BEGIN SELECT RAISE(ABORT,'immutable scope'); END",
+    "CREATE TRIGGER no_delete BEFORE DELETE ON intents BEGIN SELECT RAISE(ABORT,'retained intent'); END",
+    "CREATE TRIGGER one_reservation BEFORE UPDATE ON intents WHEN NOT (OLD.state='prepared' AND NEW.state='uncertain' AND OLD.reserved_at IS NULL AND NEW.reserved_at IS NOT NULL) BEGIN SELECT RAISE(ABORT,'reservation consumed'); END",
+)
 
 
 def bound_scope(intent, allowed_repository, repository_id):
@@ -65,10 +71,8 @@ class GitHubJournal:
             version = self.db.execute("PRAGMA user_version").fetchone()[0]
             identity = self.db.execute("PRAGMA application_id").fetchone()[0]
             if version == 0 and identity == 0 and not self.db.execute("SELECT 1 FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").fetchone():
-                self.db.execute("CREATE TABLE intents(operation_id TEXT PRIMARY KEY, task_id TEXT NOT NULL UNIQUE, scope TEXT NOT NULL, sha256 TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('prepared','uncertain')), reserved_at TEXT)")
-                self.db.execute("CREATE TRIGGER immutable_scope BEFORE UPDATE OF operation_id,task_id,scope,sha256 ON intents BEGIN SELECT RAISE(ABORT,'immutable scope'); END")
-                self.db.execute("CREATE TRIGGER no_delete BEFORE DELETE ON intents BEGIN SELECT RAISE(ABORT,'retained intent'); END")
-                self.db.execute("CREATE TRIGGER one_reservation BEFORE UPDATE ON intents WHEN NOT (OLD.state='prepared' AND NEW.state='uncertain' AND OLD.reserved_at IS NULL AND NEW.reserved_at IS NOT NULL) BEGIN SELECT RAISE(ABORT,'reservation consumed'); END")
+                for statement in SCHEMA_SQL:
+                    self.db.execute(statement)
                 self.db.execute("PRAGMA application_id=1330792264")
                 self.db.execute("PRAGMA user_version=1")
             elif version != 1 or identity != 1330792264:
@@ -82,6 +86,19 @@ class GitHubJournal:
 
     def close(self):
         self.db.close()
+
+    def _check_schema(self):
+        expected = {('table', 'intents', 'intents', SCHEMA_SQL[0]),
+                    ('index', 'sqlite_autoindex_intents_1', 'intents', None),
+                    ('index', 'sqlite_autoindex_intents_2', 'intents', None)}
+        expected.update(('trigger', name, 'intents', sql) for name, sql in zip(
+            ('immutable_scope', 'no_delete', 'one_reservation'), SCHEMA_SQL[1:]))
+        actual = {tuple(row) for row in self.db.execute("SELECT type,name,tbl_name,CASE WHEN length(sql)<=4096 THEN sql END FROM main.sqlite_master LIMIT 7")}
+        if (actual != expected or self.db.execute('SELECT 1 FROM sqlite_temp_master LIMIT 1').fetchone()
+                or self.db.execute('PRAGMA application_id').fetchone()[0] != 1330792264
+                or self.db.execute('PRAGMA user_version').fetchone()[0] != 1
+                or self.db.execute('PRAGMA ignore_check_constraints').fetchone()[0] != 0):
+            raise Rejected("Unsupported GitHub journal schema or constraint configuration")
 
     def get(self, operation_id):
         # Do not materialize an oversized stored scope in Python, even after file tampering.
@@ -143,6 +160,7 @@ class GitHubJournal:
         """Validate a bounded, consistent snapshot; emit no proposal text."""
         self.db.execute("BEGIN")
         try:
+            self._check_schema()
             usage = self.usage()
             if usage['records'] > MAX_RECORDS or usage['scope_bytes'] > MAX_TOTAL_SCOPE_BYTES:
                 raise Rejected("Journal exceeds audit budget")
@@ -173,6 +191,7 @@ class GitHubJournal:
         operation = intent['operation_id']
         self.db.execute("BEGIN IMMEDIATE")
         try:
+            self._check_schema()
             existing = self.db.execute("SELECT operation_id FROM intents WHERE operation_id=? OR task_id=?", (operation, intent['task_id'])).fetchall()
             if existing:
                 if len(existing) != 1 or existing[0]['operation_id'] != operation or self.get(operation)['sha256'] != sha:
@@ -195,6 +214,7 @@ class GitHubJournal:
             raise Rejected("Journal is read-only")
         self.db.execute("BEGIN IMMEDIATE")
         try:
+            self._check_schema()
             current = self.get(operation_id)
             if current['sha256'] != expected_sha256 or current['state'] != 'prepared':
                 raise Rejected("Scope changed or reservation already consumed; reconcile before further action")
