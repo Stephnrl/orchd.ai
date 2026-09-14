@@ -246,6 +246,17 @@ IDs, result hashes and fixed blockers without result contents. This establishes 
 completion records only: broker request/envelope provenance, generation fencing and
 the actual execution environment remain independently unverified.
 
+For operations whose stage, attempt, status and generation pass, the assessment now
+also reads the retained `broker_requests` row for that exact operation/generation.
+The canonical request must pass the broker wire schema and match task, operation and
+generation. Patch requests must use `edit` with one allowed fixture argument; test
+requests must use `test` with no arguments. Missing, malformed, noncanonical or
+oversized requests fail without a report; mismatched bindings block. Reads are capped
+at 1 MiB and only the request digest is included in the operation report. Incomplete
+operations remain blocked without requiring broker records. This binds a historical
+request to the retained generation; it does not verify a broker result envelope,
+approve the source digest or image, or establish that execution enforced the request.
+
 This is consistency checking of local claims, not authentication of execution, reviewer
 identity or policy authority. It does not validate every transitive dependency,
 the meaning of diff/log contents, real GitHub commits, or the tool payload against a journal proposal.

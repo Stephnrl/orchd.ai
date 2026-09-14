@@ -26,8 +26,8 @@ class EvidenceClaimsTests(unittest.TestCase):
             ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'), ('test_request', 'TestRequest'), ('work_order', 'WorkOrder'), ('plan', 'ImplementationPlan'), ('plan_request', 'ApprovalRequest'), ('plan_decision', 'ApprovalDecision'), ('spec', 'TaskSpec'))}
         for role, document in self.docs.items():
             document.update(id=role, task_id=self.task)
-        self.docs['patch']['operation_id'] = 'patch-operation'
-        self.docs['test']['operation_id'] = self.docs['test_request']['operation_id'] = 'test-operation'
+        self.docs['patch']['operation_id'] = 'c' * 32
+        self.docs['test']['operation_id'] = self.docs['test_request']['operation_id'] = 'd' * 32
         self.docs['spec']['confirmed_by'] = 'fixture-operator'
         register_support(self.store, self.task, self.docs)
         self.docs['plan_request']['expires_at'] = '2026-09-12T14:15:00Z'
@@ -258,11 +258,57 @@ class EvidenceClaimsTests(unittest.TestCase):
             self.check()
         self.assertFalse(self.store.db.in_transaction)
 
+    def test_current_generation_requires_its_own_broker_request(self):
+        self.persist()
+        self.store.db.execute('UPDATE operations SET generation=2 WHERE id=?', ('d' * 32,))
+        with self.assertRaisesRegex(Rejected, 'Missing or oversized broker request'):
+            self.check()
+        self.assertFalse(self.store.db.in_transaction)
+
+    def test_missing_broker_request_rejects(self):
+        self.persist()
+        self.store.db.execute('DROP TRIGGER broker_requests_delete')
+        self.store.db.execute('DELETE FROM broker_requests WHERE operation_id=?', ('d' * 32,))
+        with self.assertRaisesRegex(Rejected, 'Missing or oversized broker request'):
+            self.check()
+
+    def test_broker_request_identity_recipe_and_args_must_match(self):
+        self.persist()
+        original = json.loads(self.store.db.execute('SELECT request FROM broker_requests WHERE operation_id=?', ('d' * 32,)).fetchone()[0])
+        self.store.db.execute('DROP TRIGGER broker_requests_update')
+        for field, value in (('operation_id', 'f' * 32), ('task_id', 'b' * 32), ('generation', 2),
+                             ('recipe', 'edit'), ('args', ['hello world\n'])):
+            with self.subTest(field=field):
+                request = {**original, field: value}
+                self.store.db.execute('UPDATE broker_requests SET request=? WHERE operation_id=?', (canonical(request).decode(), 'd' * 32))
+                report = self.check()
+                self.assertEqual(report['status'], 'blocked')
+                self.assertIn('test_broker_request_mismatch', report['binding']['claims']['blockers'])
+
+    def test_invalid_noncanonical_and_oversized_broker_requests_reject(self):
+        self.persist()
+        original = json.loads(self.store.db.execute('SELECT request FROM broker_requests WHERE operation_id=?', ('d' * 32,)).fetchone()[0])
+        self.store.db.execute('DROP TRIGGER broker_requests_update')
+        for raw in ('not json', '{}', json.dumps(original, indent=2), 'x' * (1024 * 1024 + 1)):
+            self.store.db.execute('UPDATE broker_requests SET request=? WHERE operation_id=?', (raw, 'd' * 32))
+            with self.assertRaises(Rejected):
+                self.check()
+            self.assertFalse(self.store.db.in_transaction)
+
+    def test_broker_request_report_binds_digest_without_arguments(self):
+        self.persist()
+        request = json.loads(self.store.db.execute('SELECT request FROM broker_requests WHERE operation_id=?', ('d' * 32,)).fetchone()[0])
+        report = self.check()
+        self.assertEqual(report['status'], 'claims_consistent')
+        self.assertEqual(report['binding']['claims']['execution']['operations']['test']['broker_request_sha256'], digest(request))
+        self.assertNotIn('private-fixture-workspace', json.dumps(report))
+        self.assertFalse(report['live_authorized'])
+
     def test_foreign_task_execution_operation_rejects(self):
         self.persist()
         other = 'b' * 32
         self.store.db.execute('INSERT INTO tasks VALUES(?,?,?)', (other, '{}', '{}'))
-        self.store.db.execute('UPDATE operations SET task_id=? WHERE id=?', (other, 'test-operation'))
+        self.store.db.execute('UPDATE operations SET task_id=? WHERE id=?', (other, 'd' * 32))
         with self.assertRaisesRegex(Rejected, 'Missing task-owned execution'):
             self.check()
 
@@ -272,31 +318,31 @@ class EvidenceClaimsTests(unittest.TestCase):
             for field, value in (('stage', 'other'), ('slot', '2'), ('status', 'started'), ('generation', 0)):
                 with self.subTest(role=role, field=field):
                     self.store.db.execute('UPDATE operations SET stage=?,slot=?,status=?,generation=? WHERE id=?',
-                                          (stage, '1', 'done', 1, role + '-operation'))
-                    self.store.db.execute(f'UPDATE operations SET {field}=? WHERE id=?', (value, role + '-operation'))
+                                          (stage, '1', 'done', 1, self.docs[role]['operation_id']))
+                    self.store.db.execute(f'UPDATE operations SET {field}=? WHERE id=?', (value, self.docs[role]['operation_id']))
                     report = self.check()
                     self.assertEqual(report['status'], 'blocked')
                     self.assertIn(role + '_operation_not_completed', report['binding']['claims']['blockers'])
-            self.store.db.execute('UPDATE operations SET generation=1 WHERE id=?', (role + '-operation',))
+            self.store.db.execute('UPDATE operations SET generation=1 WHERE id=?', (self.docs[role]['operation_id'],))
 
     def test_execution_result_must_bind_successful_receipt(self):
         self.persist()
         for result in ({'test': {'id': 'other', 'sha256': 'b' * 64}, 'failure': None},
                        {'test': ref(self.docs['test']), 'failure': 'failed'},
                        {'test': ref(self.docs['test'])}):
-            self.store.db.execute('UPDATE operations SET result=? WHERE id=?', (canonical(result).decode(), 'test-operation'))
+            self.store.db.execute('UPDATE operations SET result=? WHERE id=?', (canonical(result).decode(), 'd' * 32))
             self.assertIn('test_operation_result_mismatch', self.check()['binding']['claims']['blockers'])
 
     def test_missing_or_oversized_execution_result_blocks(self):
         self.persist()
         for raw in (None, 'x' * (1024 * 1024 + 1)):
-            self.store.db.execute('UPDATE operations SET result=? WHERE id=?', (raw, 'test-operation'))
+            self.store.db.execute('UPDATE operations SET result=? WHERE id=?', (raw, 'd' * 32))
             self.assertIn('test_operation_result_missing', self.check()['binding']['claims']['blockers'])
 
     def test_malformed_or_noncanonical_execution_result_rejects(self):
         self.persist()
         for raw in ('not json', '[]', json.dumps({'test': ref(self.docs['test']), 'failure': None}, indent=2)):
-            self.store.db.execute('UPDATE operations SET result=? WHERE id=?', (raw, 'test-operation'))
+            self.store.db.execute('UPDATE operations SET result=? WHERE id=?', (raw, 'd' * 32))
             with self.assertRaises(Rejected):
                 self.check()
             self.assertFalse(self.store.db.in_transaction)
