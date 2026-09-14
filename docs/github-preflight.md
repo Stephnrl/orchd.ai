@@ -56,6 +56,10 @@ validates the snapshot and compares observations against the exact scope in the 
 approval, including the numeric repository identity, active status, full name, API URLs,
 base/head ref names, commit object types and both expected commit SHAs.
 
+Snapshots can also be produced from [strict response transcripts](github-read-transcripts.md).
+That path validates the saved request/response boundary before normalization and rechecks
+the journal after decoding. It does not change preflight's trust or freshness rules.
+
 After that work, preflight rechecks the approval against the current journal. Policy
 validity and observation freshness are evaluated at that final check time. Observations
 must be at or after the nested approval preview's issue time, not in the future, and

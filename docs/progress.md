@@ -28,10 +28,11 @@ PRs opened while developing this repository are collaboration through developmen
 tools, not evidence that orchd.ai itself has a GitHub integration. Deterministic
 fixture success also does not establish compatibility with live model providers.
 
-The latest full offline run completed 468 Python tests: 463 passed and five expected
-Docker skips. The evidence handoff workspace also passed nine Chromium tests and ten
-targeted UI scripts, including downloaded-bundle verification and received-bundle review
-in an empty workspace after removing the source store.
+The latest full offline run completed 479 Python tests: 474 passed and five expected
+Docker skips. This includes the read-plan/transcript-to-preflight integration. The most
+recent UI milestone passed nine Chromium tests and ten targeted UI scripts, including
+downloaded-bundle verification and received-bundle review in an empty workspace after
+removing the source store; UI checks were not rerun for the CLI-only read contract.
 Those are dated local results, not a claim that every current host or hosted CI job has
 passed. Docker evidence expires and is tied to source, host, daemon and image.
 
@@ -50,6 +51,8 @@ passed. Docker evidence expires and is tied to source, host, daemon and image.
    previews directly from verified bundles, including exact file and tool-scope binding.
    [Combined offline preflight](github-preflight.md) adds scope-bound ref observations,
    freshness checks and a final journal/expiry recheck without authenticating remote state.
+   [Read plans and transcripts](github-read-transcripts.md) now validate the offline
+   request/response boundary before creating snapshots. A trusted live fetcher remains.
 4. Complete deployment/auth hardening and adversarial release checks before concurrency.
 5. Define and implement bounded concurrent-worker and advanced-orchestration milestones.
 

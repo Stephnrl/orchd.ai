@@ -14,6 +14,8 @@ selected workflow chain for bounded offline verification without the original st
 approval preview against that exact bundle and its intended GitHub operation scope.
 [Combined offline preflight](docs/github-preflight.md) adds scope-bound repository/ref
 observations, a fixed freshness window and a final journal/expiry recheck.
+[GitHub read plans and transcripts](docs/github-read-transcripts.md) define exact GET
+requests and validate bounded captured responses before producing preflight snapshots.
 
 Phase 1 remains the design baseline below. Phase 2 implements the bounded offline
 vertical slice; see [running Phase 2](docs/phase2.md) for APIs, recovery and limitations.

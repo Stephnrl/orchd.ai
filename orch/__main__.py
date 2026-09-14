@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -41,7 +41,34 @@ def main():
     parser.add_argument("--expected-bundle-sha256", help="Expected whole-file digest for journal-bound bundle review")
     parser.add_argument("--expected-observations-sha256", help="Expected ref observation snapshot binding digest")
     parser.add_argument("--observed-at", help="Supplied observation time in UTC, such as 2026-01-01T00:00:00Z")
+    parser.add_argument('--transcript', help='Offline JSON capture of the three planned GitHub GET responses')
     args = parser.parse_args()
+    if args.command in ('github-ref-read-plan', 'github-ref-transcript-snapshot'):
+        importing = args.command == 'github-ref-transcript-snapshot'
+        if not args.journal or not args.operation_id or not args.expected_sha256:
+            parser.error('Read plan requires --journal, --operation-id and --expected-sha256')
+        if importing and (not args.transcript or not args.observed_at):
+            parser.error('Transcript snapshot requires --transcript and --observed-at')
+        from .github_reads import prepare_read_plan, snapshot_from_transcript
+        from .github_journal import GitHubJournal
+        from .github_preview import load_intent
+        from .contracts import Rejected, canonical
+        import sqlite3
+        journal = None
+        try:
+            journal = GitHubJournal(args.journal, read_only=True)
+            if importing:
+                report = snapshot_from_transcript(journal, args.operation_id, args.expected_sha256,
+                                                  load_intent(args.transcript), args.observed_at)
+            else:
+                report = prepare_read_plan(journal, args.operation_id, args.expected_sha256)
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error('Offline read contract rejected; check transcript, digest, time and prepared journal scope')
+        finally:
+            if journal is not None:
+                journal.close()
+        print(canonical(report).decode())
+        return
     if args.command in ("github-ref-observation-snapshot", "github-preflight"):
         preparing = args.command == "github-ref-observation-snapshot"
         if not args.journal or not args.expected_sha256 or not args.observations:
