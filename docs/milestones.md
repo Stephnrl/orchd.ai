@@ -63,6 +63,8 @@ Completed operations now require canonical retained broker requests for their ex
 generation, task, operation and fixture recipe, with request digests in the assessment.
 Retained broker envelopes now require task-owned canonical artifacts, matching request
 identity/fences/digests and successful untruncated outcomes under UTF-8 output budgets.
+Broker results now match test and single-command patch receipts by executed argv,
+timing, exit/truncation claims and redacted output artifact hashes and byte counts.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

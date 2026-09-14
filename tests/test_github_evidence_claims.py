@@ -306,6 +306,46 @@ class EvidenceClaimsTests(unittest.TestCase):
             self.replace_envelope({**original, 'result': {**original['result'], field: value}})
             self.assertIn('test_broker_execution_not_successful', self.check()['binding']['claims']['blockers'])
 
+    def test_broker_command_and_times_must_match_test_receipt(self):
+        self.persist()
+        original, _ = self.saved_envelope()
+        for field, value in (('command', ['different']), ('started', '2026-09-12T13:59:59Z'),
+                             ('ended', '2026-09-12T14:00:01Z'), ('code', 1)):
+            self.replace_envelope({**original, 'result': {**original['result'], field: value}})
+            self.assertIn('test_broker_receipt_execution_mismatch', self.check()['binding']['claims']['blockers'])
+
+    def test_broker_streams_must_match_verified_test_artifacts(self):
+        self.persist()
+        original, _ = self.saved_envelope()
+        for channel in ('stdout', 'stderr'):
+            self.replace_envelope({**original, 'result': {**original['result'], channel: 'different output'}})
+            self.assertIn('test_broker_receipt_' + channel + '_mismatch', self.check()['binding']['claims']['blockers'])
+
+    def test_patch_must_report_exactly_one_broker_command(self):
+        self.docs['patch']['executed_commands'] = []
+        self.relink()
+        self.persist()
+        self.assertIn('patch_broker_receipt_command_count_mismatch', self.check()['binding']['claims']['blockers'])
+
+    def test_patch_cannot_add_unbacked_commands(self):
+        self.docs['patch']['executed_commands'].append(copy.deepcopy(self.docs['patch']['executed_commands'][0]))
+        self.relink()
+        self.persist()
+        self.assertIn('patch_broker_receipt_command_count_mismatch', self.check()['binding']['claims']['blockers'])
+
+    def test_broker_result_must_match_patch_command(self):
+        self.persist()
+        row = self.store.db.execute('SELECT artifact FROM execution_provenance WHERE operation_id=?', ('c' * 32,)).fetchone()
+        item = json.loads(row[0])
+        original = json.loads((self.store.root / 'artifacts' / item['sha256']).read_bytes())
+        self.store.db.execute('DROP TRIGGER execution_provenance_update')
+        for field, value, reason in (('command', ['different'], 'execution'), ('stdout', 'changed', 'stdout'), ('stderr', 'changed', 'stderr')):
+            envelope = {**original, 'result': {**original['result'], field: value}}
+            artifact = self.store.artifact(self.task, envelope)
+            self.store.db.execute('UPDATE execution_provenance SET envelope_sha256=?,artifact=? WHERE operation_id=?',
+                                  (digest(envelope), canonical(artifact).decode(), 'c' * 32))
+            self.assertIn('patch_broker_receipt_' + reason + '_mismatch', self.check()['binding']['claims']['blockers'])
+
     def test_envelope_artifact_must_belong_to_task(self):
         self.persist()
         original, _ = self.saved_envelope()

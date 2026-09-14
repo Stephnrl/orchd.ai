@@ -15,8 +15,12 @@ def register_operations(store, documents):
         store.db.execute('INSERT INTO broker_requests VALUES(?,?,?)',
                          (receipt['operation_id'], 1, canonical(request).decode()))
         envelope = {key: request[key] for key in ('schema_version', 'operation_id', 'task_id', 'generation', 'nonce', 'source_digest')}
-        envelope.update(request_sha256=digest(request), result=dict(command=['fixture'], started=receipt['started_at'],
-                        ended=receipt['ended_at'], code=0, stdout='stdout', stderr='stderr', truncated=False, failure=None))
+        command = receipt if role == 'test' else (receipt['executed_commands'] or [documents['test']])[0]
+        envelope.update(request_sha256=digest(request), result=dict(command=command.get('executed_argv', command.get('argv')),
+                        started=command['started_at'], ended=command['ended_at'], code=command['exit_code'],
+                        stdout=store.read_artifact(command['stdout'], receipt['task_id'])[:262144],
+                        stderr=store.read_artifact(command['stderr'], receipt['task_id'])[:262144],
+                        truncated=command.get('output_truncated', False), failure=None))
         artifact = store.artifact(receipt['task_id'], envelope)
         store.db.execute('INSERT INTO execution_provenance VALUES(?,?,?,?)',
                          (receipt['operation_id'], 1, digest(envelope), canonical(artifact).decode()))
@@ -39,6 +43,11 @@ def register_support(store, task, documents):
     documents['patch']['diff'] = store.artifact(task, 'fixture diff', media_type='text/plain')
     for channel in ('stdout', 'stderr'):
         documents['test'][channel] = store.artifact(task, channel, media_type='text/plain')
+    if not documents['patch']['executed_commands']:
+        test = documents['test']
+        documents['patch']['executed_commands'] = [dict(argv=['fixture'], working_directory='.',
+            started_at=documents['patch']['started_at'], ended_at=documents['patch']['ended_at'], exit_code=0,
+            stdout=test['stdout'], stderr=test['stderr'])]
     for command in documents['patch']['executed_commands']:
         for channel in ('stdout', 'stderr'):
             command[channel] = store.artifact(task, 'patch ' + channel, media_type='text/plain')
