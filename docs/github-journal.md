@@ -204,6 +204,32 @@ Every report keeps `restore_allowed`, `retry_allowed` and `live_authorized` fals
 including exact matches. An operator recovery procedure and trusted provenance are still
 required before any future restore or success adoption.
 
+## Disposable recovery drill
+
+```sh
+python -m orch github-journal-recovery-drill --destination .runtime/github-backup-001 --expected-sha256 <bundle-digest>
+```
+
+The drill verifies the selected bundle and copies its database into a private temporary
+directory. It checks the copied bytes and audit before exercising any reservation. Each
+prepared operation is reserved once in the disposable copy; every subsequent reservation
+must be rejected, including those already uncertain in the backup. The copy is audited,
+closed and reopened to check that the resulting evidence persists. The report binds the
+bundle and original audit digests plus counts of exercised and rejected reservations.
+
+The source bundle is read-only, and the command accepts no active `--journal` argument.
+Scratch storage is removed on normal completion and handled failures; a killed process
+can leave temporary files containing proposal text. The reservation loop has a 30-second
+deadline. This is an API/reopening drill, not a physical power-loss, disk-failure or process-
+crash certification, and it does not certify SQL trigger behavior against direct writes.
+An empty backup has zero operations to exercise and can still pass verification.
+
+Success exits 0 with `status: passed`; failure exits 2 with no success report. The drill
+does not copy results back, restore a journal, prove backup freshness or authorize retries.
+`restore_allowed`, `retry_allowed` and `live_authorized` remain false. Compare against
+current evidence separately when it is available; recovery adoption still needs a reviewed
+procedure and trusted provenance.
+
 ## Storage and remaining recovery work
 
 The database has its own application identity/version and rejects other SQLite databases.

@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import shutil
+import tempfile
 import time
 
 from .contracts import Rejected, canonical, digest
@@ -100,6 +102,59 @@ def compare_journal_backup(source, directory, expected_sha256):
     return {"kind": "GitHubJournalBackupComparison", "binding": binding, "sha256": digest(binding),
             "status": "different" if differences else "matches", "restore_allowed": False,
             "retry_allowed": False, "live_authorized": False}
+
+
+def drill_journal_backup(directory, expected_sha256):
+    """Exercise reservation recovery on a disposable copy, never the active journal."""
+    manifest = _verified_manifest(directory)
+    if manifest['sha256'] != expected_sha256:
+        raise Rejected("Unexpected journal backup digest")
+    prepared = uncertain = 0
+    with tempfile.TemporaryDirectory(prefix='orchd-journal-drill-') as scratch:
+        database = Path(scratch) / 'journal.sqlite'
+        shutil.copyfile(Path(directory) / 'journal.sqlite', database)
+        sha, size = file_digest(database)
+        if sha != manifest['binding']['database_sha256'] or size != manifest['binding']['database_bytes']:
+            raise Rejected("Backup changed before drill copy")
+        journal = GitHubJournal(database)
+        try:
+            original = journal.audit()
+            if canonical(original) != canonical(manifest['binding']['audit']):
+                raise Rejected("Drill copy differs from verified audit")
+            deadline = time.monotonic() + 30
+            for record in original['binding']['records']:
+                if time.monotonic() > deadline:
+                    raise Rejected("Journal recovery drill timed out")
+                operation, scope = record['operation_id'], record['sha256']
+                if record['state'] == 'prepared':
+                    reserved = journal.reserve(operation, scope)
+                    if reserved['state'] != 'uncertain' or reserved['sha256'] != scope:
+                        raise Rejected("Drill reservation failed")
+                    prepared += 1
+                else:
+                    uncertain += 1
+                try:
+                    journal.reserve(operation, scope)
+                except Rejected:
+                    pass
+                else:
+                    raise Rejected("Drill allowed a consumed reservation")
+            final = journal.audit()
+            if any(row['state'] != 'uncertain' for row in final['binding']['records']):
+                raise Rejected("Drill did not retain consumed reservations")
+        finally:
+            journal.close()
+        reopened = GitHubJournal(database, read_only=True)
+        try:
+            if canonical(reopened.audit()) != canonical(final):
+                raise Rejected("Drill reservations did not survive reopening")
+        finally:
+            reopened.close()
+    binding = {"schema_version": "1.0.0", "backup_sha256": manifest['sha256'],
+               "audit_sha256": original['sha256'], "prepared_exercised": prepared,
+               "existing_uncertain_checked": uncertain, "repeat_reservations_rejected": prepared + uncertain}
+    return {"kind": "GitHubJournalRecoveryDrill", "binding": binding, "sha256": digest(binding),
+            "status": "passed", "restore_allowed": False, "retry_allowed": False, "live_authorized": False}
 
 
 def backup_journal(source, destination):
