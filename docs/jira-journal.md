@@ -109,8 +109,10 @@ Storage retains the **original unredacted issue response** to reproduce its exac
 digest, plus proposed comment and expected author key. Source text remains untrusted and
 potentially confidential even though CLI reports omit it. The module does not encrypt
 storage. Use approved local storage and host access controls; an inspection report is
-not a sanitized copy of the database. Backup, retention/restore policy and independent
-credential/containment review remain prerequisites for live deployment. Process-crash
+not a sanitized copy of the database. [Verified backups and recovery drills](jira-backups.md)
+now exercise snapshot integrity and reservation persistence on disposable copies.
+Actual restore/retention policy and independent credential/containment review remain
+prerequisites for live deployment. Process-crash
 tests do not establish power-loss durability on every filesystem or network share.
 
 Tests cover restart recovery, abrupt exit, competing process admission and reservation,

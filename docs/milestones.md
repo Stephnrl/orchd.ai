@@ -243,6 +243,8 @@ ambiguous captures remain unresolved. It does not confirm delivery or authorize 
 [Retained Jira operations](jira-journal.md) add immutable staging, one-use reservations,
 capacity enforcement, integrity audits and recovery against saved scope. Live dispatch,
 credential admission and operator retry policy remain unimplemented.
+[Jira recovery bundles](jira-backups.md) now provide verified snapshots, comparison with
+active reservation history and disposable recovery drills. They do not restore active storage.
 
 ## Decisions to resolve before enabling real execution
 

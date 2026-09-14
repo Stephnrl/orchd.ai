@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-read-plan", "jira-reconcile-journal"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -45,6 +45,36 @@ def main():
     parser.add_argument('--jira-target', help='Explicit Jira Data Center instance/project/issue target JSON')
     parser.add_argument('--jira-author-key', help='Explicit expected Jira comment author key; never inferred from captured comments')
     args = parser.parse_args()
+    if args.command in ('jira-journal-backup', 'jira-verify-journal-backup',
+                        'jira-compare-journal-backup', 'jira-journal-recovery-drill'):
+        creating = args.command == 'jira-journal-backup'
+        comparing = args.command == 'jira-compare-journal-backup'
+        if not args.destination or ((creating or comparing) and not args.journal):
+            parser.error('Jira backup commands require --destination; creation and comparison also require --journal')
+        if not creating and not args.expected_sha256:
+            parser.error('Jira backup verification, comparison and drills require --expected-sha256')
+        if not creating and not comparing and args.journal:
+            parser.error('Jira verification and recovery drills accept no active --journal')
+        if any(value is not None for value in (args.intent, args.jira_target, args.observations, args.jira_author_key, args.transcript)):
+            parser.error('Jira backup commands use retained records; scope overrides are not accepted')
+        from .jira_backup import backup_journal, verify_journal_backup, compare_journal_backup, drill_journal_backup
+        from .contracts import Rejected, canonical
+        import sqlite3
+        try:
+            if creating:
+                report = backup_journal(args.journal, args.destination)
+            elif comparing:
+                report = compare_journal_backup(args.journal, args.destination, args.expected_sha256)
+            elif args.command == 'jira-journal-recovery-drill':
+                report = drill_journal_backup(args.destination, args.expected_sha256)
+            else:
+                report = verify_journal_backup(args.destination, args.expected_sha256)
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error('Jira backup operation rejected; check digest, bundle integrity, paths and retained journal')
+        print(canonical(report).decode())
+        if report.get('status') == 'different':
+            raise SystemExit(2)
+        return
     if args.command in ('jira-stage', 'jira-inspect', 'jira-journal-usage', 'jira-journal-audit',
                         'jira-journal-read-plan', 'jira-reconcile-journal'):
         staging = args.command == 'jira-stage'
