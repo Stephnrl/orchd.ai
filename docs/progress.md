@@ -18,7 +18,7 @@ an assumption that more UI features alone will make the system production-ready.
 | 5. Guardian/tool broker and policies | Implemented for the fixture workflow; broader tools and external brokers remain |
 | 6. Local management UI | Substantially implemented, including restart/replay, evidence and operator controls |
 | 7. GitHub integration | Offline preview, ref comparison, reconciliation classifier and durable intent/reservation journal; platform actions still simulated; no live PR creation |
-| 8. Jira Data Center integration | Offline issue identity/context review and comment previews; live transport, credentials and broader Jira actions remain |
+| 8. Jira Data Center integration | Offline issue review, comment previews and paginated comment recovery assessment; live transport, credentials and broader Jira actions remain |
 | 9. Credential broker/auth hardening | Local session boundary implemented; production provider credentials/SSO remain |
 | 10. OWASP/ACS hardening and adversarial tests | Substantial boundary tests; independent deployment review and broader live-system testing remain |
 | 11. Concurrent workers | Deferred; current execution is deliberately bounded |
@@ -28,11 +28,12 @@ PRs opened while developing this repository are collaboration through developmen
 tools, not evidence that orchd.ai itself has a GitHub integration. Deterministic
 fixture success also does not establish compatibility with live model providers.
 
-The latest full offline run completed 503 Python tests: 498 passed and five expected
-Docker skips. This includes Jira issue review and explicit comment preparation. The most
+The latest full offline run completed 515 Python tests: 510 passed and five expected
+Docker skips. This includes Jira issue review, comment preparation and paginated recovery.
+All 24 focused Jira tests also passed after the final capture-budget and CLI help checks. The most
 recent UI milestone passed nine Chromium tests and ten targeted UI scripts, including
 downloaded-bundle verification and received-bundle review in an empty workspace after
-removing the source store; UI checks were not rerun for the CLI-only Jira foundation.
+removing the source store; UI checks were not rerun for these CLI-only Jira changes.
 Those are dated local results, not a claim that every current host or hosted CI job has
 passed. Docker evidence expires and is tied to source, host, daemon and image.
 
@@ -57,6 +58,8 @@ passed. Docker evidence expires and is tied to source, host, daemon and image.
    and retained-reservation reconciliation, without authorizing retry or PR adoption.
    [Jira issue/comment preparation](jira-preview.md) starts the next integration's offline
    contract while live GitHub and Jira admission remain gated on separate reviews.
+   [Jira comment recovery](jira-comment-recovery.md) now checks paginated captures against
+   the exact preview and expected author, without confirming delivery or permitting retry.
 4. Complete deployment/auth hardening and adversarial release checks before concurrency.
 5. Define and implement bounded concurrent-worker and advanced-orchestration milestones.
 

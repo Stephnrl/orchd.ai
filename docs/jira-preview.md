@@ -111,6 +111,10 @@ use, this still needs deployment-specific conformance, credentials, authenticate
 approval, fresh issue/permission checks, durable intent and uncertain-result recovery.
 Epic creation, transitions, linking and automatic task intake remain unimplemented.
 
+[Offline comment recovery](jira-comment-recovery.md) now adds an exact read plan and
+bounded paginated comparison against the proposed text, visibility and expected author.
+Candidate observations remain non-authoritative and never permit automatic reposting.
+
 Tests cover the complete CLI flow, explicit target binding, issue moves, snapshot drift,
 redaction/provenance, visibility, malformed URLs, encoding/byte limits and no network or
 process execution. They use synthetic issue responses rather than a corporate server.

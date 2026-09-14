@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -41,9 +41,26 @@ def main():
     parser.add_argument("--expected-bundle-sha256", help="Expected whole-file digest for journal-bound bundle review")
     parser.add_argument("--expected-observations-sha256", help="Expected ref observation snapshot binding digest")
     parser.add_argument("--observed-at", help="Supplied observation time in UTC, such as 2026-01-01T00:00:00Z")
-    parser.add_argument('--transcript', help='Offline JSON capture of the three planned GitHub GET responses')
+    parser.add_argument('--transcript', help='Offline JSON response capture for the selected GitHub or Jira read plan')
     parser.add_argument('--jira-target', help='Explicit Jira Data Center instance/project/issue target JSON')
+    parser.add_argument('--jira-author-key', help='Explicit expected Jira comment author key; never inferred from captured comments')
     args = parser.parse_args()
+    if args.command in ('jira-comment-read-plan', 'jira-reconcile-comments'):
+        assessing = args.command == 'jira-reconcile-comments'
+        if not all((args.jira_target, args.observations, args.intent, args.expected_sha256, args.jira_author_key)) or (assessing and not args.transcript):
+            parser.error('Jira comment recovery requires target, issue observations, intent, expected preview digest, author key and, for assessment, transcript')
+        from .jira_reconcile import prepare_comment_read_plan, assess_comments
+        from .github_preview import load_intent
+        from .contracts import Rejected, canonical
+        try:
+            values = (load_intent(args.intent), load_intent(args.jira_target), load_intent(args.observations), args.expected_sha256, args.jira_author_key)
+            report = assess_comments(*values, load_intent(args.transcript)) if assessing else prepare_comment_read_plan(*values)
+        except (Rejected, OSError):
+            parser.error('Offline Jira recovery rejected; check retained preview, author and captured pages')
+        print(canonical(report).decode())
+        if report.get('status') == 'unresolved':
+            raise SystemExit(2)
+        return
     if args.command in ('jira-review-issue', 'jira-comment-preview'):
         commenting = args.command == 'jira-comment-preview'
         if not args.jira_target or not args.observations or (commenting and not args.intent):

@@ -20,6 +20,8 @@ requests and validate bounded captured responses before producing preflight snap
 paginated PR lookup and retained-reservation reconciliation without retry authority.
 [Jira Data Center preparation](docs/jira-preview.md) adds explicit issue/project review
 and snapshot-bound comment previews using saved responses, with live actions disabled.
+[Jira comment recovery](docs/jira-comment-recovery.md) checks captured comment pages
+against the exact preview and expected author without permitting automatic reposting.
 
 Phase 1 remains the design baseline below. Phase 2 implements the bounded offline
 vertical slice; see [running Phase 2](docs/phase2.md) for APIs, recovery and limitations.
