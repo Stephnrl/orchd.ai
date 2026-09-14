@@ -59,6 +59,8 @@ class CombinedAssessmentTests(unittest.TestCase):
             self.store.put(document)
             if role in ('patch', 'test', 'review', 'policy'):
                 self.evidence[role + '_sha256'] = self.store.artifact(task, document)['sha256']
+        self.store.db.execute('INSERT INTO approvals VALUES(?,?)',
+                              (self.docs['plan_request']['id'], self.docs['plan_decision']['id']))
         clock = patch('orch.github_evidence.now', return_value='2026-01-01T00:01:00Z')
         clock.start()
         self.addCleanup(clock.stop)
@@ -93,6 +95,19 @@ class CombinedAssessmentTests(unittest.TestCase):
         self.assertEqual(report['status'], 'blocked')
         self.assertIsNone(report['binding']['artifact_evidence'])
         self.assertFalse(report['artifact_bytes_verified'])
+
+    def test_missing_plan_registration_blocks_otherwise_current_assessment(self):
+        # Simulate incomplete/corrupt workflow storage while retaining all contracts.
+        self.store.db.execute('DROP TRIGGER approvals_delete')
+        self.store.db.execute('DELETE FROM approvals')
+        with patch('orch.github_approval.now', return_value='2026-01-01T00:01:00Z'):
+            report = self.assess()
+        self.assertEqual(report['binding']['approval']['status'], 'current')
+        self.assertEqual(report['binding']['tool_scope']['status'], 'matches')
+        self.assertTrue(report['artifact_bytes_verified'])
+        self.assertEqual(report['status'], 'blocked')
+        self.assertIn('evidence:plan_approval_not_registered', report['binding']['blockers'])
+        self.assertFalse(report['live_authorized'])
 
     def test_expiry_during_artifact_check_is_caught(self):
         with patch('orch.github_approval.now', side_effect=['2026-01-01T00:14:59Z', '2026-01-01T00:15:00Z']):

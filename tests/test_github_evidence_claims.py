@@ -45,13 +45,16 @@ class EvidenceClaimsTests(unittest.TestCase):
         self.store.close()
         self.temp.cleanup()
 
-    def persist(self, omit=None):
+    def persist(self, omit=None, register=True):
         self.evidence = {'task_id': self.task}
         for role, document in self.docs.items():
             if role != omit:
                 self.store.put(document)
             if role in ('patch', 'test', 'review', 'policy'):
                 self.evidence[role + '_sha256'] = self.store.artifact(self.task, document)['sha256']
+        if register and omit not in ('plan_request', 'plan_decision'):
+            self.store.db.execute('INSERT INTO approvals VALUES(?,?)',
+                                  (self.docs['plan_request']['id'], self.docs['plan_decision']['id']))
 
     def check(self, at='2026-09-12T14:01:00Z'):
         with patch('orch.github_evidence.now', return_value=at):
@@ -244,6 +247,43 @@ class EvidenceClaimsTests(unittest.TestCase):
         self.persist(omit='plan')
         with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
             self.check()
+
+    def test_unregistered_plan_decision_blocks_without_writes(self):
+        self.persist(register=False)
+        before = self.store.db.total_changes
+        report = self.check()
+        self.assertEqual(report['status'], 'blocked')
+        self.assertIn('plan_approval_not_registered', report['binding']['claims']['blockers'])
+        self.assertFalse(report['binding']['claims']['plan_approval']['registered'])
+        self.assertEqual(self.store.db.total_changes, before)
+        self.assertFalse(self.store.db.in_transaction)
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM approvals').fetchone()[0], 0)
+
+    def test_registration_for_another_decision_blocks(self):
+        self.persist(register=False)
+        other = {**self.docs['plan_decision'], 'id': 'other-decision'}
+        self.store.put(other)
+        self.store.db.execute('INSERT INTO approvals VALUES(?,?)', (self.docs['plan_request']['id'], other['id']))
+        report = self.check()
+        self.assertEqual(report['status'], 'blocked')
+        self.assertIn('plan_approval_not_registered', report['binding']['claims']['blockers'])
+        self.assertNotIn('other-decision', json.dumps(report))
+
+    def test_registration_for_another_request_does_not_qualify(self):
+        self.persist(register=False)
+        other = {**self.docs['plan_request'], 'id': 'other-request'}
+        self.store.put(other)
+        self.store.db.execute('INSERT INTO approvals VALUES(?,?)', (other['id'], self.docs['plan_decision']['id']))
+        self.assertIn('plan_approval_not_registered', self.check()['binding']['claims']['blockers'])
+
+    def test_registered_approval_is_bound_but_not_authenticated(self):
+        self.persist()
+        report = self.check()
+        self.assertEqual(report['status'], 'claims_consistent')
+        self.assertTrue(report['binding']['claims']['plan_approval']['registered'])
+        self.assertFalse(report['live_authorized'])
+        self.assertFalse(report['evidence_verified'])
+        self.assertEqual(report['sha256'], digest(report['binding']))
 
     def test_missing_spec_rejects(self):
         self.persist(omit='spec')

@@ -213,8 +213,16 @@ created before approval expiry and its deadline cannot extend that expiry.
 The report includes those three references and fixed blockers in `plan_approval`.
 This checks historical approval claims, not current approval validity: expiry after
 work-order creation does not by itself invalidate completed evidence. It does not
-authenticate the actor or policy, consult the approval registry for supersession, verify
+authenticate the actor or policy, establish supersession from historical task state, verify
 the task revision against historical state, or admit/consume a live approval.
+
+The workflow's `approvals` registry must map the exact plan request ID to the assessed
+decision ID. A missing entry, or an entry for another request or decision, produces
+`plan_approval_not_registered`; the combined command prefixes that blocker with
+`evidence:`. The report binds a `registered` boolean without exposing a different
+registered decision's ID. This lookup uses the existing evidence read transaction and
+never registers or repairs a decision. Registration is local workflow evidence, not
+authentication or proof that a request has not been superseded.
 
 The plan's task-owned `TaskSpec` is resolved from its canonical stored record. It must
 have a non-null recorded confirmation, use the same repository as the plan and be

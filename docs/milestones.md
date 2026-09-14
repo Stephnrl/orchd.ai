@@ -55,6 +55,8 @@ Plan and historical plan-approval records now resolve within the evidence snapsh
 with scope/attempt limits, exact subject/evidence digests and approval chronology checks.
 Task specifications and their original request artifacts now anchor that chain, with
 recorded confirmation, repository/path containment and spec-before-plan chronology checks.
+Plan approval evidence now requires the workflow registry to bind the exact request
+and decision IDs in the same read snapshot; unregistered decisions cannot pass.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
