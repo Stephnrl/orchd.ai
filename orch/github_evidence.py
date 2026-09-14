@@ -390,6 +390,8 @@ def _broker_envelope(store, task, operation, generation, request, role, receipt)
         argv = command['executed_argv'] if role == 'test' else command['argv']
         if role == 'test' and receipt['requested_command']['argv'] != argv and not _fixture_test_command(request, receipt):
             blockers.append('command_mismatch')
+        if role == 'patch' and not _fixture_edit_command(request, argv):
+            blockers.append('command_mismatch')
         if command['working_directory'] != request['workspace']:
             blockers.append('broker_receipt_workspace_mismatch')
         if (argv != result['command'] or command['exit_code'] != result['code']
@@ -406,16 +408,29 @@ def _broker_envelope(store, task, operation, generation, request, role, receipt)
 
 
 def _fixture_test_command(request, receipt):
-    from .execution import Executor
     from .fixtures import TEST_CODE, recipe
     if receipt['requested_command'] != recipe() or request['recipe'] != 'test' or request['args']:
+        return False
+    return _fixture_command(request, TEST_CODE, receipt['executed_argv'])
+
+
+def _fixture_edit_command(request, argv):
+    from .fixtures import EDIT_CODE
+    if request['recipe'] != 'edit' or request['args'] not in (['hello world\n'], ['wrong\n']):
+        return False
+    return _fixture_command(request, EDIT_CODE, argv)
+
+
+def _fixture_command(request, script, argv):
+    from .execution import Executor
+    if not argv:
         return False
     workspace = request['workspace']
     path = PureWindowsPath(workspace) if '\\' in workspace or re.match(r'^[A-Za-z]:', workspace) else PurePosixPath(workspace)
     try:
         expected = Executor(request['mode'], request['image']).command_for(
-            path, TEST_CODE, [], request['operation_id'], python_executable=receipt['executed_argv'][0])
-        return receipt['executed_argv'] == expected
+            path, script, request['args'], request['operation_id'], python_executable=argv[0])
+        return argv == expected
     except Rejected:
         return False
 

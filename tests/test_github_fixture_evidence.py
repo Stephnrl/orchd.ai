@@ -7,11 +7,34 @@ from unittest.mock import patch
 from orch.contracts import ref
 from orch.engine import Engine
 from orch.execution import Executor
-from orch.github_evidence import check_record_claims, _fixture_test_command
-from orch.fixtures import TEST_CODE, recipe
+from orch.github_evidence import check_record_claims, _fixture_test_command, _fixture_edit_command
+from orch.fixtures import EDIT_CODE, TEST_CODE, recipe
 
 
 class FixtureEvidenceIntegrationTests(unittest.TestCase):
+    def test_edit_wrapper_checks_scripts_arguments_paths_and_isolation_flags(self):
+        for mode in ('trusted-fixture', 'docker'):
+            for workspace in (PureWindowsPath('C:/historical/workspace'), PurePosixPath('/historical/workspace')):
+                for value in ('hello world\n', 'wrong\n'):
+                    with self.subTest(mode=mode, workspace=str(workspace), value=value):
+                        image = 'python@sha256:' + 'a' * 64 if mode == 'docker' else None
+                        request = dict(mode=mode, image=image, workspace=str(workspace), operation_id='b' * 32, recipe='edit', args=[value])
+                        argv = Executor(mode, image).command_for(workspace, EDIT_CODE, [value], request['operation_id'], python_executable='historical-python')
+                        with patch('subprocess.Popen', side_effect=AssertionError('No execution')), patch('pathlib.Path.resolve', side_effect=AssertionError('No host path resolution')):
+                            self.assertTrue(_fixture_edit_command(request, argv))
+                            for changed in ([], argv + ['extra'], argv[:-1] + ['different'],
+                                            [part if part != EDIT_CODE else 'print("injected")' for part in argv],
+                                            [part for part in argv if part != '-I']):
+                                self.assertFalse(_fixture_edit_command(request, changed))
+                            self.assertFalse(_fixture_edit_command({**request, 'workspace': '/different'}, argv))
+                            self.assertFalse(_fixture_edit_command({**request, 'recipe': 'test'}, argv))
+                            self.assertFalse(_fixture_edit_command({**request, 'args': ['unsupported']}, argv))
+                            if mode == 'docker':
+                                for flag in ('--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--memory=256m'):
+                                    self.assertFalse(_fixture_edit_command(request, [part for part in argv if part != flag]))
+                                self.assertFalse(_fixture_edit_command({**request, 'operation_id': 'c' * 32}, argv))
+                                self.assertFalse(_fixture_edit_command({**request, 'image': 'python:latest'}, argv))
+
     def test_rendered_recipe_rejects_extra_flags_scripts_and_changed_logical_command(self):
         for mode in ('trusted-fixture', 'docker'):
             for workspace in (PureWindowsPath('C:/historical/workspace'), PurePosixPath('/historical/workspace')):

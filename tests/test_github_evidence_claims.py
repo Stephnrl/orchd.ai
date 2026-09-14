@@ -2,7 +2,7 @@ from contextlib import redirect_stdout, redirect_stderr
 import copy
 import io
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import sys
 import tempfile
 import unittest
@@ -11,6 +11,8 @@ from unittest.mock import patch
 from orch.contracts import Rejected, canonical, digest, ref
 from orch.github_evidence import check_evidence_contents, check_record_claims, list_evidence_records, resolve_record_selection
 from orch.storage import Store
+from orch.execution import Executor
+from orch.fixtures import EDIT_CODE
 from github_evidence_support import register_support, link_plan_evidence, register_operations
 
 
@@ -237,7 +239,9 @@ class EvidenceClaimsTests(unittest.TestCase):
 
     def command(self):
         test = self.docs['test']
-        return dict(argv=['fixture'], working_directory='.', started_at=test['started_at'],
+        argv = Executor('trusted-fixture').command_for(PurePosixPath('.'), EDIT_CODE, ['hello world\n'],
+            self.docs['patch']['operation_id'], python_executable='historical-python')
+        return dict(argv=argv, working_directory='.', started_at=test['started_at'],
                     ended_at=test['ended_at'], exit_code=0, stdout=test['stdout'], stderr=test['stderr'])
 
     def test_support_metadata_is_bound_without_contents(self):
@@ -485,8 +489,21 @@ class EvidenceClaimsTests(unittest.TestCase):
         self.persist()
         self.replace_runtime_request('patch', args=['wrong\n'])
         report = self.check()
-        self.assertEqual(report['binding']['claims']['blockers'], ['fixture_patch_argument_mismatch'])
+        self.assertIn('fixture_patch_argument_mismatch', report['binding']['claims']['blockers'])
+        self.assertIn('patch_command_mismatch', report['binding']['claims']['blockers'])
         self.assertFalse(report['live_authorized'])
+
+    def test_receipt_and_envelope_agreement_cannot_admit_changed_edit_script(self):
+        command = self.docs['patch']['executed_commands'][0]
+        command['argv'] = [part if part != EDIT_CODE else 'print("injected")' for part in command['argv']]
+        self.relink()
+        self.persist()
+        before = self.store.db.total_changes
+        report = self.check()
+        self.assertEqual(report['binding']['claims']['blockers'], ['patch_command_mismatch'])
+        self.assertEqual(self.store.db.total_changes, before)
+        self.assertFalse(report['live_authorized'])
+        self.assertNotIn('injected', json.dumps(report))
 
     def test_current_generation_requires_its_own_broker_request(self):
         self.persist()
@@ -549,6 +566,8 @@ class EvidenceClaimsTests(unittest.TestCase):
 
     def test_consistent_docker_claims_do_not_authorize_execution(self):
         self.docs['test']['environment']['os'] = 'linux'
+        self.docs['patch']['executed_commands'][0]['argv'] = Executor('docker', 'python@sha256:' + 'a' * 64).command_for(
+            PurePosixPath('.'), EDIT_CODE, ['hello world\n'], self.docs['patch']['operation_id'])
         self.relink()
         self.persist()
         for role in ('patch', 'test'):
