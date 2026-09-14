@@ -278,6 +278,15 @@ those artifacts independently pass the supporting-file checks. Contradictory com
 timing or output produce fixed `broker_receipt_*` blockers. These comparisons do not
 reconstruct workspace contents, evaluate the patch diff or prove producer authenticity.
 
+Patch and test broker requests must agree exactly on source digest, execution mode and
+image reference. Docker claims require a digest-pinned image in the executor's accepted
+format; the test receipt must report Linux and that image digest. Trusted-fixture
+requests must not claim an image. Receipt working-directory strings must exactly match
+their broker request workspace, without resolving paths on the assessment host. These
+checks can reject inconsistent historical records without launching Docker or touching
+the recorded workspace. They do not approve an image/source digest, prove containment,
+verify the host interpreter for fixture execution or authenticate runtime claims.
+
 This is consistency checking of local claims, not authentication of execution, reviewer
 identity or policy authority. It does not validate every transitive dependency,
 the meaning of diff/log contents, real GitHub commits, or the tool payload against a journal proposal.

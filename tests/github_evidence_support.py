@@ -5,17 +5,17 @@ from orch.contracts import canonical, digest, ref
 def register_operations(store, documents):
     for role, stage in (('patch', 'implementation'), ('test', 'tests')):
         receipt = documents[role]
+        command = receipt if role == 'test' else (receipt['executed_commands'] or [documents['test']])[0]
         store.db.execute('INSERT INTO operations(id,task_id,stage,slot,status,result) VALUES(?,?,?,?,?,?)',
                          (receipt['operation_id'], receipt['task_id'], stage, str(documents['work_order']['attempt']),
                           'done', canonical({role: ref(receipt), 'failure': None}).decode()))
         request = dict(schema_version='1.0.0', operation_id=receipt['operation_id'], task_id=receipt['task_id'],
-                       generation=1, nonce='e' * 32, workspace='private-fixture-workspace',
+                       generation=1, nonce='e' * 32, workspace=command['working_directory'],
                        recipe='edit' if role == 'patch' else 'test', args=['hello world\n'] if role == 'patch' else [],
                        mode='trusted-fixture', image=None, source_digest='a' * 64)
         store.db.execute('INSERT INTO broker_requests VALUES(?,?,?)',
                          (receipt['operation_id'], 1, canonical(request).decode()))
         envelope = {key: request[key] for key in ('schema_version', 'operation_id', 'task_id', 'generation', 'nonce', 'source_digest')}
-        command = receipt if role == 'test' else (receipt['executed_commands'] or [documents['test']])[0]
         envelope.update(request_sha256=digest(request), result=dict(command=command.get('executed_argv', command.get('argv')),
                         started=command['started_at'], ended=command['ended_at'], code=command['exit_code'],
                         stdout=store.read_artifact(command['stdout'], receipt['task_id'])[:262144],
