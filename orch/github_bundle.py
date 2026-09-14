@@ -125,11 +125,8 @@ def _publish(destination, raw):
         Path(temporary).unlink(missing_ok=True)
 
 
-def export_bundle(store, selection, destination):
-    path = Path(destination).absolute()
-    _regular_path(path)
-    if path.resolve().is_relative_to(store.root):
-        raise Rejected('Bundle destination must be outside workflow storage')
+def build_bundle(store, selection):
+    """Build bounded canonical bytes and metadata without publishing a file."""
     store.db.execute('BEGIN')
     try:
         payload, assessment = _collect(store, selection, require_consistent=True)
@@ -140,8 +137,17 @@ def export_bundle(store, selection, destination):
     except BaseException:
         store.db.execute('ROLLBACK')
         raise
+    return raw, _report(payload, assessment, hashlib.sha256(raw).hexdigest())
+
+
+def export_bundle(store, selection, destination):
+    path = Path(destination).absolute()
+    _regular_path(path)
+    if path.resolve().is_relative_to(store.root):
+        raise Rejected('Bundle destination must be outside workflow storage')
+    raw, report = build_bundle(store, selection)
     _publish(path, raw)
-    return _report(payload, assessment, hashlib.sha256(raw).hexdigest())
+    return report
 
 
 def _keys(value, expected):

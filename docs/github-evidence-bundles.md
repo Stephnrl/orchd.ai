@@ -7,6 +7,11 @@ process or network action runs during either command.
 
 ## Export a selected chain
 
+The [Evidence review panel](evidence-review-ui.md) also offers **Download evidence
+bundle** after an explicit consistent assessment. It reuses the same bounded builder,
+rechecks evidence at download time and displays the complete file's SHA-256 after
+browser verification. Keep that digest for the standalone verifier below.
+
 Use the [record catalog and selection resolver](github-approval.md) to select the exact
 patch, test, review and policy records. Save the resolver's JSON as UTF-8 `records.json`.
 The export command takes that same closed selection object; it never selects a newer

@@ -57,14 +57,16 @@ unchanged by running the diagnostic. Record IDs, blockers and metadata render as
 | --- | --- | --- |
 | `GET /tasks/{task}/evidence-catalog` | No query parameters | Existing `GitHubEvidenceRecordCatalog` |
 | `POST /tasks/{task}/assess-evidence` | Exactly `review` and `policy` document references | Resolved `selection` and `assessment` |
+| `POST /tasks/{task}/evidence-bundle` | Exactly `patch`, `test`, `review` and `policy` document references | Canonical portable bundle bytes, only after a fresh consistent assessment |
 
-Both routes require the existing in-memory operator bearer session. Task identity
+All routes require the existing in-memory operator bearer session. Task identity
 comes from the URL, not a request-body override. Each reference contains `id` and
 `sha256`; malformed, stale-hash or foreign-task references are rejected. Missing or
 corrupt dependencies, exceeded catalog limits and database errors produce a generic
 409 error with no partial selection. Missing sessions produce 401.
 
-Both `claims_consistent` and `blocked` are successful diagnostic responses (HTTP 200).
+The assessment route returns both `claims_consistent` and `blocked` as successful
+diagnostic responses (HTTP 200).
 Clients must inspect `assessment.status`. The API does not accept a proposed decision,
 new instructions, a substitute task ID or a request to execute. Selection resolution
 and assessment use the existing read transactions; this is not atomic admission or a
@@ -74,3 +76,24 @@ Validation includes API authentication/ownership and malformed-input tests, no-w
 and no-execution assertions, UI stale-response/error tests and a real Chromium fixture
 workflow that checks evidence, inspects a policy, downloads the selection and confirms
 unchanged task state. Desktop and narrow-screen layouts are visually checked.
+
+## Download a portable bundle
+
+After checking a consistent selection, choose **Download evidence bundle**. The server
+reassesses that exact chain and collects its dependencies in one read transaction using
+the same builder as the CLI exporter. Expired policy, changed or missing evidence and
+size-limit failures reject the download. No file is published into the workflow store.
+
+The response uses a fixed attachment filename, `application/json`, exact Content-Length,
+`X-Orch-Bundle-SHA256` over the complete file, and the API's no-store headers. The browser
+limits the stream to 16 MiB, checks its declared length and SHA-256, then offers the file
+as `orchd-evidence-bundle.json`. Keep the displayed digest for the
+[standalone verification command](github-evidence-bundles.md). A hash supplied by this
+server detects changed bytes; it does not independently authenticate the server or
+grant execution authority. The file includes selected project evidence.
+
+Changing the selection, refreshing or switching tasks cancels an outstanding download
+and clears its digest. Late results cannot offer a stale file. A failed download clears
+the assessment and requires another check. The displayed success means the bytes were
+prepared for the browser download, not that a filesystem save completed. Restart the
+local API after upgrading so the new route is available.

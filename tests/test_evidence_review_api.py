@@ -1,10 +1,12 @@
 import copy
+import hashlib
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 import test_github_evidence_claims as fixtures
-from orch.api import Application
+from orch.api import Application, BundleDownload
+from orch.github_bundle import verify_bundle
 
 
 class EvidenceReviewApiTests(unittest.TestCase):
@@ -26,6 +28,48 @@ class EvidenceReviewApiTests(unittest.TestCase):
 
     def anchors(self):
         return {role: self.fixture.selection()[role] for role in ('review', 'policy')}
+
+    def bundle_selection(self):
+        return {key: value for key, value in self.fixture.selection().items() if key != 'task_id'}
+
+    def test_bundle_download_is_readonly_and_standalone_verifiable(self):
+        before = self.fixture.store.db.total_changes
+        files = set(self.fixture.store.root.rglob('*'))
+        with patch('subprocess.Popen', side_effect=AssertionError('No execution')), patch('socket.socket', side_effect=AssertionError('No network')):
+            code, result = self.request('POST', '/evidence-bundle', self.bundle_selection())
+        self.assertEqual(code, 200)
+        self.assertIsInstance(result, BundleDownload)
+        self.assertEqual(hashlib.sha256(result.content).hexdigest(), result.sha256)
+        self.assertEqual(self.fixture.store.db.total_changes, before)
+        self.assertEqual(set(self.fixture.store.root.rglob('*')), files)
+        destination = self.fixture.store.root / 'download.json'
+        destination.write_bytes(result.content)
+        report = verify_bundle(destination, result.sha256)
+        self.assertEqual(report['status'], 'claims_consistent')
+        self.assertFalse(report['live_authorized'])
+
+    def test_bundle_auth_scope_and_closed_contract(self):
+        selection = self.bundle_selection()
+        self.assertEqual(self.request('POST', '/evidence-bundle', selection, token='invalid')[0], 401)
+        for payload in ({}, {**selection, 'task_id': self.fixture.task}, {**selection, 'execute': True}):
+            self.assertEqual(self.request('POST', '/evidence-bundle', payload)[0], 409)
+        self.assertEqual(self.request('POST', '/evidence-bundle?download=1', selection)[0], 409)
+        self.assertEqual(self.request('GET', '/evidence-bundle')[0], 404)
+        self.root = '/tasks/' + 'b' * 32
+        self.assertEqual(self.request('POST', '/evidence-bundle', selection)[0], 409)
+
+    def test_bundle_rechecks_expiry_corruption_and_size(self):
+        selection = self.bundle_selection()
+        self.assertEqual(self.request('POST', '/assess-evidence', self.anchors())[0], 200)
+        with patch('orch.github_evidence.now', return_value='2026-09-12T14:16:00Z'):
+            self.assertEqual(self.request('POST', '/evidence-bundle', selection)[0], 409)
+        with patch('orch.github_bundle.MAX_BUNDLE_BYTES', 1):
+            self.assertEqual(self.request('POST', '/evidence-bundle', selection)[0], 409)
+        (self.fixture.store.root / 'artifacts' / self.fixture.docs['patch']['diff']['sha256']).unlink()
+        code, result = self.request('POST', '/evidence-bundle', selection)
+        self.assertEqual(code, 409)
+        self.assertEqual(set(result), {'error'})
+        self.assertFalse(self.fixture.store.db.in_transaction)
 
     def test_catalog_and_assessment_do_not_mutate_or_execute(self):
         before = self.fixture.store.db.total_changes

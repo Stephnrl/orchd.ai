@@ -26,7 +26,8 @@ workflow through a fixed subprocess fixture. Live provider execution remains dis
 The [local management UI](docs/local-management.md) adds task browsing, explicit
 approvals, evidence inspection and event replay at the existing loopback server.
 [Evidence review](docs/evidence-review-ui.md) now lets operators explicitly select and
-assess a review/policy pair, inspect blockers and save a selection for bundle export.
+assess a review/policy pair, inspect blockers, save its selection and download a portable
+bundle with a fresh server assessment and browser digest verification.
 The [Copilot protocol codec and deployment guide](docs/copilot-protocol.md) provide
 documented prompt/output preparation and read-only provider inventory without requiring
 either provider CLI on this workstation.
