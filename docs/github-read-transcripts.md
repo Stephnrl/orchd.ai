@@ -107,3 +107,6 @@ Tests cover exact request binding, encoding and size limits, duplicate headers/J
 redirects, unavailable statuses and transport errors, journal reservation during parsing,
 CLI round trips, and the complete transcript-to-bundle-preflight path with moved refs
 and rate-limit/timeout failures. These use synthetic captures, not live GitHub traffic.
+
+For uncertain operations, [recovery transcripts](github-recovery-transcripts.md) reuse
+the strict exchange decoder with bounded pagination and retained-reservation checks.

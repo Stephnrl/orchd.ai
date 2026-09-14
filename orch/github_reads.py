@@ -79,6 +79,42 @@ def _json(raw):
     return json.loads(raw.decode('utf-8'), object_pairs_hook=unique, parse_constant=invalid)
 
 
+def _decode_exchange(expected_request, exchange):
+    _keys(exchange, ('request', 'error', 'response'))
+    if canonical(exchange['request']) != canonical(expected_request):
+        raise Rejected('Unexpected transcript request')
+    if exchange['error'] is not None:
+        if exchange['error'] not in ('timeout', 'connection_failed', 'tls_failed') or exchange['response'] is not None:
+            raise Rejected('Invalid transport failure')
+        return {'status': 0, 'body': None}, {}
+    response = exchange['response']
+    _keys(response, ('url', 'redirected', 'status', 'headers', 'body_base64'))
+    if response['url'] != exchange['request']['url'] or response['redirected'] is not False:
+        raise Rejected('Redirected or foreign response')
+    status = response['status']
+    if type(status) is not int or not 200 <= status <= 599:
+        raise Rejected('Invalid HTTP response status')
+    headers = _headers(response['headers'])
+    encoded = response['body_base64']
+    if not isinstance(encoded, str) or len(encoded) > 4 * ((MAX_BODY_BYTES + 2) // 3):
+        raise Rejected('Response body budget exceeded')
+    raw = base64.b64decode(encoded, validate=True)
+    if len(raw) > MAX_BODY_BYTES or base64.b64encode(raw).decode('ascii') != encoded:
+        raise Rejected('Invalid response body encoding')
+    if 'content-length' in headers:
+        length = headers['content-length']
+        if not re.fullmatch('[0-9]{1,8}', length) or int(length) != len(raw):
+            raise Rejected('Response content length mismatch')
+    body = None
+    if status == 200:
+        if 'location' in headers or not re.fullmatch(r'application/(?:json|vnd\.github\+json)(?:;\s*charset=utf-8)?', headers.get('content-type', ''), re.I):
+            raise Rejected('Unsupported successful response type or redirect')
+        body = _json(raw)
+        # Also rejects escaped lone surrogates and non-finite exponent overflow.
+        canonical(body)
+    return {'status': status, 'body': body}, headers
+
+
 def decode_transcript(plan, transcript):
     """Normalize untrusted saved exchanges; a matching transcript is not a network attestation."""
     try:
@@ -92,40 +128,7 @@ def decode_transcript(plan, transcript):
         observations = {'preview_sha256': plan['binding']['preview_sha256']}
         for role in ROLES:
             exchange = transcript['responses'][role]
-            _keys(exchange, ('request', 'error', 'response'))
-            if canonical(exchange['request']) != canonical(plan['binding']['requests'][role]):
-                raise Rejected('Unexpected transcript request')
-            if exchange['error'] is not None:
-                if exchange['error'] not in ('timeout', 'connection_failed', 'tls_failed') or exchange['response'] is not None:
-                    raise Rejected('Invalid transport failure')
-                observations[role] = {'status': 0, 'body': None}
-                continue
-            response = exchange['response']
-            _keys(response, ('url', 'redirected', 'status', 'headers', 'body_base64'))
-            if response['url'] != exchange['request']['url'] or response['redirected'] is not False:
-                raise Rejected('Redirected or foreign response')
-            status = response['status']
-            if type(status) is not int or not 200 <= status <= 599:
-                raise Rejected('Invalid HTTP response status')
-            headers = _headers(response['headers'])
-            encoded = response['body_base64']
-            if not isinstance(encoded, str) or len(encoded) > 4 * ((MAX_BODY_BYTES + 2) // 3):
-                raise Rejected('Response body budget exceeded')
-            raw = base64.b64decode(encoded, validate=True)
-            if len(raw) > MAX_BODY_BYTES or base64.b64encode(raw).decode('ascii') != encoded:
-                raise Rejected('Invalid response body encoding')
-            if 'content-length' in headers:
-                length = headers['content-length']
-                if not re.fullmatch('[0-9]{1,8}', length) or int(length) != len(raw):
-                    raise Rejected('Response content length mismatch')
-            body = None
-            if status == 200:
-                if 'location' in headers or not re.fullmatch(r'application/(?:json|vnd\.github\+json)(?:;\s*charset=utf-8)?', headers.get('content-type', ''), re.I):
-                    raise Rejected('Unsupported successful response type or redirect')
-                body = _json(raw)
-                # Also rejects escaped lone surrogates and non-finite exponent overflow.
-                canonical(body)
-            observations[role] = {'status': status, 'body': body}
+            observations[role], _ = _decode_exchange(plan['binding']['requests'][role], exchange)
         return observations
     except (ValueError, TypeError, KeyError, UnicodeError, RecursionError, binascii.Error) as exc:
         raise Rejected('Invalid read transcript') from exc
