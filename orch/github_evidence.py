@@ -2,6 +2,7 @@
 import hashlib
 import json
 import stat
+import re
 from datetime import datetime
 
 from jsonschema import Draft202012Validator
@@ -194,6 +195,7 @@ def _assess_contents(store, task, contents):
 
 def _execution_claims(store, task, work, patch, test):
     operations, blockers = {}, []
+    runtimes = []
     for role, stage, receipt in (('patch', 'implementation', patch), ('test', 'tests', test)):
         row = store.db.execute('SELECT stage,slot,status,generation,CASE WHEN length(CAST(result AS BLOB))<=? THEN result END AS result FROM operations WHERE id=? AND task_id=?',
                                (MAX_BYTES, receipt['operation_id'], task)).fetchone()
@@ -218,6 +220,16 @@ def _execution_claims(store, task, work, patch, test):
             except (ValueError, TypeError, RecursionError) as exc:
                 raise Rejected('Invalid broker request evidence') from exc
             request_sha = digest(request)
+            runtimes.append((request['source_digest'], request['mode'], request['image']))
+            if request['mode'] == 'docker':
+                image = request['image']
+                if not isinstance(image, str) or not re.fullmatch(r'[A-Za-z0-9./:_-]+@sha256:[a-f0-9]{64}', image):
+                    blockers.append(role + '_broker_image_not_pinned')
+                elif role == 'test' and (receipt['environment']['image_digest'] != image.rsplit('@sha256:', 1)[1]
+                                         or receipt['environment']['os'] != 'linux'):
+                    blockers.append('test_broker_environment_mismatch')
+            elif request['image'] is not None:
+                blockers.append(role + '_fixture_image_not_supported')
             if (request['operation_id'] != receipt['operation_id'] or request['task_id'] != task
                     or request['generation'] != row['generation'] or type(request['generation']) is not int
                     or request['recipe'] != ('edit' if role == 'patch' else 'test')
@@ -240,6 +252,8 @@ def _execution_claims(store, task, work, patch, test):
             blockers.append(role + '_operation_result_missing')
         operations[role] = {'operation_id': receipt['operation_id'], 'result_sha256': result_sha,
                             'broker_request_sha256': request_sha, 'broker_envelope_sha256': envelope_sha}
+    if len(runtimes) == 2 and runtimes[0] != runtimes[1]:
+        blockers.append('broker_runtime_mismatch')
     return {'operations': operations, 'blockers': blockers}
 
 
@@ -273,6 +287,8 @@ def _broker_envelope(store, task, operation, generation, request, role, receipt)
     else:
         command = receipt if role == 'test' else receipt['executed_commands'][0]
         argv = command['executed_argv'] if role == 'test' else command['argv']
+        if command['working_directory'] != request['workspace']:
+            blockers.append('broker_receipt_workspace_mismatch')
         if (argv != result['command'] or command['exit_code'] != result['code']
                 or datetime.fromisoformat(command['started_at']) != datetime.fromisoformat(result['started'])
                 or datetime.fromisoformat(command['ended_at']) != datetime.fromisoformat(result['ended'])):

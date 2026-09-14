@@ -272,6 +272,62 @@ class EvidenceClaimsTests(unittest.TestCase):
         with self.assertRaisesRegex(Rejected, 'Missing or oversized broker request'):
             self.check()
 
+    def replace_runtime_request(self, role, **updates):
+        operation = self.docs[role]['operation_id']
+        request = json.loads(self.store.db.execute('SELECT request FROM broker_requests WHERE operation_id=?', (operation,)).fetchone()[0])
+        request.update(updates)
+        item = json.loads(self.store.db.execute('SELECT artifact FROM execution_provenance WHERE operation_id=?', (operation,)).fetchone()[0])
+        envelope = json.loads((self.store.root / 'artifacts' / item['sha256']).read_bytes())
+        envelope.update(request_sha256=digest(request), source_digest=request['source_digest'])
+        artifact = self.store.artifact(self.task, envelope)
+        self.store.db.execute('DROP TRIGGER IF EXISTS broker_requests_update')
+        self.store.db.execute('DROP TRIGGER IF EXISTS execution_provenance_update')
+        self.store.db.execute('UPDATE broker_requests SET request=? WHERE operation_id=?', (canonical(request).decode(), operation))
+        self.store.db.execute('UPDATE execution_provenance SET envelope_sha256=?,artifact=? WHERE operation_id=?',
+                              (digest(envelope), canonical(artifact).decode(), operation))
+
+    def test_patch_and_test_broker_sources_must_agree(self):
+        self.persist()
+        self.replace_runtime_request('test', source_digest='b' * 64)
+        self.assertIn('broker_runtime_mismatch', self.check()['binding']['claims']['blockers'])
+
+    def test_broker_workspace_must_match_receipt(self):
+        self.persist()
+        for role in ('patch', 'test'):
+            self.replace_runtime_request(role, workspace='different-private-workspace')
+            report = self.check()
+            self.assertIn(role + '_broker_receipt_workspace_mismatch', report['binding']['claims']['blockers'])
+            self.assertNotIn('different-private-workspace', json.dumps(report))
+
+    def test_fixture_cannot_claim_docker_image(self):
+        self.persist()
+        self.replace_runtime_request('test', image='python@sha256:' + 'a' * 64)
+        self.assertIn('test_fixture_image_not_supported', self.check()['binding']['claims']['blockers'])
+
+    def test_docker_requires_pinned_image(self):
+        self.persist()
+        for image in (None, 'python:latest', 'python@sha256:invalid'):
+            self.replace_runtime_request('test', mode='docker', image=image)
+            self.assertIn('test_broker_image_not_pinned', self.check()['binding']['claims']['blockers'])
+
+    def test_docker_environment_must_match_request(self):
+        self.persist()
+        self.replace_runtime_request('test', mode='docker', image='python@sha256:' + 'b' * 64)
+        blockers = self.check()['binding']['claims']['blockers']
+        self.assertIn('test_broker_environment_mismatch', blockers)
+        self.assertIn('broker_runtime_mismatch', blockers)
+
+    def test_consistent_docker_claims_do_not_authorize_execution(self):
+        self.docs['test']['environment']['os'] = 'linux'
+        self.relink()
+        self.persist()
+        for role in ('patch', 'test'):
+            self.replace_runtime_request(role, mode='docker', image='python@sha256:' + 'a' * 64)
+        report = self.check()
+        self.assertEqual(report['status'], 'claims_consistent')
+        self.assertFalse(report['evidence_verified'])
+        self.assertFalse(report['live_authorized'])
+
     def saved_envelope(self):
         row = self.store.db.execute('SELECT artifact FROM execution_provenance WHERE operation_id=?', ('d' * 32,)).fetchone()
         item = json.loads(row[0])
