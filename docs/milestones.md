@@ -7,6 +7,8 @@ The [offline GitHub preview](github-preview.md) supplies a separate destination-
 request preparation contract; live transport and approval admission remain unimplemented.
 An [offline GitHub ref assessment](github-ref-assessment.md) now checks supplied
 repository identity and branch-tip observations against that prepared scope.
+An [offline reconciliation classifier](github-reconciliation.md) now distinguishes a
+single matching draft PR from unresolved observations without enabling dispatch or retry.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
