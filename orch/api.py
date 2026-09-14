@@ -2,6 +2,7 @@
 import hmac
 import json
 import secrets
+import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,12 @@ from .contracts import Rejected, ref
 
 @dataclass(frozen=True)
 class BundleDownload:
+    content: bytes
+    sha256: str
+
+
+@dataclass(frozen=True)
+class BundleUpload:
     content: bytes
     sha256: str
 
@@ -35,7 +42,7 @@ class Application:
         self.session = secrets.token_urlsafe(32)  # In-memory local session; never persisted.
 
     def dispatch(self, method, path, payload, token):
-        if not isinstance(token, str) or not hmac.compare_digest(token, self.session):
+        if not isinstance(token, str) or not token.isascii() or not hmac.compare_digest(token, self.session):
             return 401, {"error": "Operator session required"}
         try:
             parsed = urlsplit(path)
@@ -53,6 +60,11 @@ class Application:
                              "next": rows[limit-1]["rowid"] if len(rows) > limit else None}
             if query and not (method == "GET" and len(parts) == 3 and parts[2] in ("records", "stream")):
                 raise Rejected("Unexpected query")
+            if method == 'POST' and parsed.path == '/evidence-bundles/verify':
+                from .github_bundle import verify_bundle_bytes
+                if not isinstance(payload, BundleUpload):
+                    raise Rejected('Binary bundle upload required')
+                return 200, verify_bundle_bytes(payload.content, payload.sha256)
             if method == "GET" and parts == ["storage"]:
                 from .maintenance import storage_usage
                 return 200, storage_usage(self.engine.store)
@@ -181,6 +193,36 @@ def serve(engine, port=8080):
             if self.command == "GET" and self.path in assets:
                 name, mime = assets[self.path]
                 self.respond(200, (Path(__file__).with_name("ui") / name).read_bytes(), mime)
+                return
+            if self.command == 'POST' and self.path == '/evidence-bundles/verify':
+                from .github_bundle import MAX_BUNDLE_BYTES
+                authorization = self.headers.get('Authorization', '')
+                token = authorization[7:] if authorization.startswith('Bearer ') else ''
+                if len(self.headers.get_all('Authorization', [])) != 1 or not token.isascii() or not hmac.compare_digest(token, app.session):
+                    self.send_error(401)
+                    return
+                length = self.headers.get('Content-Length', '')
+                expected = self.headers.get('X-Orch-Expected-SHA256', '')
+                if (len(self.headers.get_all('Content-Length', [])) != 1
+                        or len(self.headers.get_all('Content-Type', [])) != 1
+                        or len(self.headers.get_all('X-Orch-Expected-SHA256', [])) != 1
+                        or not re.fullmatch('[0-9]{1,8}', length)
+                        or not 0 < int(length) <= MAX_BUNDLE_BYTES
+                        or self.headers.get('Content-Type') != 'application/octet-stream'
+                        or self.headers.get_all('Transfer-Encoding')
+                        or self.headers.get_all('Content-Encoding')
+                        or not re.fullmatch('[a-f0-9]{64}', expected)):
+                    self.send_error(400)
+                    return
+                try:
+                    raw = self.rfile.read(int(length))
+                    if len(raw) != int(length):
+                        raise ValueError('Incomplete upload')
+                except (OSError, ValueError):
+                    self.send_error(400)
+                    return
+                code, output = app.dispatch('POST', self.path, BundleUpload(raw, expected), token)
+                self.respond(code, json.dumps(output).encode(), 'application/json')
                 return
             try:
                 length = int(self.headers.get("Content-Length", "0"))

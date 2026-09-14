@@ -256,3 +256,15 @@ def verify_bundle(source, expected_sha256):
     """Reassess untrusted bundle claims in disposable storage; never adopt the database."""
     with _verified_bundle(source, expected_sha256) as (_, _, report):
         return report
+
+
+def verify_bundle_bytes(raw, expected_sha256):
+    """Verify an upload in disposable storage, without a caller-selected path."""
+    if (not isinstance(raw, bytes) or not 0 < len(raw) <= MAX_BUNDLE_BYTES
+            or not isinstance(expected_sha256, str) or not re.fullmatch('[a-f0-9]{64}', expected_sha256)
+            or hashlib.sha256(raw).hexdigest() != expected_sha256):
+        raise Rejected('Bundle size or expected digest mismatch')
+    with tempfile.TemporaryDirectory(prefix='orch-evidence-upload-') as root:
+        source = Path(root) / 'bundle.json'
+        source.write_bytes(raw)
+        return verify_bundle(source, expected_sha256)
