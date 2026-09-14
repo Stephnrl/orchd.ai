@@ -135,6 +135,27 @@ it does not authenticate the policy or approver, bind a human decision, or grant
 
 ## Assessing workflow evidence claims
 
+To inspect stored records before receipt artifacts have been exported, use:
+
+```sh
+python -m orch github-check-record-claims --data .runtime/phase2 --records records.json
+```
+
+The selection file is a closed object with `task_id` (32 lowercase hex characters)
+and `patch`, `test`, `review`, `policy` document references. Each reference contains
+the exact stored record `id` and canonical record `sha256`, as used by the workflow's
+document references. Select the intended attempt explicitly; this command never picks
+the latest record. It resolves the four records by task, kind and hash in one read
+transaction and runs the same chain, supporting-artifact and broker checks described
+below. It does not require copies of the four primary records as artifact files.
+
+The `GitHubRecordClaimsAssessment` binds the selection and claims, returning
+`claims_consistent`/exit 0 or `blocked`/exit 2. Invalid selections or missing/corrupt
+dependencies exit 2 without a report. No artifacts are exported and no workflow or
+network action runs. This report is not an artifact-evidence envelope and cannot replace
+`--evidence` in combined approval assessment. The current fixture workflow may still
+report consistency blockers; this command exposes them without authorizing execution.
+
 ```sh
 python -m orch github-check-evidence-claims --data .runtime/phase2 --evidence evidence.json
 ```

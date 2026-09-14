@@ -67,6 +67,8 @@ Broker results now match test and single-command patch receipts by executed argv
 timing, exit/truncation claims and redacted output artifact hashes and byte counts.
 Runtime claims now require matching patch/test source, mode and image, digest-pinned
 Docker images with matching Linux test metadata, and exact requested workspace strings.
+An explicit read-only stored-record CLI now runs the same claims checks before receipt
+artifact export, exposing blockers without creating artifacts or changing approval admission.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
