@@ -36,7 +36,12 @@ class Application:
             if method == "GET" and parts == ["tasks"]:
                 after, limit = page(query)
                 rows = self.engine.store.db.execute("SELECT rowid,id,state FROM tasks WHERE rowid>? ORDER BY rowid LIMIT ?", (after, limit + 1)).fetchall()
-                return 200, {"items": [{"task_id": r["id"], "state": json.loads(r["state"])} for r in rows[:limit]],
+                items = []
+                for row in rows[:limit]:
+                    state = json.loads(row["state"])
+                    spec = self.engine.store.get(state["spec"], row["id"], "TaskSpec")
+                    items.append({"task_id": row["id"], "title": spec["title"], "state": state})
+                return 200, {"items": items,
                              "next": rows[limit-1]["rowid"] if len(rows) > limit else None}
             if query and not (method == "GET" and len(parts) == 3 and parts[2] in ("records", "stream")):
                 raise Rejected("Unexpected query")

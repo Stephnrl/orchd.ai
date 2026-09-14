@@ -17,7 +17,7 @@ vm.runInContext('selected = "task-one"; api = request;', context);
 (async () => {
   for (const kind of ["tasks", "records"]) {
     function page(id, next) {
-      return {items: [kind === "tasks" ? {task_id: id, state: {state: "COMPLETED"}} : {id, kind: "Plan"}], next};
+      return {items: [kind === "tasks" ? {task_id: id, title: "Title " + id, state: {state: "COMPLETED"}} : {id, kind: "Plan"}], next};
     }
     const start = pending.length;
     const older = vm.runInContext(`${kind}()`, context);

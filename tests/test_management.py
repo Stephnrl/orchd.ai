@@ -31,11 +31,23 @@ class ManagementTests(unittest.TestCase):
         code, first = self.get("/tasks?limit=1")
         self.assertEqual(code, 200)
         self.assertEqual([x["task_id"] for x in first["items"]], [self.task])
+        self.assertEqual(first["items"][0]["title"], "<img src=x onerror=alert(1)>")
         code, second = self.get(f"/tasks?after={first['next']}&limit=1")
         self.assertEqual([x["task_id"] for x in second["items"]], [other])
+        self.assertEqual(second["items"][0]["title"], "Greeting fixture")
         self.assertIsNone(second["next"])
         for query in ("limit=101", "after=-1", "limit=0", "after=9223372036854775808", "limit=2&limit=3", "token=secret", "after=", "limit=abc"):
             self.assertEqual(self.get("/tasks?" + query)[0], 409)
+
+    def test_task_titles_require_intact_task_bound_specs(self):
+        self.assertEqual(self.app.dispatch("GET", "/tasks", {}, "wrong")[0], 401)
+        reference = self.engine.task(self.task)["state"]["spec"]
+        spec = self.engine.store.get(reference, self.task)
+        spec["title"] = "Tampered title"
+        # Simulate offline corruption in this disposable store, beyond its write guard.
+        self.engine.store.db.execute("DROP TRIGGER records_update")
+        self.engine.store.db.execute("UPDATE records SET payload=? WHERE id=?", (json.dumps(spec), reference["id"]))
+        self.assertEqual(self.get("/tasks")[0], 409)
 
     def test_task_bound_records_artifacts_and_integrity(self):
         other = self.engine.create_task()

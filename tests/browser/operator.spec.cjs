@@ -81,6 +81,10 @@ for (const outcome of ['COMPLETED', 'CANCELLED']) {
     await expect(page.locator('#state')).toHaveText('AWAITING PLAN APPROVAL');
     if (outcome === 'COMPLETED') {
       for (const next of ['AWAITING ACTION APPROVAL', 'COMPLETED']) {
+        // Replay refreshes intentionally clear review; wait for this pause's events first.
+        const pause = await readTask(page, operator, task);
+        await expect(page.locator('#events li')).toHaveCount(pause.state.last_event_sequence);
+        await expect(page.locator('#task-refresh-status')).toContainText('Task refreshed.');
         await page.locator('#reviewed').check();
         await page.locator('#approve').click();
         await expect(page.locator('#approval')).toBeHidden();
@@ -134,6 +138,31 @@ async function connect(page, token) {
   await expect(page.locator('#workspace')).toBeVisible();
   await expect(page.locator('#token')).toHaveValue('');
 }
+
+test('task titles remain literal and duplicate titles select distinct tasks', async ({ page, operator }) => {
+  await connect(page, operator.token);
+  const title = '<img src=x onerror=alert(1)> Same title';
+  const ids = [];
+  for (let index = 0; index < 2; index++) {
+    await page.locator('#title').fill(title);
+    const created = page.waitForResponse(response => response.url().endsWith('/tasks') && response.request().method() === 'POST');
+    await page.locator('#create button').click();
+    ids.push((await (await created).json()).task_id);
+    await expect(page.locator('#task-id')).toHaveText(ids[index]);
+    await expect(page.locator('#tasks button')).toHaveCount(index + 1);
+  }
+  await expect(page.locator('#tasks img')).toHaveCount(0);
+  for (let index = 0; index < 2; index++) {
+    const entry = page.locator('#tasks button').nth(index);
+    await expect(entry).toContainText(title);
+    await expect(entry.locator('small')).toContainText(ids[index].slice(0, 12));
+    await expect(entry.locator('small')).toContainText('SPEC READY');
+    await entry.click();
+    await expect(page.locator('#task-id')).toHaveText(ids[index]);
+    await expect(page.locator('#task-title')).toHaveText(title);
+    await expect(entry).toHaveAttribute('aria-current', 'true');
+  }
+});
 
 test('session rejection and disconnect clear access', async ({ page, operator }) => {
   await page.locator('#token').fill('invalid-test-session');

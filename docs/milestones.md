@@ -56,6 +56,8 @@ Evidence reads likewise fence overlapping selections and clear stale contents du
 loading or failures, preventing older artifacts from replacing the selected evidence.
 Task and record lists fence stale responses and serialize next-page requests to avoid
 duplicate entries, with retryable failed pages and cleared record links on task switches.
+Task navigation now shows verified specification titles alongside shortened IDs and
+state labels, with literal text rendering and identity-based selection for duplicate names.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |
