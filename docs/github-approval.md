@@ -339,6 +339,17 @@ altered logical recipe limits cannot qualify through this path. An end-to-end tr
 fixture run now passes record-claims assessment at `AWAITING_ACTION_APPROVAL`; that
 diagnostic result neither approves nor dispatches its external action.
 
+The patch's single executed command must also match the executor's fixed edit wrapper
+for the recorded mode, image, workspace, operation and supported edit argument. This
+requires the exact built-in edit script, argument order, interpreter isolation flags
+and, for Docker, the container isolation options, mount and operation labels. Agreement
+between a receipt and envelope on an altered command now produces
+`patch_command_mismatch`. Both supported fixture edits (`hello world\n` and `wrong\n`)
+can match the command shape; separate test-outcome and snapshot checks still apply.
+The comparison shares the pure renderer with execution, handles Windows/POSIX paths
+without resolving them, and does not authenticate the recorded host interpreter or
+prove that Docker actually enforced the reported options.
+
 Patch and test broker requests must agree exactly on source digest, execution mode and
 image reference. Docker claims require a digest-pinned image in the executor's accepted
 format; the test receipt must report Linux and that image digest. Trusted-fixture

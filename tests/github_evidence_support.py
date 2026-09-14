@@ -1,6 +1,9 @@
 """Register supporting files before test fixtures compute receipt references."""
 from orch.contracts import canonical, digest, ref
+from orch.execution import Executor
+from orch.fixtures import EDIT_CODE
 import hashlib
+from pathlib import PurePosixPath
 
 
 def register_operations(store, documents):
@@ -59,7 +62,9 @@ def register_support(store, task, documents):
         documents['test'][channel] = store.artifact(task, channel, media_type='text/plain')
     if not documents['patch']['executed_commands']:
         test = documents['test']
-        documents['patch']['executed_commands'] = [dict(argv=['fixture'], working_directory='.',
+        argv = Executor('trusted-fixture').command_for(PurePosixPath('.'), EDIT_CODE, ['hello world\n'],
+            documents['patch']['operation_id'], python_executable='historical-python')
+        documents['patch']['executed_commands'] = [dict(argv=argv, working_directory='.',
             started_at=documents['patch']['started_at'], ended_at=documents['patch']['ended_at'], exit_code=0,
             stdout=test['stdout'], stderr=test['stderr'])]
     for command in documents['patch']['executed_commands']:
