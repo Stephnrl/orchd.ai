@@ -6,6 +6,13 @@ replace a newer view with older state; responses and errors from a previous sele
 are ignored. If the current refresh fails, the last rendered details may remain visible,
 but workflow, approval, recovery and cleanup controls stay disabled until a successful
 refresh. Server-side revision and approval checks remain authoritative.
+
+Event-history failures label retained events as potentially incomplete. Polling retries
+from the last accepted sequence without duplicating events; reselecting a task starts
+replay from the beginning when a gap requires it. Late responses or errors from a
+previous selection cannot replace the current task's replay status or show stale errors.
+Selecting or creating a task resets its history status to loading.
+
 The selected task includes a **Refresh task** button and a live status message for
 loading, success or failure. The message labels retained details as potentially stale
 while refresh is pending or failed. Retry remains available after a failed read without

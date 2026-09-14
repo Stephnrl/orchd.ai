@@ -54,6 +54,8 @@ jobs:
         run: node tests/test_ui_evidence.cjs
       - name: Check list request ordering
         run: node tests/test_ui_lists.cjs
+      - name: Check event replay failures
+        run: node tests/test_ui_replay.cjs
       - name: Check Python compilation
         run: python -m compileall -q orch tests scripts
       - name: Check whitespace

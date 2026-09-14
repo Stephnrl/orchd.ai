@@ -9,7 +9,7 @@ and manual dispatch. It has four independent checks:
 - `Browser (Linux)`
 
 The offline jobs use Python 3.12 and Node 22, install the declared test dependencies,
-validate contracts, run the Python suite, run all six UI regression scripts, compile
+validate contracts, run the Python suite, run all seven UI regression scripts, compile
 Python files and check whitespace. `scripts/ci_tests.py` explicitly removes Docker
 opt-in from its environment and permits exactly the five named Docker test skips.
 Missing gates, additional skips, failures and empty runs fail the job. The UI tests
@@ -22,6 +22,7 @@ It reads the generated session from the server pipe without printing it or weake
 production authentication. It checks invalid-session rejection, disconnect, rendered
 approval guards, evidence inspection, refresh review reset, separate approval/execution,
 literal task-title rendering and distinct selection of tasks sharing a title,
+event-history outage feedback and recovery without duplicate events,
 and storage/integrity reports. Completion and cancellation tests also stop the server,
 restart it against the same test store, reject the old session, and reconnect with the
 new session. They compare persisted state/context, replayed event labels, a contract

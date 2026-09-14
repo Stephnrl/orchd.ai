@@ -177,6 +177,23 @@ test('session rejection and disconnect clear access', async ({ page, operator })
   expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
 });
 
+test('event history reports an outage and retries without duplicate events', async ({ page, operator }) => {
+  await connect(page, operator.token);
+  await page.locator('#create button').click();
+  await expect(page.locator('#task-id')).not.toBeEmpty();
+  const task = await page.locator('#task-id').textContent();
+  const snapshot = await readTask(page, operator, task);
+  await expect(page.locator('#events li')).toHaveCount(snapshot.state.last_event_sequence);
+  const labels = await page.locator('#events button').allTextContents();
+  await page.route('**/stream', route => route.abort());
+  await expect(page.locator('#event-status')).toContainText('Event history update failed.');
+  await expect(page.locator('#events button')).toHaveText(labels);
+  await page.unroute('**/stream');
+  await expect(page.locator('#event-status')).toHaveText(`Replayed through event ${snapshot.state.last_event_sequence}`);
+  await expect(page.locator('#events button')).toHaveText(labels);
+  expect(await readTask(page, operator, task)).toEqual(snapshot);
+});
+
 test('operator reviews evidence, refreshes, approves and inspects maintenance', async ({ page, operator }) => {
   await connect(page, operator.token);
   await page.locator('#title').fill('Browser regression fixture');
