@@ -142,7 +142,7 @@ python -m orch github-check-evidence-claims --data .runtime/phase2 --evidence ev
 This stricter mode performs the byte checks above and parses those same verified bytes
 as canonical `PatchReceipt`, `TestReceipt`, `ReviewDecision` and `ToolDecision` contracts.
 Each must exactly match a schema-valid stored record for the same task. Linked
-`ReviewRequest` and `ToolRequest` records are resolved by task and document hash with
+`TestRequest`, `ReviewRequest` and `ToolRequest` records are resolved by task and document hash with
 bounded reads, within the artifact metadata read transaction. Ordinary log files and
 arbitrary JSON cannot satisfy these role requirements.
 
@@ -176,7 +176,18 @@ window, and none of the six records may claim creation after the assessment time
 Timeline violations produce fixed blockers and exit 2, including when artifact bytes,
 preview scope and policy expiry otherwise pass. These checks use claimed timestamps;
 they do not authenticate clocks or producers, impose an evidence age limit, or establish
-the chronology of unresolved dependencies such as work orders and test requests.
+the chronology of unresolved dependencies such as work orders.
+
+The test receipt must resolve to a canonical stored `TestRequest` for the same task.
+Its operation must match the receipt, its patch must match the assessed patch, its
+snapshot must match the receipt, and its work-order reference must match the patch's.
+The entire command contract (including recipe, working-directory and timeout fields)
+must match the receipt's requested command; the requested runner image must match the
+receipt's environment image digest. Request creation must fall between patch receipt
+creation and test execution start and cannot be in the future. Mismatches block both
+strict assessment commands; missing, corrupt or foreign-task requests fail without a
+report. The resolved request reference is included in the assessment binding. This
+does not verify the work order itself, an image's provenance, or the real runner's behavior.
 
 This is consistency checking of local claims, not authentication of execution, reviewer
 identity or policy authority. It does not validate every transitive dependency,

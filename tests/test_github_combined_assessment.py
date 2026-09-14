@@ -29,7 +29,7 @@ class CombinedAssessmentTests(unittest.TestCase):
         examples = json.loads((Path(__file__).resolve().parents[1] / 'contracts/v1/examples.json').read_text())
         self.docs = {role: examples[kind] for role, kind in (
             ('patch', 'PatchReceipt'), ('test', 'TestReceipt'), ('review', 'ReviewDecision'),
-            ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'))}
+            ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'), ('test_request', 'TestRequest'))}
         for role, document in self.docs.items():
             document.update(id=role, task_id=task, created_at='2026-01-01T00:00:00Z')
             for field in ('started_at', 'ended_at'):
@@ -37,6 +37,8 @@ class CombinedAssessmentTests(unittest.TestCase):
                     document[field] = document['created_at']
         register_support(self.store, task, self.docs)
         self.docs['test']['patch'] = ref(self.docs['patch'])
+        self.docs['test_request']['patch'] = ref(self.docs['patch'])
+        self.docs['test']['request'] = ref(self.docs['test_request'])
         request = self.docs['review_request']
         request.update(patch=ref(self.docs['patch']), test_receipts=[ref(self.docs['test'])], implementer_invocation_id='implementer', reviewer_invocation_id='reviewer')
         self.docs['review'].update(request=ref(request), reviewer_invocation_id='reviewer')

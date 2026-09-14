@@ -23,11 +23,13 @@ class EvidenceClaimsTests(unittest.TestCase):
         examples = json.loads((Path(__file__).resolve().parents[1] / 'contracts/v1/examples.json').read_text())
         self.docs = {role: copy.deepcopy(examples[kind]) for role, kind in (
             ('patch', 'PatchReceipt'), ('test', 'TestReceipt'), ('review', 'ReviewDecision'),
-            ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'))}
+            ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'), ('test_request', 'TestRequest'))}
         for role, document in self.docs.items():
             document.update(id=role, task_id=self.task)
         register_support(self.store, self.task, self.docs)
         self.docs['test']['patch'] = ref(self.docs['patch'])
+        self.docs['test_request']['patch'] = ref(self.docs['patch'])
+        self.docs['test']['request'] = ref(self.docs['test_request'])
         request = self.docs['review_request']
         request.update(patch=ref(self.docs['patch']), test_receipts=[ref(self.docs['test'])], implementer_invocation_id='implementer', reviewer_invocation_id='reviewer')
         self.docs['review'].update(request=ref(request), reviewer_invocation_id='reviewer')
@@ -73,6 +75,8 @@ class EvidenceClaimsTests(unittest.TestCase):
 
     def relink(self):
         self.docs['test']['patch'] = ref(self.docs['patch'])
+        self.docs['test_request']['patch'] = ref(self.docs['patch'])
+        self.docs['test']['request'] = ref(self.docs['test_request'])
         self.docs['review_request'].update(patch=ref(self.docs['patch']), test_receipts=[ref(self.docs['test'])])
         self.docs['review']['request'] = ref(self.docs['review_request'])
 
@@ -162,6 +166,76 @@ class EvidenceClaimsTests(unittest.TestCase):
     def test_reversed_patch_window_blocks(self):
         self.docs['patch']['started_at'] = '2026-09-12T14:00:01Z'
         self.assert_timeline_blocked('patch_execution_window_invalid')
+
+    def persist_request(self, omit=None):
+        self.docs['test']['request'] = ref(self.docs['test_request'])
+        self.docs['review_request']['test_receipts'] = [ref(self.docs['test'])]
+        self.docs['review']['request'] = ref(self.docs['review_request'])
+        self.persist(omit=omit)
+
+    def assert_request_blocked(self, reason):
+        self.persist_request()
+        report = self.check()
+        self.assertEqual(report['status'], 'blocked')
+        self.assertIn(reason, report['binding']['claims']['blockers'])
+        self.assertEqual(report['binding']['claims']['test_request'], ref(self.docs['test_request']))
+        self.assertFalse(report['live_authorized'])
+
+    def test_missing_test_request_rejects(self):
+        self.persist_request(omit='test_request')
+        with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
+            self.check()
+        self.assertFalse(self.store.db.in_transaction)
+
+    def test_foreign_task_test_request_rejects(self):
+        other = 'b' * 32
+        self.store.db.execute('INSERT INTO tasks VALUES(?,?,?)', (other, '{}', '{}'))
+        self.docs['test_request']['task_id'] = other
+        self.persist_request()
+        with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
+            self.check()
+
+    def test_test_request_hash_mismatch_rejects(self):
+        self.docs['test_request']['command']['timeout_seconds'] = 2
+        self.persist()
+        with self.assertRaises(Rejected):
+            self.check()
+
+    def test_test_request_operation_mismatch_blocks(self):
+        self.docs['test_request']['operation_id'] = 'other-operation'
+        self.assert_request_blocked('test_request_binding_mismatch')
+
+    def test_test_request_patch_mismatch_blocks(self):
+        self.docs['test_request']['patch']['sha256'] = 'b' * 64
+        self.assert_request_blocked('test_request_binding_mismatch')
+
+    def test_test_request_snapshot_mismatch_blocks(self):
+        self.docs['test_request']['snapshot_sha256'] = 'b' * 64
+        self.assert_request_blocked('test_request_binding_mismatch')
+
+    def test_test_request_work_order_mismatch_blocks(self):
+        self.docs['test_request']['work_order']['sha256'] = 'b' * 64
+        self.assert_request_blocked('test_request_binding_mismatch')
+
+    def test_test_request_command_limits_must_match(self):
+        self.docs['test_request']['command']['timeout_seconds'] = 2
+        self.assert_request_blocked('test_request_command_mismatch')
+
+    def test_test_request_runner_image_mismatch_blocks(self):
+        self.docs['test_request']['runner_image_digest'] = 'b' * 64
+        self.assert_request_blocked('test_runner_image_mismatch')
+
+    def test_test_request_before_patch_blocks(self):
+        self.docs['test_request']['created_at'] = '2026-09-12T13:59:59Z'
+        self.assert_request_blocked('test_request_timeline_invalid')
+
+    def test_test_request_after_execution_starts_blocks(self):
+        self.docs['test_request']['created_at'] = '2026-09-12T14:00:01Z'
+        self.assert_request_blocked('test_request_timeline_invalid')
+
+    def test_future_test_request_blocks(self):
+        self.docs['test_request']['created_at'] = '2026-09-12T14:02:00Z'
+        self.assert_request_blocked('test_request_from_future')
 
     def test_test_receipt_before_execution_ends_blocks(self):
         self.docs['test']['ended_at'] = '2026-09-12T14:00:01Z'
