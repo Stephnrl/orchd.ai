@@ -23,12 +23,16 @@ const artifact = {reference: {trust: "untrusted", producer_id: "junior", sha256:
   assert.equal(element("evidence-json").textContent, "");
   assert.equal(element("evidence-links").children.length, 0);
   assert.match(element("evidence-title").textContent, /Loading/);
+  assert.equal(element("save-evidence").disabled, true);
   const latest = vm.runInContext('evidence("artifacts", "new")', context);
   pending[1].resolve(artifact); await latest;
   pending[0].resolve(record); await first;
   assert.equal(element("evidence-title").textContent, "Artifact content");
   assert.equal(element("evidence-json").textContent, artifact.content);
   assert.match(element("evidence-trust").textContent, /Trust: untrusted/);
+  assert.equal(element("save-evidence").disabled, false);
+  assert.equal(vm.runInContext('evidenceDownload.text', context), artifact.content);
+  assert.equal(vm.runInContext('evidenceDownload.filename', context), 'orchd-artifact.txt');
 
   const obsolete = vm.runInContext('evidence("records", "old")', context);
   const fresh = vm.runInContext('evidence("artifacts", "new")', context);
@@ -42,9 +46,16 @@ const artifact = {reference: {trust: "untrusted", producer_id: "junior", sha256:
   assert.match(element("evidence-title").textContent, /Evidence unavailable/);
   assert.equal(element("evidence-json").textContent, "");
   assert.equal(element("evidence-links").children.length, 0);
+  assert.equal(element("save-evidence").disabled, true);
+  assert.equal(vm.runInContext('evidenceDownload', context), null);
   const retry = vm.runInContext('evidence("records", "bad")', context);
   pending[5].resolve(record); await retry;
   assert.equal(element("evidence-title").textContent, "Plan");
+  assert.equal(vm.runInContext('evidenceDownload.filename', context), 'orchd-record.json');
+  vm.runInContext('busy = true;', context);
+  element('save-evidence').handlers.click(); // No Blob/URL APIs exist in this stub: guard must return.
+  vm.runInContext('busy = false; epoch++;', context);
+  element('save-evidence').handlers.click(); // A previous task's completed read cannot be saved.
 
   const switched = vm.runInContext('evidence("records", "previous-task")', context);
   vm.runInContext('epoch++; selected = "task-two"; $("evidence").hidden = true;', context);

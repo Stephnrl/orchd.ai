@@ -60,6 +60,8 @@ Task navigation now shows verified specification titles alongside shortened IDs 
 state labels, with literal text rendering and identity-based selection for duplicate names.
 Event replay now marks update failures explicitly, preserves its cursor for retries,
 and ignores responses/errors from earlier task selections.
+The evidence viewer supports explicit local review-copy downloads of its current
+record or artifact, with fixed filenames and stale-selection guards.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |
