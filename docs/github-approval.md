@@ -266,8 +266,17 @@ Broker failure, nonzero/missing exit status or truncated output blocks assessmen
 Each stdout/stderr value has a 256 KiB UTF-8 byte cap in addition to schema limits.
 Missing/corrupt provenance fails without a report, while binding or outcome mismatches
 produce blockers. Only the envelope digest is added to the operation report. This
-does not yet compare envelope command/output/timing with receipt claims, approve the
-declared runtime/image, authenticate the producer or authorize live execution.
+does not approve the declared runtime/image, authenticate the producer or authorize
+live execution.
+
+The broker result must also agree with the receipt's executed argv, exit status and
+start/end instants. Test truncation flags must agree. For patch receipts, exactly one
+reported command is required because the broker format retains one execution result
+per operation. Both output streams are redacted using the storage redactor, encoded as
+UTF-8 and compared by hash and byte count with the receipt's output artifact references;
+those artifacts independently pass the supporting-file checks. Contradictory commands,
+timing or output produce fixed `broker_receipt_*` blockers. These comparisons do not
+reconstruct workspace contents, evaluate the patch diff or prove producer authenticity.
 
 This is consistency checking of local claims, not authentication of execution, reviewer
 identity or policy authority. It does not validate every transitive dependency,

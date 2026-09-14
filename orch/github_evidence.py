@@ -6,7 +6,7 @@ from datetime import datetime
 
 from jsonschema import Draft202012Validator
 
-from .contracts import Rejected, SCHEMA, canonical, digest, validate, ref, now
+from .contracts import Rejected, SCHEMA, canonical, digest, validate, ref, now, redact
 from .broker import validate_wire
 from .github_approval import _validate_evidence, check_approval
 
@@ -223,7 +223,7 @@ def _execution_claims(store, task, work, patch, test):
                     or request['recipe'] != ('edit' if role == 'patch' else 'test')
                     or len(request['args']) != (1 if role == 'patch' else 0)):
                 blockers.append(role + '_broker_request_mismatch')
-            envelope_sha, envelope_blockers = _broker_envelope(store, task, receipt['operation_id'], row['generation'], request)
+            envelope_sha, envelope_blockers = _broker_envelope(store, task, receipt['operation_id'], row['generation'], request, role, receipt)
             blockers.extend(role + '_' + reason for reason in envelope_blockers)
         result_sha = None
         if row['result'] is not None:
@@ -243,7 +243,7 @@ def _execution_claims(store, task, work, patch, test):
     return {'operations': operations, 'blockers': blockers}
 
 
-def _broker_envelope(store, task, operation, generation, request):
+def _broker_envelope(store, task, operation, generation, request, role, receipt):
     row = store.db.execute('SELECT envelope_sha256,CASE WHEN length(CAST(artifact AS BLOB))<=8192 THEN artifact END AS artifact FROM execution_provenance WHERE operation_id=? AND generation=?',
                            (operation, generation)).fetchone()
     if row is None or row['artifact'] is None:
@@ -268,6 +268,21 @@ def _broker_envelope(store, task, operation, generation, request):
         blockers.append('broker_execution_not_successful')
     if any(len(result[channel].encode()) > 262144 for channel in ('stdout', 'stderr')):
         raise Rejected('Broker envelope output exceeds byte budget')
+    if role == 'patch' and len(receipt['executed_commands']) != 1:
+        blockers.append('broker_receipt_command_count_mismatch')
+    else:
+        command = receipt if role == 'test' else receipt['executed_commands'][0]
+        argv = command['executed_argv'] if role == 'test' else command['argv']
+        if (argv != result['command'] or command['exit_code'] != result['code']
+                or datetime.fromisoformat(command['started_at']) != datetime.fromisoformat(result['started'])
+                or datetime.fromisoformat(command['ended_at']) != datetime.fromisoformat(result['ended'])):
+            blockers.append('broker_receipt_execution_mismatch')
+        if role == 'test' and receipt['output_truncated'] != result['truncated']:
+            blockers.append('broker_receipt_execution_mismatch')
+        for channel in ('stdout', 'stderr'):
+            output = redact(result[channel]).encode()
+            if command[channel]['sha256'] != hashlib.sha256(output).hexdigest() or command[channel]['size_bytes'] != len(output):
+                blockers.append('broker_receipt_' + channel + '_mismatch')
     return digest(envelope), blockers
 
 
