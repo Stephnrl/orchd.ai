@@ -86,15 +86,22 @@ store's records, not independent provenance. `evidence_verified`, `live_authoriz
 python -m orch github-assess-approval --data .runtime/phase2 --journal .runtime/github-journal.sqlite --approval-preview approval.json --expected-sha256 <preview-digest> --evidence evidence.json
 ```
 
-This command checks the selected saved preview, verifies task-owned artifact bytes only
-if the preview is current, then rechecks expiry and journal scope/state after artifact I/O.
+This command checks the selected saved preview, verifies task-owned artifact bytes and
+the stored workflow claims below only if the preview is current, then rechecks expiry
+and journal scope/state after artifact I/O. Policy validity is also compared with the
+final approval-check time, so expiry during verification blocks the result.
 Both databases are opened read-only. The report binds the complete fresh approval and
 artifact assessments; it does not accept previously saved assessments as proof.
 
 `current` exits 0. A blocked preview exits 2 with its blockers; when blocked before file
-checks, `artifact_evidence` is null and `artifact_bytes_verified` is false. If expiry or
+checks, `artifact_evidence` and `evidence_claims` are null and `artifact_bytes_verified`
+is false. If expiry or
 reservation changes during file checks, the result is blocked even though verified byte
-evidence is included. Invalid inputs or artifact failures exit 2 without a partial report.
+evidence is included. Inconsistent claims also block even when the preview is current.
+The binding includes the complete claims assessment and a sorted, deduplicated blocker
+list prefixed with `approval:` or `evidence:`. Invalid inputs or artifact failures exit 2
+without a partial report. Existing callers must now supply canonical registered contracts;
+matching arbitrary JSON is no longer sufficient for this combined command.
 
 The recheck detects changes during the artifact stage, but it is not an atomic snapshot
 across databases and files or a lock against changes afterward. A current result still
@@ -128,8 +135,8 @@ This is consistency checking of local claims, not authentication of execution, r
 identity or policy authority. It does not validate every transitive dependency, referenced
 diff/log contents, real GitHub commits, or the tool payload against a journal proposal.
 The current engine does not automatically export these records as evidence artifacts.
-The existing combined approval command still checks bytes only; it does not consume
-this stricter report. `evidence_verified`, `live_authorized` and `retry_allowed` stay false.
+The combined approval command runs this stricter assessment fresh rather than trusting
+a saved report. `evidence_verified`, `live_authorized` and `retry_allowed` stay false.
 
 Next steps require verifying evidence provenance and remaining dependencies, durable request/decision
 storage, authenticated approver identity, policy verification, expiry and single-use

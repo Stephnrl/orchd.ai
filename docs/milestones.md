@@ -37,6 +37,8 @@ Combined local approval assessment now checks artifacts between initial and fina
 validation, detecting expiry or reservation changes during file checks without authorizing use.
 Stricter evidence-claim checks now validate canonical stored workflow contracts and their
 patch/test/review/policy relationships; independent provenance and live approval remain required.
+Combined approval assessment now requires those consistent claims, combines their blockers
+with approval blockers, and checks policy expiry against the final assessment time.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

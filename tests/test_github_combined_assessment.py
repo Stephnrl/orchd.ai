@@ -7,9 +7,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from orch.contracts import Rejected, digest
+from orch.contracts import Rejected, digest, ref
 from orch.github_approval import prepare_approval
-from orch.github_evidence import assess_approval_evidence, check_evidence
+from orch.github_evidence import assess_approval_evidence, check_evidence_contents
 from orch.github_journal import GitHubJournal
 from orch.storage import Store
 from test_github_preview import intent
@@ -24,9 +24,26 @@ class CombinedAssessmentTests(unittest.TestCase):
         self.store = Store(self.root / 'workflow')
         task = intent()['task_id']
         self.store.db.execute('INSERT INTO tasks VALUES(?,?,?)', (task, '{}', '{}'))
+        examples = json.loads((Path(__file__).resolve().parents[1] / 'contracts/v1/examples.json').read_text())
+        self.docs = {role: examples[kind] for role, kind in (
+            ('patch', 'PatchReceipt'), ('test', 'TestReceipt'), ('review', 'ReviewDecision'),
+            ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'))}
+        for role, document in self.docs.items():
+            document.update(id=role, task_id=task, created_at='2026-01-01T00:00:00Z')
+        self.docs['test']['patch'] = ref(self.docs['patch'])
+        request = self.docs['review_request']
+        request.update(patch=ref(self.docs['patch']), test_receipts=[ref(self.docs['test'])], implementer_invocation_id='implementer', reviewer_invocation_id='reviewer')
+        self.docs['review'].update(request=ref(request), reviewer_invocation_id='reviewer')
+        self.docs['tool']['tool'] = 'github'
+        self.docs['policy'].update(request=ref(self.docs['tool']), decision='require_human_approval', approval_request={'id': 'approval', 'sha256': 'a' * 64}, expires_at='2026-01-01T00:10:00Z')
         self.evidence = {'task_id': task}
-        for role in ('patch', 'test', 'review', 'policy'):
-            self.evidence[role + '_sha256'] = self.store.artifact(task, {'role': role})['sha256']
+        for role, document in self.docs.items():
+            self.store.put(document)
+            if role in ('patch', 'test', 'review', 'policy'):
+                self.evidence[role + '_sha256'] = self.store.artifact(task, document)['sha256']
+        clock = patch('orch.github_evidence.now', return_value='2026-01-01T00:01:00Z')
+        clock.start()
+        self.addCleanup(clock.stop)
         with patch('orch.github_approval.now', return_value='2026-01-01T00:00:00Z'):
             self.preview = prepare_approval(self.journal, self.saved['operation_id'], self.saved['sha256'], self.evidence)
 
@@ -52,7 +69,7 @@ class CombinedAssessmentTests(unittest.TestCase):
         self.assertEqual((self.root / 'journal.sqlite').read_bytes(), before)
 
     def test_initially_blocked_preview_skips_artifact_reads(self):
-        with patch('orch.github_approval.now', return_value='2026-01-01T00:15:00Z'), patch('orch.github_evidence.check_evidence', side_effect=AssertionError('No artifact reads')):
+        with patch('orch.github_approval.now', return_value='2026-01-01T00:15:00Z'), patch('orch.github_evidence.check_evidence_contents', side_effect=AssertionError('No artifact reads')):
             report = self.assess()
         self.assertEqual(report['status'], 'blocked')
         self.assertIsNone(report['binding']['artifact_evidence'])
@@ -67,11 +84,11 @@ class CombinedAssessmentTests(unittest.TestCase):
 
     def test_reservation_during_artifact_check_is_caught(self):
         def check_and_reserve(store, evidence):
-            result = check_evidence(store, evidence)
+            result = check_evidence_contents(store, evidence)
             self.journal.reserve(self.saved['operation_id'], self.saved['sha256'])
             return result
 
-        with patch('orch.github_approval.now', return_value='2026-01-01T00:01:00Z'), patch('orch.github_evidence.check_evidence', side_effect=check_and_reserve):
+        with patch('orch.github_approval.now', return_value='2026-01-01T00:01:00Z'), patch('orch.github_evidence.check_evidence_contents', side_effect=check_and_reserve):
             report = self.assess()
         self.assertEqual(report['status'], 'blocked')
         self.assertEqual(report['binding']['approval']['binding']['blockers'], ['journal_not_prepared'])
@@ -82,6 +99,34 @@ class CombinedAssessmentTests(unittest.TestCase):
             self.assess()
         self.assertFalse(self.store.db.in_transaction)
         self.assertFalse(self.journal.db.in_transaction)
+
+    def test_policy_expiry_at_final_check_blocks_unexpired_preview(self):
+        with patch('orch.github_approval.now', side_effect=['2026-01-01T00:09:59Z', '2026-01-01T00:10:00Z']):
+            report = self.assess()
+        self.assertEqual(report['binding']['approval']['status'], 'current')
+        self.assertEqual(report['binding']['evidence_claims']['status'], 'claims_consistent')
+        self.assertEqual(report['status'], 'blocked')
+        self.assertEqual(report['binding']['blockers'], ['evidence:policy_not_current'])
+
+    def test_declined_review_blocks_even_when_bytes_and_preview_match(self):
+        review = {**self.docs['review'], 'id': 'declined-review', 'decision': 'REJECT'}
+        self.store.put(review)
+        self.evidence['review_sha256'] = self.store.artifact(self.evidence['task_id'], review)['sha256']
+        with patch('orch.github_approval.now', return_value='2026-01-01T00:00:00Z'):
+            self.preview = prepare_approval(self.journal, self.saved['operation_id'], self.saved['sha256'], self.evidence)
+        with patch('orch.github_approval.now', return_value='2026-01-01T00:01:00Z'):
+            report = self.assess()
+        self.assertTrue(report['artifact_bytes_verified'])
+        self.assertEqual(report['binding']['approval']['status'], 'current')
+        self.assertEqual(report['status'], 'blocked')
+        self.assertIn('evidence:review_not_clean_accept', report['binding']['blockers'])
+
+    def test_arbitrary_json_no_longer_satisfies_combined_assessment(self):
+        self.evidence['review_sha256'] = self.store.artifact(self.evidence['task_id'], {'role': 'review'})['sha256']
+        with patch('orch.github_approval.now', return_value='2026-01-01T00:00:00Z'):
+            self.preview = prepare_approval(self.journal, self.saved['operation_id'], self.saved['sha256'], self.evidence)
+        with patch('orch.github_approval.now', return_value='2026-01-01T00:01:00Z'), self.assertRaises(Rejected):
+            self.assess()
 
     def test_cli_uses_read_only_stores_and_reports_failure_without_partial_output(self):
         from orch.__main__ import main
