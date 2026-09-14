@@ -32,6 +32,9 @@ class CombinedAssessmentTests(unittest.TestCase):
             ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'))}
         for role, document in self.docs.items():
             document.update(id=role, task_id=task, created_at='2026-01-01T00:00:00Z')
+            for field in ('started_at', 'ended_at'):
+                if field in document:
+                    document[field] = document['created_at']
         register_support(self.store, task, self.docs)
         self.docs['test']['patch'] = ref(self.docs['patch'])
         request = self.docs['review_request']
@@ -159,6 +162,17 @@ class CombinedAssessmentTests(unittest.TestCase):
                 report = self.assess()
             self.assertEqual(report['status'], 'blocked')
             self.assertIn('tool:payload_scope_mismatch', report['binding']['blockers'])
+
+    def test_policy_before_tool_request_blocks_with_matching_scope(self):
+        self.replace_tool({**self.docs['tool'], 'created_at': '2026-01-01T00:00:01Z'}, 'late-request')
+        with patch('orch.github_approval.now', return_value='2026-01-01T00:01:00Z'):
+            report = self.assess()
+        self.assertEqual(report['binding']['approval']['status'], 'current')
+        self.assertEqual(report['binding']['tool_scope']['status'], 'matches')
+        self.assertTrue(report['artifact_bytes_verified'])
+        self.assertEqual(report['status'], 'blocked')
+        self.assertIn('evidence:policy_timeline_invalid', report['binding']['blockers'])
+        self.assertFalse(report['live_authorized'])
 
     def test_operation_checksum_and_missing_payload_block(self):
         for tag, updates, reason in (
