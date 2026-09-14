@@ -8,10 +8,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from orch.contracts import Rejected, digest, ref
+from orch.contracts import Rejected, canonical, digest, ref
 from orch.github_evidence import check_evidence_contents
 from orch.storage import Store
-from github_evidence_support import register_support, link_plan_evidence
+from github_evidence_support import register_support, link_plan_evidence, register_operations
 
 
 class EvidenceClaimsTests(unittest.TestCase):
@@ -26,6 +26,8 @@ class EvidenceClaimsTests(unittest.TestCase):
             ('policy', 'ToolDecision'), ('review_request', 'ReviewRequest'), ('tool', 'ToolRequest'), ('test_request', 'TestRequest'), ('work_order', 'WorkOrder'), ('plan', 'ImplementationPlan'), ('plan_request', 'ApprovalRequest'), ('plan_decision', 'ApprovalDecision'), ('spec', 'TaskSpec'))}
         for role, document in self.docs.items():
             document.update(id=role, task_id=self.task)
+        self.docs['patch']['operation_id'] = 'patch-operation'
+        self.docs['test']['operation_id'] = self.docs['test_request']['operation_id'] = 'test-operation'
         self.docs['spec']['confirmed_by'] = 'fixture-operator'
         register_support(self.store, self.task, self.docs)
         self.docs['plan_request']['expires_at'] = '2026-09-12T14:15:00Z'
@@ -45,13 +47,15 @@ class EvidenceClaimsTests(unittest.TestCase):
         self.store.close()
         self.temp.cleanup()
 
-    def persist(self, omit=None, register=True):
+    def persist(self, omit=None, register=True, operations=True):
         self.evidence = {'task_id': self.task}
         for role, document in self.docs.items():
             if role != omit:
                 self.store.put(document)
             if role in ('patch', 'test', 'review', 'policy'):
                 self.evidence[role + '_sha256'] = self.store.artifact(self.task, document)['sha256']
+        if operations:
+            register_operations(self.store, self.docs)
         if register and omit not in ('plan_request', 'plan_decision'):
             self.store.db.execute('INSERT INTO approvals VALUES(?,?)',
                                   (self.docs['plan_request']['id'], self.docs['plan_decision']['id']))
@@ -247,6 +251,55 @@ class EvidenceClaimsTests(unittest.TestCase):
         self.persist(omit='plan')
         with self.assertRaisesRegex(Rejected, 'Missing task-owned'):
             self.check()
+
+    def test_missing_execution_operations_reject(self):
+        self.persist(operations=False)
+        with self.assertRaisesRegex(Rejected, 'Missing task-owned execution'):
+            self.check()
+        self.assertFalse(self.store.db.in_transaction)
+
+    def test_foreign_task_execution_operation_rejects(self):
+        self.persist()
+        other = 'b' * 32
+        self.store.db.execute('INSERT INTO tasks VALUES(?,?,?)', (other, '{}', '{}'))
+        self.store.db.execute('UPDATE operations SET task_id=? WHERE id=?', (other, 'test-operation'))
+        with self.assertRaisesRegex(Rejected, 'Missing task-owned execution'):
+            self.check()
+
+    def test_execution_stage_attempt_status_and_generation_must_match(self):
+        self.persist()
+        for role, stage in (('patch', 'implementation'), ('test', 'tests')):
+            for field, value in (('stage', 'other'), ('slot', '2'), ('status', 'started'), ('generation', 0)):
+                with self.subTest(role=role, field=field):
+                    self.store.db.execute('UPDATE operations SET stage=?,slot=?,status=?,generation=? WHERE id=?',
+                                          (stage, '1', 'done', 1, role + '-operation'))
+                    self.store.db.execute(f'UPDATE operations SET {field}=? WHERE id=?', (value, role + '-operation'))
+                    report = self.check()
+                    self.assertEqual(report['status'], 'blocked')
+                    self.assertIn(role + '_operation_not_completed', report['binding']['claims']['blockers'])
+            self.store.db.execute('UPDATE operations SET generation=1 WHERE id=?', (role + '-operation',))
+
+    def test_execution_result_must_bind_successful_receipt(self):
+        self.persist()
+        for result in ({'test': {'id': 'other', 'sha256': 'b' * 64}, 'failure': None},
+                       {'test': ref(self.docs['test']), 'failure': 'failed'},
+                       {'test': ref(self.docs['test'])}):
+            self.store.db.execute('UPDATE operations SET result=? WHERE id=?', (canonical(result).decode(), 'test-operation'))
+            self.assertIn('test_operation_result_mismatch', self.check()['binding']['claims']['blockers'])
+
+    def test_missing_or_oversized_execution_result_blocks(self):
+        self.persist()
+        for raw in (None, 'x' * (1024 * 1024 + 1)):
+            self.store.db.execute('UPDATE operations SET result=? WHERE id=?', (raw, 'test-operation'))
+            self.assertIn('test_operation_result_missing', self.check()['binding']['claims']['blockers'])
+
+    def test_malformed_or_noncanonical_execution_result_rejects(self):
+        self.persist()
+        for raw in ('not json', '[]', json.dumps({'test': ref(self.docs['test']), 'failure': None}, indent=2)):
+            self.store.db.execute('UPDATE operations SET result=? WHERE id=?', (raw, 'test-operation'))
+            with self.assertRaises(Rejected):
+                self.check()
+            self.assertFalse(self.store.db.in_transaction)
 
     def test_unregistered_plan_decision_blocks_without_writes(self):
         self.persist(register=False)

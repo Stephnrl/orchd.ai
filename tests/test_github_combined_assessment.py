@@ -14,7 +14,7 @@ from orch.github_evidence import assess_approval_evidence, check_evidence_conten
 from orch.github_journal import GitHubJournal
 from orch.storage import Store
 from test_github_preview import intent
-from github_evidence_support import register_support, link_plan_evidence
+from github_evidence_support import register_support, link_plan_evidence, register_operations
 
 
 class CombinedAssessmentTests(unittest.TestCase):
@@ -35,6 +35,8 @@ class CombinedAssessmentTests(unittest.TestCase):
             for field in ('started_at', 'ended_at'):
                 if field in document:
                     document[field] = document['created_at']
+        self.docs['patch']['operation_id'] = 'patch-operation'
+        self.docs['test']['operation_id'] = self.docs['test_request']['operation_id'] = 'test-operation'
         self.docs['spec']['confirmed_by'] = 'fixture-operator'
         register_support(self.store, task, self.docs)
         self.docs['work_order']['deadline'] = '2026-01-01T00:00:00Z'
@@ -59,6 +61,7 @@ class CombinedAssessmentTests(unittest.TestCase):
             self.store.put(document)
             if role in ('patch', 'test', 'review', 'policy'):
                 self.evidence[role + '_sha256'] = self.store.artifact(task, document)['sha256']
+        register_operations(self.store, self.docs)
         self.store.db.execute('INSERT INTO approvals VALUES(?,?)',
                               (self.docs['plan_request']['id'], self.docs['plan_decision']['id']))
         clock = patch('orch.github_evidence.now', return_value='2026-01-01T00:01:00Z')

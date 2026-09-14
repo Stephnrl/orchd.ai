@@ -124,11 +124,13 @@ def _assess_contents(store, task, contents):
     test_request = _stored_record(store, test['request'], task, 'TestRequest')
     work = _stored_record(store, patch['work_order'], task, 'WorkOrder')
     plan_claims = _plan_claims(store, task, work)
+    execution_claims = _execution_claims(store, task, work, patch, test)
     review_request = _stored_record(store, review['request'], task, 'ReviewRequest')
     tool = _stored_record(store, policy['request'], task, 'ToolRequest')
     supporting = _check_supporting_artifacts(store, task, patch, test)
     blockers = []
     blockers.extend(plan_claims['blockers'])
+    blockers.extend(execution_claims['blockers'])
     if work['repository'] != patch['repository']:
         blockers.append('work_order_repository_mismatch')
     if work['spec'] != review_request['spec'] or work['plan'] != review_request['plan']:
@@ -183,10 +185,37 @@ def _assess_contents(store, task, contents):
     if not datetime.fromisoformat(policy['created_at']) <= datetime.fromisoformat(checked) < datetime.fromisoformat(policy['expires_at']):
         blockers.append('policy_not_current')
     return {"records": {role: ref(document) for role, document in documents.items()},
-            "plan_approval": plan_claims, "work_order": ref(work), "test_request": ref(test_request), "review_request": ref(review_request), "tool_request": ref(tool), "checked_at": checked,
+            "execution": execution_claims, "plan_approval": plan_claims, "work_order": ref(work), "test_request": ref(test_request), "review_request": ref(review_request), "tool_request": ref(tool), "checked_at": checked,
             "policy_window": {"issued_at": policy['created_at'], "expires_at": policy['expires_at']},
             "supporting_artifacts": supporting,
             "blockers": blockers}
+
+
+def _execution_claims(store, task, work, patch, test):
+    operations, blockers = {}, []
+    for role, stage, receipt in (('patch', 'implementation', patch), ('test', 'tests', test)):
+        row = store.db.execute('SELECT stage,slot,status,generation,CASE WHEN length(CAST(result AS BLOB))<=? THEN result END AS result FROM operations WHERE id=? AND task_id=?',
+                               (MAX_BYTES, receipt['operation_id'], task)).fetchone()
+        if row is None:
+            raise Rejected('Missing task-owned execution operation')
+        if (row['stage'] != stage or row['slot'] != str(work['attempt']) or row['status'] != 'done'
+                or type(row['generation']) is not int or row['generation'] < 1):
+            blockers.append(role + '_operation_not_completed')
+        result_sha = None
+        if row['result'] is not None:
+            try:
+                result = json.loads(row['result'])
+                if not isinstance(result, dict) or canonical(result).decode() != row['result']:
+                    raise Rejected('Invalid execution result')
+                result_sha = digest(result)
+                if result.get(role) != ref(receipt) or 'failure' not in result or result['failure'] is not None:
+                    blockers.append(role + '_operation_result_mismatch')
+            except (ValueError, TypeError, RecursionError) as exc:
+                raise Rejected('Invalid execution result') from exc
+        else:
+            blockers.append(role + '_operation_result_missing')
+        operations[role] = {'operation_id': receipt['operation_id'], 'result_sha256': result_sha}
+    return {'operations': operations, 'blockers': blockers}
 
 
 def _plan_claims(store, task, work):
