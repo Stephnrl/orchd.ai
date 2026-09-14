@@ -31,6 +31,8 @@ A [GitHub-specific approval preview](github-approval.md) binds prepared journal 
 evidence/policy digest claims and expiry without issuing a decision or authorizing dispatch.
 Saved approval checks now enforce the preview structure and validity window and detect
 changes in journal scope/state or evidence claims, while keeping authorization disabled.
+Task-owned artifact checks now validate the claimed evidence bytes against canonical
+workflow metadata and content hashes; semantic outcomes and policy trust remain unverified.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
