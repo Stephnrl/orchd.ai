@@ -77,3 +77,9 @@ compliance claim or runtime dependency is made in this baseline.
 Residual risk: containers share a kernel; provider output can still be incorrect; secret
 recognition is imperfect; a local privileged user can rewrite the audit database. Stronger
 VM isolation, off-host audit signing and corporate identity integration are later decisions.
+
+The implemented [local operator session boundary](operator-sessions.md) now enforces
+idle/absolute expiry, immediate rotation and revocation, in-memory token handling,
+stale-client UI clearing and strict authenticated HTTP framing/JSON parsing. These
+controls are covered by clock-boundary, concurrency, raw HTTP and browser tests.
+They do not establish production identity or credential-broker readiness.

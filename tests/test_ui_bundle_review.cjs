@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const {webcrypto, createHash} = require('node:crypto');
 const nodes = new Map(), pending = [];
-function node() { return {value: '', textContent: '', handlers: {}, append() {}, replaceChildren() {}, addEventListener(name, fn) { this.handlers[name] = fn; }}; }
+function node() { return {value: '', textContent: '', handlers: {}, append() {}, replaceChildren() {}, querySelector() { return node(); }, addEventListener(name, fn) { this.handlers[name] = fn; }}; }
 function element(id) { if (!nodes.has(id)) nodes.set(id, node()); return nodes.get(id); }
 const context = vm.createContext({document: {getElementById: element, createElement: node}, setInterval() {}, Date, Map, Set, Uint8Array, crypto: webcrypto, AbortController, fetch(route, options) { return new Promise(resolve => pending.push({route, options, resolve})); }});
 vm.runInContext(fs.readFileSync(require('node:path').join(__dirname, '../orch/ui/app.js'), 'utf8'), context);
@@ -44,7 +44,10 @@ async function fetched(count) { for (let n = 0; n < 100 && pending.length < coun
   assert.match(element('bundle-review-status').textContent, /Unexpected verification response/);
   const auth = click(); await fetched(4);
   pending[3].resolve({ok:false, status:401}); await auth;
-  assert.match(element('bundle-review-status').textContent, /Session expired/);
+  assert.match(element('notice').textContent, /Session expired/);
+  assert.equal(element('workspace').hidden, true);
+  assert.equal(element('bundle-review-json').textContent, '');
+  ready();
   let finish;
   element('bundle-file').files = [{size:2, arrayBuffer: () => new Promise(resolve => { finish = resolve; })}];
   const cancelled = click(); element('clear-bundle-review').handlers.click();

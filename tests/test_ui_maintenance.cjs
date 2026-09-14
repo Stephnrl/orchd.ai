@@ -57,7 +57,7 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, "../orch/ui/app.js"), "utf8
     assert.match(element("maintenance-status").textContent, /Report unavailable/);
     assert.equal(element("maintenance-summary").hidden, true);
     assert.equal(element("maintenance-json").textContent, "");
-    assert.equal(element("integrity-report").disabled, false);
+    assert.equal(element("integrity-report").disabled, status === 401);
   }
   assert.ok(calls.every(call => call.options.method === "GET"));
   console.log("PASS: manual authenticated maintenance reads, busy guards, verdicts and stale-report clearing");
