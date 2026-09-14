@@ -28,8 +28,10 @@ PRs opened while developing this repository are collaboration through developmen
 tools, not evidence that orchd.ai itself has a GitHub integration. Deterministic
 fixture success also does not establish compatibility with live model providers.
 
-The latest full offline run completed 461 Python tests: 456 passed and five expected
-Docker skips. The evidence review workspace also passed eight Chromium tests and eight targeted UI scripts.
+The latest full offline run completed 464 Python tests: 459 passed and five expected
+Docker skips. The evidence review and bundle download workspace also passed eight
+Chromium tests and nine targeted UI scripts, including independent verification of a
+browser-downloaded bundle.
 Those are dated local results, not a claim that every current host or hosted CI job has
 passed. Docker evidence expires and is tied to source, host, daemon and image.
 

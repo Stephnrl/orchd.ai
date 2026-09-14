@@ -54,6 +54,8 @@ jobs:
         run: node tests/test_ui_evidence.cjs
       - name: Check evidence review selection and stale responses
         run: node tests/test_ui_claims.cjs
+      - name: Check bundle download bounds and cancellation
+        run: node tests/test_ui_bundle.cjs
       - name: Check list request ordering
         run: node tests/test_ui_lists.cjs
       - name: Check event replay failures

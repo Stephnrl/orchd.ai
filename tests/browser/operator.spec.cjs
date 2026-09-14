@@ -1,5 +1,6 @@
 const { test: base, expect } = require('@playwright/test');
-const { spawn } = require('node:child_process');
+const { spawn, execFileSync } = require('node:child_process');
+const { createHash } = require('node:crypto');
 const { mkdtemp, rm, readFile } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
@@ -180,6 +181,22 @@ test('explicit evidence review checks and saves a selection without advancing', 
   const selection = JSON.parse(await readFile(await file.path(), 'utf8'));
   expect(selection.task_id).toBe(task);
   expect(Object.keys(selection).sort()).toEqual(['patch', 'policy', 'review', 'task_id', 'test']);
+  const bundleDownload = page.waitForEvent('download');
+  const bundleResponse = page.waitForResponse(response => response.url().endsWith('/evidence-bundle'));
+  await page.locator('#download-bundle').click();
+  const bundleFile = await bundleDownload, http = await bundleResponse;
+  expect(bundleFile.suggestedFilename()).toBe('orchd-evidence-bundle.json');
+  expect(http.status()).toBe(200);
+  expect(http.headers()['cache-control']).toBe('no-store');
+  expect(http.headers()['content-disposition']).toContain('attachment;');
+  const bundlePath = await bundleFile.path(), bytes = await readFile(bundlePath);
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  expect(http.headers()['x-orch-bundle-sha256']).toBe(sha);
+  expect(Number(http.headers()['content-length'])).toBe(bytes.length);
+  await expect(page.locator('#bundle-digest')).toContainText(sha);
+  const verified = JSON.parse(execFileSync(process.env.ORCH_TEST_PYTHON || 'python', ['-c', 'import json,sys; from orch.github_bundle import verify_bundle; print(json.dumps(verify_bundle(sys.argv[1],sys.argv[2])))', bundlePath, sha], {encoding: 'utf8', windowsHide: true}));
+  expect(verified.status).toBe('claims_consistent');
+  expect(verified.live_authorized).toBe(false);
   expect(await readTask(page, operator, task)).toEqual(before);
   // Save a review image when requested, without the session input or token.
   if (process.env.ORCH_REVIEW_SCREENSHOT) {
@@ -191,6 +208,8 @@ test('explicit evidence review checks and saves a selection without advancing', 
   }
   await page.locator('#refresh-task').click();
   await expect(page.locator('#save-selection')).toBeDisabled();
+  await expect(page.locator('#download-bundle')).toBeDisabled();
+  await expect(page.locator('#bundle-digest')).toBeEmpty();
   await expect(page.locator('#claim-review')).toHaveValue('');
   await expect(page.locator('#claims-details')).toBeHidden();
 });

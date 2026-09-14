@@ -3,11 +3,18 @@ import hmac
 import json
 import secrets
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlsplit, parse_qs
 
 from .contracts import Rejected, ref
+
+
+@dataclass(frozen=True)
+class BundleDownload:
+    content: bytes
+    sha256: str
 
 
 def page(query):
@@ -59,6 +66,12 @@ class Application:
             if len(parts) < 2 or parts[0] != "tasks":
                 return 404, {"error": "Unknown route"}
             task = parts[1]
+            if method == 'POST' and parts[2:] == ['evidence-bundle']:
+                from .github_bundle import build_bundle
+                if not isinstance(payload, dict) or set(payload) != {'patch', 'test', 'review', 'policy'}:
+                    raise Rejected('Explicit evidence selection required')
+                raw, report = build_bundle(self.engine.store, {'task_id': task, **payload})
+                return 200, BundleDownload(raw, report['binding']['bundle_sha256'])
             if method == 'GET' and parts[2:] == ['evidence-catalog']:
                 from .github_evidence import list_evidence_records
                 return 200, list_evidence_records(self.engine.store, task)
@@ -197,6 +210,15 @@ def serve(engine, port=8080):
                     return
                 path += "?after=" + cursor + "&limit=100"
             code, output = app.dispatch(self.command, path, body, token)
+            if isinstance(output, BundleDownload):
+                self.send_response(code)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(output.content)))
+                self.send_header('Content-Disposition', 'attachment; filename="orchd-evidence-bundle.json"')
+                self.send_header('X-Orch-Bundle-SHA256', output.sha256)
+                self.end_headers()
+                self.wfile.write(output.content)
+                return
             if streaming and code == 200:
                 encoded = ("retry: 2000\n\n" + "".join(f"id: {e['sequence']}\nevent: task_event\ndata: {json.dumps(e)}\n\n" for e in output)).encode()
                 self.respond(code, encoded, "text/event-stream; charset=utf-8")

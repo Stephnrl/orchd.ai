@@ -6,6 +6,7 @@ let stateRequest = 0;
 let evidenceRequest = 0;
 let evidenceDownload = null;
 let claimRequest = 0, claimLoading = false, claimResult = null;
+let claimDownloadController = null;
 let claimChoices = {review: new Map(), policy: new Map()};
 let taskListRequest = 0, recordListRequest = 0, tasksLoading = false, recordsLoading = false;
 const names = new Map();
@@ -110,8 +111,12 @@ function claimControls() {
   for (const role of ["review", "policy"]) $("inspect-claim-" + role).disabled = unavailable || !claimChoices[role].has($("claim-" + role).value);
   $("assess-claims").disabled = unavailable || !claimChoices.review.has($("claim-review").value) || !claimChoices.policy.has($("claim-policy").value);
   $("save-selection").disabled = unavailable || !claimResult || claimResult.epoch !== epoch;
+  $("download-bundle").disabled = unavailable || !!claimDownloadController || !claimResult || claimResult.epoch !== epoch || claimResult.status !== "claims_consistent";
 }
 function clearClaimResult(message) {
+  claimDownloadController?.abort(); claimDownloadController = null;
+  $("bundle-digest").textContent = "";
+  $("download-bundle").disabled = true;
   claimResult = null;
   $("claims-status").textContent = message;
   $("claims-blockers").replaceChildren();
@@ -162,7 +167,7 @@ async function assessClaimSelection() {
   try {
     const result = await api(`/tasks/${task}/assess-evidence`, {review, policy});
     if (version !== epoch || request !== claimRequest) return;
-    claimResult = {epoch: version, selection: result.selection};
+    claimResult = {epoch: version, selection: result.selection, status: result.assessment.status};
     const assessment = result.assessment, claims = assessment.binding.claims;
     $("claims-status").textContent = (assessment.status === "claims_consistent" ? "Selected evidence claims are consistent." : "Selected evidence is blocked.") +
       " Checked " + claims.checked_at + ". This does not approve or run the task.";
@@ -176,6 +181,53 @@ async function assessClaimSelection() {
   } finally { if (version === epoch && request === claimRequest) { claimLoading = false; claimControls(); } }
 }
 $("load-claims").addEventListener("click", loadClaimChoices);
+async function readBundleResponse(response) {
+  const limit = 16 * 1024 * 1024, length = response.headers.get("Content-Length"), sha = response.headers.get("X-Orch-Bundle-SHA256");
+  if (!response.ok) throw new Error(response.status === 401 ? "Session expired. Reconnect." : "Fresh bundle assessment rejected. Check the evidence again.");
+  if (response.headers.get("Content-Type") !== "application/json" || !/^[0-9]+$/.test(length || "") || Number(length) < 1 || Number(length) > limit || !/^[a-f0-9]{64}$/.test(sha || "")) {
+    await response.body?.cancel(); throw new Error("Invalid bundle response headers.");
+  }
+  const reader = response.body.getReader(), chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > Number(length) || size > limit) throw new Error("Bundle exceeds its declared size.");
+      chunks.push(value);
+    }
+    if (size !== Number(length)) throw new Error("Incomplete bundle response.");
+  } catch (error) { await reader.cancel(); throw error; }
+  finally { reader.releaseLock(); }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  const actual = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), byte => byte.toString(16).padStart(2, "0")).join("");
+  if (actual !== sha) throw new Error("Bundle digest mismatch.");
+  return {bytes, sha};
+}
+$("download-bundle").addEventListener("click", async () => {
+  if (busy || claimLoading || claimDownloadController || !snapshot || !token || !claimResult || claimResult.epoch !== epoch || claimResult.status !== "claims_consistent") return;
+  const version = epoch, request = claimRequest, task = selected, controller = new AbortController();
+  const {task_id, ...selection} = claimResult.selection;
+  claimDownloadController = controller; claimControls();
+  $("bundle-digest").textContent = "Preparing and verifying bundle…";
+  try {
+    const response = await fetch(`/tasks/${task}/evidence-bundle`, {method: "POST", headers: {Authorization: "Bearer " + token, "Content-Type": "application/json"}, body: JSON.stringify(selection), cache: "no-store", credentials: "omit", signal: controller.signal});
+    const {bytes, sha} = await readBundleResponse(response);
+    if (controller.signal.aborted || version !== epoch || request !== claimRequest) return;
+    const url = URL.createObjectURL(new Blob([bytes], {type: "application/json"})), link = document.createElement("a");
+    link.href = url; link.download = "orchd-evidence-bundle.json"; document.body.append(link);
+    try { link.click(); } finally { link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    $("bundle-digest").textContent = "Bundle prepared for download. Keep this SHA-256 for verification: " + sha;
+  } catch (error) {
+    if (!controller.signal.aborted && version === epoch && request === claimRequest) clearClaimResult("Bundle download unavailable. " + error.message);
+  } finally {
+    if (claimDownloadController === controller) claimDownloadController = null;
+    claimControls();
+  }
+});
 $("assess-claims").addEventListener("click", assessClaimSelection);
 for (const role of ["review", "policy"]) $("inspect-claim-" + role).addEventListener("click", async () => {
   const chosen = claimChoices[role].get($("claim-" + role).value), version = epoch;
