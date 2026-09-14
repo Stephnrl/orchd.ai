@@ -11,6 +11,8 @@ An [offline reconciliation classifier](github-reconciliation.md) now distinguish
 single matching draft PR from unresolved observations without enabling dispatch or retry.
 A separate [GitHub operation journal](github-journal.md) now durably stages immutable
 scope and permits one conservative attempt reservation per task/operation.
+Read-only inspection validates retained scope and reservation evidence without creating
+or initializing a journal, reconciling an outcome or granting dispatch authority.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

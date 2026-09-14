@@ -12,13 +12,13 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
     parser.add_argument("--image", help="Preloaded digest-pinned Python image for Docker")
     parser.add_argument("--task")
-    parser.add_argument("--operation-id", help="Recovered operation whose workspace cleanup should be retried")
+    parser.add_argument("--operation-id", help="Operation to inspect or retry workspace cleanup for")
     parser.add_argument("--request-id", help="Expired pending approval request ID")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--destination")
@@ -35,6 +35,22 @@ def main():
     parser.add_argument("--observations", help="Offline JSON observations for GitHub assessment")
     parser.add_argument("--journal", help="Separate local GitHub operation journal database")
     args = parser.parse_args()
+    if args.command == "github-inspect":
+        if not args.journal or not args.operation_id:
+            parser.error("github-inspect requires --journal and --operation-id")
+        from .github_journal import GitHubJournal
+        from .contracts import Rejected
+        import sqlite3
+        journal = None
+        try:
+            journal = GitHubJournal(args.journal, read_only=True)
+            print(json.dumps(journal.get(args.operation_id), indent=2))
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error("Cannot inspect GitHub operation; check existing journal, identity and record integrity")
+        finally:
+            if journal is not None:
+                journal.close()
+        return
     if args.command == "github-stage":
         if not args.intent or not args.allow_repository or args.repository_id is None or not args.journal:
             parser.error("github-stage requires --intent, --allow-repository, --repository-id and --journal")

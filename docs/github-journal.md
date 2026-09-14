@@ -21,7 +21,7 @@ implemented; this deliberately conservative milestone does not allow intent revi
 The Python `GitHubJournal.reserve(operation_id, expected_sha256)` API compares the
 expected digest and transitions `prepared` to `uncertain` in one immediate transaction,
 with `synchronous=FULL`. It commits before returning. The journal has no network function.
-The CLI only stages; it does not expose reservation or dispatch.
+The CLI stages and inspects; it does not expose reservation or dispatch.
 
 Exactly one concurrent caller can reserve an operation. Reopening after a process exit
 retains `uncertain`; restaging never resets it. Further reservations are rejected. A
@@ -34,6 +34,29 @@ reservation through ordinary SQL updates. The scope digest detects accidental co
 changes. This is not protection against an administrator replacing or editing the file,
 nor a signed authorization record. Process-crash tests do not establish physical power-loss
 durability on every filesystem or network-mounted storage.
+
+## Read-only inspection
+
+```sh
+python -m orch github-inspect --journal .runtime/github-journal.sqlite --operation-id bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+```
+
+Use the operation ID returned by staging. Inspection opens an existing journal in
+SQLite read-only mode, without creating a missing file or parent directory or initializing
+a schema. It returns the retained scope, digest, state and reservation timestamp.
+An unknown operation, unsupported database or invalid record exits with code 2.
+Success only means the local record passed validation; the result still reports
+`live_authorized: false` and `retry_allowed: false`.
+
+Every journal read now reconstructs the expected preview and verifies its request shape,
+canonical encoding, nested and outer digests, task/operation binding and reservation-state
+consistency. Invalid stored records also prevent staging or reservation from succeeding.
+These checks detect malformed evidence; they do not authenticate the repository identity
+against GitHub or protect against an administrator rewriting a fully consistent record.
+Inspection does not reconcile, repair, reset or dispatch an operation.
+
+Python callers can use `GitHubJournal(path, read_only=True)` and `get(operation_id)`;
+both mutation methods reject this mode, and SQLite itself rejects writes.
 
 ## Storage and remaining recovery work
 
