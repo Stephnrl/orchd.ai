@@ -52,6 +52,8 @@ jobs:
         run: node tests/test_ui_refresh.cjs
       - name: Check evidence request ordering
         run: node tests/test_ui_evidence.cjs
+      - name: Check evidence review selection and stale responses
+        run: node tests/test_ui_claims.cjs
       - name: Check list request ordering
         run: node tests/test_ui_lists.cjs
       - name: Check event replay failures

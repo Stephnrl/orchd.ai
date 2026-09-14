@@ -97,6 +97,9 @@ state again after bundle/tool inspection; no approval decision or dispatch is en
 ref observation snapshots to that review, enforces a five-minute freshness window and
 rechecks journal state and policy/approval expiry after observation assessment. Supplied
 responses and timestamps remain unauthenticated; no remote fetch or dispatch is enabled.
+The [local evidence review workspace](evidence-review-ui.md) now exposes explicit
+review/policy selection, inspection, diagnostics and selection downloads through
+authenticated API routes and the UI, with stale-response guards and browser coverage.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

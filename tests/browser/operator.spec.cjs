@@ -139,6 +139,62 @@ async function connect(page, token) {
   await expect(page.locator('#token')).toHaveValue('');
 }
 
+test('explicit evidence review checks and saves a selection without advancing', async ({ page, operator }) => {
+  await connect(page, operator.token);
+  await page.locator('#create button').click();
+  await expect(page.locator('#task-id')).not.toBeEmpty();
+  const task = await page.locator('#task-id').textContent();
+  await page.locator('#run').click();
+  await expect(page.locator('#state')).toHaveText('AWAITING PLAN APPROVAL');
+  const plan = await readTask(page, operator, task);
+  await expect(page.locator('#events li')).toHaveCount(plan.state.last_event_sequence);
+  await page.locator('#reviewed').check();
+  await page.locator('#approve').click();
+  await expect(page.locator('#approval')).toBeHidden();
+  await page.locator('#run').click();
+  await expect(page.locator('#state')).toHaveText('AWAITING ACTION APPROVAL');
+  const before = await readTask(page, operator, task);
+  await expect(page.locator('#events li')).toHaveCount(before.state.last_event_sequence);
+  await page.locator('#load-claims').click();
+  await expect(page.locator('#claims-status')).toContainText('Choose a review and policy explicitly');
+  await expect(page.locator('#assess-claims')).toBeDisabled();
+  await page.locator('#claim-review').selectOption({index: 1});
+  // The catalog also contains implementation/test policies; choose the action policy explicitly.
+  const policyIds = await page.locator('#claim-policy option').evaluateAll(options => options.map(option => option.value).filter(Boolean));
+  let actionPolicy;
+  for (const id of policyIds) {
+    const response = await page.request.get(`${operator.url}/tasks/${task}/records/${id}`, {headers: {Authorization: `Bearer ${operator.token}`}});
+    if ((await response.json()).decision === 'require_human_approval') actionPolicy = id;
+  }
+  expect(actionPolicy).toBeTruthy();
+  await page.locator('#claim-policy').selectOption(actionPolicy);
+  await page.locator('#inspect-claim-policy').click();
+  await expect(page.locator('#evidence-title')).toHaveText('ToolDecision');
+  await expect(page.locator('#evidence-json')).toContainText(actionPolicy);
+  await page.locator('#assess-claims').click();
+  await expect(page.locator('#claims-status')).toContainText('Selected evidence claims are consistent');
+  const downloaded = page.waitForEvent('download');
+  await page.locator('#save-selection').click();
+  const file = await downloaded;
+  expect(file.suggestedFilename()).toBe('orchd-record-selection.json');
+  const selection = JSON.parse(await readFile(await file.path(), 'utf8'));
+  expect(selection.task_id).toBe(task);
+  expect(Object.keys(selection).sort()).toEqual(['patch', 'policy', 'review', 'task_id', 'test']);
+  expect(await readTask(page, operator, task)).toEqual(before);
+  // Save a review image when requested, without the session input or token.
+  if (process.env.ORCH_REVIEW_SCREENSHOT) {
+    const panel = page.locator('section[aria-labelledby="claims-title"]');
+    await panel.screenshot({path: process.env.ORCH_REVIEW_SCREENSHOT});
+    await page.setViewportSize({width: 390, height: 844});
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await panel.screenshot({path: process.env.ORCH_REVIEW_SCREENSHOT.replace('.png', '-mobile.png')});
+  }
+  await page.locator('#refresh-task').click();
+  await expect(page.locator('#save-selection')).toBeDisabled();
+  await expect(page.locator('#claim-review')).toHaveValue('');
+  await expect(page.locator('#claims-details')).toBeHidden();
+});
+
 test('task titles remain literal and duplicate titles select distinct tasks', async ({ page, operator }) => {
   await connect(page, operator.token);
   const title = '<img src=x onerror=alert(1)> Same title';

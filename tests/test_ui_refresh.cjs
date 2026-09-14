@@ -5,10 +5,10 @@ const vm = require("node:vm");
 const nodes = new Map();
 function element(id) {
   if (!nodes.has(id)) nodes.set(id, {checked: false, hidden: false, textContent: "", handlers: {},
-    addEventListener(name, handler) { this.handlers[name] = handler; }, querySelector() { return element(id + "-button"); }});
+    replaceChildren() {}, append() {}, addEventListener(name, handler) { this.handlers[name] = handler; }, querySelector() { return element(id + "-button"); }});
   return nodes.get(id);
 }
-const context = vm.createContext({document: {getElementById: element}, setInterval() {}, Date, Map, Set});
+const context = vm.createContext({document: {getElementById: element, createElement() { return {}; }}, setInterval() {}, Date, Map, Set});
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../orch/ui/app.js"), "utf8"), context);
 const pending = [];
 context.request = route => route.includes("/records/") ? Promise.resolve({title: "Fixture"}) :

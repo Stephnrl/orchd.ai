@@ -2,6 +2,7 @@
 import hmac
 import json
 import secrets
+import sqlite3
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlsplit, parse_qs
@@ -58,6 +59,16 @@ class Application:
             if len(parts) < 2 or parts[0] != "tasks":
                 return 404, {"error": "Unknown route"}
             task = parts[1]
+            if method == 'GET' and parts[2:] == ['evidence-catalog']:
+                from .github_evidence import list_evidence_records
+                return 200, list_evidence_records(self.engine.store, task)
+            if method == 'POST' and parts[2:] == ['assess-evidence']:
+                from .github_evidence import resolve_record_selection, check_record_claims
+                if not isinstance(payload, dict) or set(payload) != {'review', 'policy'}:
+                    raise Rejected('Explicit review and policy references required')
+                selection = resolve_record_selection(self.engine.store, {'task_id': task, **payload})
+                assessment = check_record_claims(self.engine.store, selection)
+                return 200, {'selection': selection, 'assessment': assessment}
             if method == "GET" and parts[2:] == ["recovery-diagnostics"]:
                 return 200, self.engine.recovery_diagnostics(task)
             if method == "GET" and parts[2:] == ["storage"]:
@@ -116,7 +127,7 @@ class Application:
                     raise Rejected("Invalid cancellation fields")
                 return 200, self.engine.cancel(task, payload["expected_revision"], payload["reason"])
             return 404, {"error": "Unknown route"}
-        except (Rejected, KeyError, TypeError, ValueError, OSError):
+        except (Rejected, KeyError, TypeError, ValueError, OSError, sqlite3.Error):
             return 409, {"error": "Request rejected; inspect current task and approval"}
 
 
