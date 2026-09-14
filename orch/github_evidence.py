@@ -15,6 +15,29 @@ ARTIFACT = Draft202012Validator({'$defs': SCHEMA['$defs'], '$ref': '#/$defs/Arti
 MAX_BYTES = 1024 * 1024
 MAX_SUPPORT_REFERENCES = 32
 MAX_SUPPORT_BYTES = 8 * 1024 * 1024
+RECORD_ROLES = {'patch': 'PatchReceipt', 'test': 'TestReceipt', 'review': 'ReviewDecision', 'policy': 'ToolDecision'}
+DOCUMENT_REF = Draft202012Validator({'$defs': SCHEMA['$defs'], '$ref': '#/$defs/DocumentRef'})
+
+
+def check_record_claims(store, selection):
+    if (not isinstance(selection, dict) or set(selection) != {'task_id', *RECORD_ROLES}
+            or not isinstance(selection['task_id'], str) or not re.fullmatch(r'[a-f0-9]{32}', selection['task_id'])
+            or any(not DOCUMENT_REF.is_valid(selection[role]) for role in RECORD_ROLES)):
+        raise Rejected('Invalid evidence record selection')
+    store.db.execute('BEGIN')
+    try:
+        contents = {role: canonical(_stored_record(store, selection[role], selection['task_id'], kind))
+                    for role, kind in RECORD_ROLES.items()}
+        claims = _assess_contents(store, selection['task_id'], contents)
+        binding = {'schema_version': '1.0.0', 'selection': selection, 'claims': claims}
+        report = {'kind': 'GitHubRecordClaimsAssessment', 'binding': binding, 'sha256': digest(binding),
+                  'status': 'blocked' if claims['blockers'] else 'claims_consistent',
+                  'evidence_verified': False, 'live_authorized': False, 'retry_allowed': False}
+        store.db.execute('COMMIT')
+        return report
+    except BaseException:
+        store.db.execute('ROLLBACK')
+        raise
 
 
 def assess_approval_evidence(journal, store, preview, expected_sha256, evidence):

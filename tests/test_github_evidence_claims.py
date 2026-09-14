@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from orch.contracts import Rejected, canonical, digest, ref
-from orch.github_evidence import check_evidence_contents
+from orch.github_evidence import check_evidence_contents, check_record_claims
 from orch.storage import Store
 from github_evidence_support import register_support, link_plan_evidence, register_operations
 
@@ -73,6 +73,51 @@ class EvidenceClaimsTests(unittest.TestCase):
         for flag in ('evidence_verified', 'live_authorized', 'retry_allowed'):
             self.assertIs(report[flag], False)
         self.assertNotIn('summary', json.dumps(report))
+
+    def selection(self):
+        return {'task_id': self.task, **{role: ref(self.docs[role]) for role in ('patch', 'test', 'review', 'policy')}}
+
+    def test_direct_record_claims_need_no_primary_receipt_artifacts(self):
+        self.persist()
+        for role in ('patch', 'test', 'review', 'policy'):
+            (self.store.root / 'artifacts' / self.evidence[role + '_sha256']).unlink()
+        before = self.store.db.total_changes
+        with patch('orch.github_evidence.now', return_value='2026-09-12T14:01:00Z'):
+            report = check_record_claims(self.store, self.selection())
+        self.assertEqual(report['status'], 'claims_consistent')
+        self.assertEqual(report['sha256'], digest(report['binding']))
+        self.assertFalse(report['live_authorized'])
+        self.assertEqual(self.store.db.total_changes, before)
+        self.assertNotIn('artifact_bytes_verified', report)
+
+    def test_record_selection_is_closed_and_hash_bound(self):
+        self.persist()
+        for selection in ({**self.selection(), 'extra': True}, {**self.selection(), 'task_id': 'other'},
+                          {**self.selection(), 'review': {'id': 'review', 'sha256': 'b' * 64}},
+                          {**self.selection(), 'review': ref(self.docs['test'])}):
+            with self.assertRaises(Rejected):
+                check_record_claims(self.store, selection)
+            self.assertFalse(self.store.db.in_transaction)
+
+    def test_direct_record_cli_is_read_only_and_reports_blockers(self):
+        from orch.__main__ import main
+        self.persist(register=False)
+        path = Path(self.temp.name) / 'records.json'
+        path.write_text(json.dumps(self.selection()))
+        output = io.StringIO()
+        argv = ['orch', 'github-check-record-claims', '--data', str(self.store.root), '--records', str(path)]
+        with patch.object(sys, 'argv', argv), redirect_stdout(output), patch('orch.github_evidence.now', return_value='2026-09-12T14:01:00Z'), patch('orch.__main__.Engine', side_effect=AssertionError('No workflow')), patch('socket.socket', side_effect=AssertionError('No network')), patch('subprocess.Popen', side_effect=AssertionError('No process')):
+            with self.assertRaises(SystemExit) as error:
+                main()
+        self.assertEqual(error.exception.code, 2)
+        self.assertIn('plan_approval_not_registered', json.loads(output.getvalue())['binding']['claims']['blockers'])
+        path.write_text('{"unexpected": true}')
+        output = io.StringIO()
+        with patch.object(sys, 'argv', argv), redirect_stdout(output), redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as error:
+                main()
+        self.assertEqual(error.exception.code, 2)
+        self.assertEqual(output.getvalue(), '')
 
     def test_failed_tests_and_declined_review_block(self):
         self.docs['test'].update(outcome='failed', exit_code=1)
