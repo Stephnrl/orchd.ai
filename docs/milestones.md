@@ -236,7 +236,7 @@ scheduling, concurrent workers and retrieval remain outside MVP.
 
 The [offline Jira foundation](jira-preview.md) now implements explicit instance/project/
 issue validation, a bounded untrusted-text projection and comment previews bound to that
-snapshot. It does not enable Jira calls, task adoption, issue transitions or creation.
+snapshot. It does not enable Jira calls or task adoption.
 [Jira comment recovery](jira-comment-recovery.md) adds preview-bound read plans and
 paginated candidate assessment, including author/visibility matching. Incomplete or
 ambiguous captures remain unresolved. It does not confirm delivery or authorize another attempt.
@@ -245,6 +245,11 @@ capacity enforcement, integrity audits and recovery against saved scope. Live di
 credential admission and operator retry policy remain unimplemented.
 [Jira recovery bundles](jira-backups.md) now provide verified snapshots, comparison with
 active reservation history and disposable recovery drills. They do not restore active storage.
+[The consolidated Jira package](jira-integration.md) now adds metadata-bound Epic/Story/Task
+creation, transitions, Epic relationships, issue links, GitHub associations, journal support
+for those actions, expiring review previews and identity/permission/freshness preflight.
+A synthetic acceptance scenario exercises the complete offline lifecycle. Live transport,
+credential/approval admission and authoritative evidence/recovery remain explicit deployment gates.
 
 ## Decisions to resolve before enabling real execution
 

@@ -18,7 +18,7 @@ an assumption that more UI features alone will make the system production-ready.
 | 5. Guardian/tool broker and policies | Implemented for the fixture workflow; broader tools and external brokers remain |
 | 6. Local management UI | Substantially implemented, including restart/replay, evidence and operator controls |
 | 7. GitHub integration | Offline preview, ref comparison, reconciliation classifier and durable intent/reservation journal; platform actions still simulated; no live PR creation |
-| 8. Jira Data Center integration | Offline preparation, durable journal, paginated recovery, verified backups and recovery drills; live transport, credentials and broader Jira actions remain |
+| 8. Jira Data Center integration | Consolidated offline comments, Epic/Story/Task preparation, relationships, transitions, GitHub associations, durable journal, review/preflight and recovery; live deployment/admission remains blocked |
 | 9. Credential broker/auth hardening | Local session boundary implemented; production provider credentials/SSO remain |
 | 10. OWASP/ACS hardening and adversarial tests | Substantial boundary tests; independent deployment review and broader live-system testing remain |
 | 11. Concurrent workers | Deferred; current execution is deliberately bounded |
@@ -28,9 +28,10 @@ PRs opened while developing this repository are collaboration through developmen
 tools, not evidence that orchd.ai itself has a GitHub integration. Deterministic
 fixture success also does not establish compatibility with live model providers.
 
-The latest full offline run completed 544 Python tests: 539 passed and five expected
-Docker skips. This includes Jira snapshots, stale-backup comparison and disposable recovery drills.
-All 53 focused Jira tests also passed after final history-preservation and cleanup checks. The most
+The latest full offline run completed 567 Python tests: 562 passed and five expected
+Docker skips. This includes the consolidated Jira action/review/recovery package and its
+synthetic end-to-end acceptance scenario. All 76 focused Jira tests also passed after final
+field-type, retained-author and profile-override checks. The most
 recent UI milestone passed nine Chromium tests and ten targeted UI scripts, including
 downloaded-bundle verification and received-bundle review in an empty workspace after
 removing the source store; UI checks were not rerun for these CLI-only Jira changes.
@@ -64,6 +65,11 @@ passed. Docker evidence expires and is tied to source, host, daemon and image.
    cross-process capacity enforcement and read-only integrity/recovery diagnostics.
    [Jira recovery bundles](jira-backups.md) now verify snapshots, compare reservation history
    and exercise recovery on disposable copies; actual restore admission remains deferred.
+   [The consolidated Jira package](jira-integration.md) now covers the remaining bounded
+   offline action set, legacy journal compatibility and expiring review/preflight checks.
+   The executable deployment report keeps version conformance, credentials, trusted transport,
+   independent containment, authenticated approval, verified workflow evidence and authoritative
+   reconciliation/restore policy blocked. Completing the offline package does not close Phase 8.
 4. Complete deployment/auth hardening and adversarial release checks before concurrency.
 5. Define and implement bounded concurrent-worker and advanced-orchestration milestones.
 
