@@ -8,6 +8,10 @@ import sqlite3
 from .contracts import Rejected, canonical, digest, now
 from .github_preview import prepare_pull_request
 
+MAX_RECORDS = 1000
+MAX_TOTAL_SCOPE_BYTES = 16 * 1024 * 1024
+MAX_SCOPE_BYTES = 65536
+
 
 def bound_scope(intent, allowed_repository, repository_id):
     if type(repository_id) is not int or not 0 < repository_id <= 9007199254740991:
@@ -80,10 +84,13 @@ class GitHubJournal:
         self.db.close()
 
     def get(self, operation_id):
-        row = self.db.execute("SELECT * FROM intents WHERE operation_id=?", (operation_id,)).fetchone()
+        # Do not materialize an oversized stored scope in Python, even after file tampering.
+        row = self.db.execute("SELECT operation_id, task_id, sha256, state, reserved_at, CASE WHEN length(CAST(scope AS BLOB)) <= ? THEN scope END AS scope FROM intents WHERE operation_id=?", (MAX_SCOPE_BYTES, operation_id)).fetchone()
         if row is None:
             raise Rejected("Unknown GitHub operation")
         try:
+            if row['scope'] is None:
+                raise Rejected("Stored scope exceeds byte limit")
             scope = json.loads(row['scope'])
             intent = validated_intent(scope)
             if (canonical(scope).decode() != row['scope']
@@ -104,6 +111,15 @@ class GitHubJournal:
             raise Rejected("Invalid GitHub journal record") from exc
         return {"operation_id": row['operation_id'], "task_id": row['task_id'], "scope": scope,
                 "sha256": row['sha256'], "state": row['state'], "reserved_at": row['reserved_at'],
+                "live_authorized": False, "retry_allowed": False}
+
+    def usage(self):
+        """Logical admission usage only; not a disk-size or record-integrity check."""
+        row = self.db.execute("SELECT count(*) AS records, coalesce(sum(length(CAST(scope AS BLOB))), 0) AS scope_bytes FROM intents").fetchone()
+        return {"records": row['records'], "scope_bytes": row['scope_bytes'],
+                "limits": {"records": MAX_RECORDS, "scope_bytes": MAX_TOTAL_SCOPE_BYTES, "record_scope_bytes": MAX_SCOPE_BYTES},
+                "remaining_records": max(0, MAX_RECORDS - row['records']),
+                "remaining_scope_bytes": max(0, MAX_TOTAL_SCOPE_BYTES - row['scope_bytes']),
                 "live_authorized": False, "retry_allowed": False}
 
     def reconcile(self, operation_id, expected_sha256, observations):
@@ -127,6 +143,9 @@ class GitHubJournal:
         if self.read_only:
             raise Rejected("Journal is read-only")
         scope = bound_scope(intent, allowed_repository, repository_id)
+        encoded = canonical(scope)
+        if len(encoded) > MAX_SCOPE_BYTES:
+            raise Rejected("GitHub journal scope exceeds byte limit")
         sha = digest(scope)
         operation = intent['operation_id']
         self.db.execute("BEGIN IMMEDIATE")
@@ -136,7 +155,11 @@ class GitHubJournal:
                 if len(existing) != 1 or existing[0]['operation_id'] != operation or self.get(operation)['sha256'] != sha:
                     raise Rejected("Task or operation is already bound to another scope")
             else:
-                self.db.execute("INSERT INTO intents VALUES(?,?,?,?, 'prepared',NULL)", (operation, intent['task_id'], canonical(scope).decode(), sha))
+                # The check shares the insertion's writer transaction across processes.
+                usage = self.usage()
+                if usage['remaining_records'] == 0 or len(encoded) > usage['remaining_scope_bytes']:
+                    raise Rejected("GitHub journal capacity exhausted; retained evidence must not be deleted")
+                self.db.execute("INSERT INTO intents VALUES(?,?,?,?, 'prepared',NULL)", (operation, intent['task_id'], encoded.decode(), sha))
             result = self.get(operation)
             self.db.execute("COMMIT")
             return result
