@@ -85,6 +85,34 @@ the retained repository identity is not a fresh allowlist decision. Every result
 `retry_allowed`, `remote_effect_confirmed` and `live_authorized` false. Python callers
 can use `GitHubJournal.reconcile(operation_id, expected_sha256, observations)`.
 
+## Capacity and retained evidence
+
+```sh
+python -m orch github-journal-usage --journal .runtime/github-journal.sqlite
+```
+
+Usage opens an existing journal read-only and reports record count, retained scope bytes,
+remaining capacity and limits without returning scope contents. Missing databases are not
+created. These are logical storage measurements, not record-integrity verification or
+physical disk usage.
+
+New intent admission is limited to 1,000 retained records, 16 MiB of combined canonical
+UTF-8 scope data, and 64 KiB per scope. Both prepared and uncertain records count.
+The aggregate check and insertion share an immediate writer transaction, so concurrent
+processes using this implementation cannot claim the same final capacity. Oversized
+stored scopes are also rejected before Python materializes or decodes their contents.
+
+Capacity exhaustion rejects a new intent without eviction or a partial insert. Repeating
+an existing valid intent remains idempotent, and inspection, reconciliation and reservation
+of an already-staged operation remain available. Journals already above the aggregate
+limits remain readable and reject new admissions. Individual records must still pass
+scope validation and the per-record byte limit.
+
+These fixed application limits do not cap SQLite indexes, page overhead, sidecars or total
+filesystem usage, and are not enforced against direct SQL, older code or an administrator.
+Do not delete records or start a replacement journal to regain dispatch capacity: that can
+lose consumed-attempt evidence. Supported archival and retirement remain future work.
+
 ## Storage and remaining recovery work
 
 The database has its own application identity/version and rejects other SQLite databases.
@@ -95,6 +123,6 @@ This journal is separate from the existing workflow backup, audit and restore co
 they do not include or verify it. There is no supported journal reset, success adoption,
 automatic retry or backup/restore procedure yet. Restoring an older journal could lose
 reservation evidence and must not be used to authorize dispatch. Integration with durable
-approval/evidence binding, authenticated reconciliation, journal lifecycle/quotas and a
+approval/evidence binding, authenticated reconciliation, journal archival/retirement and a
 reviewed recovery procedure remains required before live use. The current offline
 [reconciliation report](github-reconciliation.md) cannot clear or finalize a reservation.
