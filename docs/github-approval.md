@@ -80,6 +80,28 @@ a reviewer accepted the change, or a policy is trusted. Task ownership relies on
 store's records, not independent provenance. `evidence_verified`, `live_authorized` and
 `retry_allowed` remain false, and saved approval checks do not consume this report yet.
 
+## Combined local assessment
+
+```sh
+python -m orch github-assess-approval --data .runtime/phase2 --journal .runtime/github-journal.sqlite --approval-preview approval.json --expected-sha256 <preview-digest> --evidence evidence.json
+```
+
+This command checks the selected saved preview, verifies task-owned artifact bytes only
+if the preview is current, then rechecks expiry and journal scope/state after artifact I/O.
+Both databases are opened read-only. The report binds the complete fresh approval and
+artifact assessments; it does not accept previously saved assessments as proof.
+
+`current` exits 0. A blocked preview exits 2 with its blockers; when blocked before file
+checks, `artifact_evidence` is null and `artifact_bytes_verified` is false. If expiry or
+reservation changes during file checks, the result is blocked even though verified byte
+evidence is included. Invalid inputs or artifact failures exit 2 without a partial report.
+
+The recheck detects changes during the artifact stage, but it is not an atomic snapshot
+across databases and files or a lock against changes afterward. A current result still
+has `evidence_verified`, `live_authorized` and `retry_allowed` false. Semantic evidence,
+policy trust and authenticated approval admission remain separate requirements; no
+requests or decisions are persisted or consumed.
+
 Next steps require semantically validating workflow evidence, durable request/decision
 storage, authenticated approver identity, policy verification, expiry and single-use
 admission, plus reviewed provider/credential/remote-branch boundaries. A future broker
