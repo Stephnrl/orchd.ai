@@ -18,6 +18,38 @@ MAX_SUPPORT_REFERENCES = 32
 MAX_SUPPORT_BYTES = 8 * 1024 * 1024
 RECORD_ROLES = {'patch': 'PatchReceipt', 'test': 'TestReceipt', 'review': 'ReviewDecision', 'policy': 'ToolDecision'}
 DOCUMENT_REF = Draft202012Validator({'$defs': SCHEMA['$defs'], '$ref': '#/$defs/DocumentRef'})
+MAX_CATALOG_RECORDS = 200
+
+
+def list_evidence_records(store, task):
+    if not isinstance(task, str) or not re.fullmatch(r'[a-f0-9]{32}', task):
+        raise Rejected('Invalid evidence task')
+    store.db.execute('BEGIN')
+    try:
+        if store.db.execute('SELECT 1 FROM tasks WHERE id=?', (task,)).fetchone() is None:
+            raise Rejected('Unknown evidence task')
+        rows = store.db.execute('SELECT id,kind,CASE WHEN length(CAST(payload AS BLOB))<=? THEN payload END AS payload FROM records WHERE task_id=? AND kind IN (?,?,?,?) ORDER BY kind,id LIMIT ?',
+                                (MAX_BYTES, task, *RECORD_ROLES.values(), MAX_CATALOG_RECORDS + 1)).fetchall()
+        if len(rows) > MAX_CATALOG_RECORDS:
+            raise Rejected('Evidence catalog record budget exceeded')
+        roles = {kind: role for role, kind in RECORD_ROLES.items()}
+        records = []
+        for row in rows:
+            try:
+                document = validate(json.loads(row['payload']), row['kind'])
+                if document['id'] != row['id'] or document['task_id'] != task or canonical(document).decode() != row['payload']:
+                    raise Rejected('Evidence catalog record mismatch')
+            except (ValueError, TypeError, RecursionError) as exc:
+                raise Rejected('Invalid evidence catalog record') from exc
+            records.append({'role': roles[row['kind']], 'record': ref(document), 'created_at': document['created_at']})
+        binding = {'schema_version': '1.0.0', 'task_id': task, 'records': records}
+        report = {'kind': 'GitHubEvidenceRecordCatalog', 'binding': binding, 'sha256': digest(binding),
+                  'evidence_verified': False, 'live_authorized': False, 'retry_allowed': False}
+        store.db.execute('COMMIT')
+        return report
+    except BaseException:
+        store.db.execute('ROLLBACK')
+        raise
 
 
 def check_record_claims(store, selection):
