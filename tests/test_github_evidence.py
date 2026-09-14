@@ -1,11 +1,15 @@
 from contextlib import redirect_stdout, redirect_stderr
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
+import stat
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 from orch.contracts import Rejected, canonical, digest
 from orch.github_evidence import check_evidence
@@ -74,14 +78,55 @@ class GitHubEvidenceTests(unittest.TestCase):
             check_evidence(self.store, self.evidence)
 
     def test_artifact_directory_links_are_rejected(self):
+        # Deliberately retain an alias, as Windows runner temporary paths may do.
+        # Store.root is canonical; a mock keyed to the input spelling can miss it.
+        self.root = self.root / '..' / self.root.name
+        self.assertNotEqual(self.root, self.store.root)
         original = Path.is_symlink
 
         def linked(path):
-            return path == self.root / 'artifacts' or original(path)
+            return path == self.store.root / 'artifacts' or original(path)
 
         with patch.object(Path, 'is_symlink', linked):
             with self.assertRaisesRegex(Rejected, 'directory'):
                 check_evidence(self.store, self.evidence)
+
+    def test_real_artifact_directory_link_is_rejected(self):
+        directory = self.store.root / 'artifacts'
+        target = self.store.root / 'retained-artifacts'
+        directory.rename(target)
+        try:
+            if os.name == 'nt':
+                subprocess.run(['cmd', '/c', 'mklink', '/J', str(directory), str(target)],
+                               check=True, capture_output=True)
+                self.assertTrue(directory.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+            else:
+                directory.symlink_to(target, target_is_directory=True)
+                self.assertTrue(directory.is_symlink())
+            with self.assertRaisesRegex(Rejected, 'directory'):
+                check_evidence(self.store, self.evidence)
+            self.assertFalse(self.store.db.in_transaction)
+            self.assertEqual(len(list(target.iterdir())), 4)
+        finally:
+            if os.name == 'nt' and directory.exists():
+                directory.rmdir()
+            elif directory.is_symlink():
+                directory.unlink()
+            target.rename(directory)
+
+    def test_artifact_file_links_are_rejected(self):
+        artifact = self.store.root / 'artifacts' / self.items['review']['sha256']
+        for method in ('is_symlink', 'lstat'):
+            original = getattr(Path, method)
+            def linked(path):
+                if path == artifact:
+                    return True if method == 'is_symlink' else SimpleNamespace(
+                        st_mode=original(path).st_mode, st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT)
+                return original(path)
+            with self.subTest(method=method), patch.object(Path, method, linked):
+                with self.assertRaisesRegex(Rejected, 'regular file'):
+                    check_evidence(self.store, self.evidence)
+                self.assertFalse(self.store.db.in_transaction)
 
     def test_cli_opens_existing_store_read_only_and_never_runs_workflow(self):
         from orch.__main__ import main

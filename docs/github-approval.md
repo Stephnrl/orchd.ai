@@ -162,6 +162,10 @@ binds role, artifact ID, digest and byte count without returning supporting cont
 Supporting references are limited to 32 entries, 1 MiB each and 8 MiB total; repeated
 references count separately. Count and declared byte budgets are checked before reading
 supporting files. Missing, altered or foreign-task support fails without a report.
+Artifact directories and individual artifact paths must not be symbolic links or
+Windows junctions. This gate applies to primary evidence, supporting files and the
+combined assessment's tool payload. It is a path check, not an atomic filesystem
+snapshot: concurrent replacement of local evidence files remains outside this guarantee.
 
 Receipt chronology is also checked. Patch and test execution must start no later than
 they end, and end no later than their receipt creation. The patch receipt must exist

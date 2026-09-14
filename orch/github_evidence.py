@@ -1,6 +1,7 @@
 """Task-owned local artifact byte checks; no semantic approval or execution authority."""
 import hashlib
 import json
+import stat
 from datetime import datetime
 
 from jsonschema import Draft202012Validator
@@ -56,7 +57,7 @@ def _artifact_bytes(store, item, task):
         raise Rejected("Artifact reference is not owned by task")
     directory = store.root / 'artifacts'
     path = directory / item['sha256']
-    if directory.is_symlink() or not directory.is_dir() or path.is_symlink() or not path.is_file():
+    if _linked(directory) or not directory.is_dir() or _linked(path) or not path.is_file():
         raise Rejected("Evidence artifact must be a regular file")
     with path.open('rb') as stream:
         raw = stream.read(MAX_BYTES + 1)
@@ -199,7 +200,7 @@ def _check_supporting_artifacts(store, task, patch, test):
 def _check_evidence(store, evidence, contents_check=False):
     _validate_evidence(evidence)
     directory = store.root / 'artifacts'
-    if directory.is_symlink() or not directory.is_dir():
+    if _linked(directory) or not directory.is_dir():
         raise Rejected("Invalid artifact directory")
     store.db.execute('BEGIN')
     try:
@@ -241,3 +242,13 @@ def _check_evidence(store, evidence, contents_check=False):
     except BaseException:
         store.db.execute('ROLLBACK')
         raise
+
+
+def _linked(path):
+    if path.is_symlink():
+        return True
+    try:
+        # lstat also covers junctions on Python 3.11, before Path.is_junction.
+        return bool(getattr(path.lstat(), 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except FileNotFoundError:
+        return False
