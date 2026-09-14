@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -27,7 +27,8 @@ def main():
     parser.add_argument("--reason", help="One-line operator cancellation reason (1–500 characters)")
     parser.add_argument("--provider", choices=["github_copilot_cli", "abc_binary_ai_placeholder"])
     parser.add_argument("--executable", help="Absolute provider executable path for read-only inventory")
-    parser.add_argument("--expected-sha256", help="Approved executable digest for provider-check")
+    parser.add_argument("--expected-sha256", help="Approved executable digest for provider inventory")
+    parser.add_argument("--runtime-report", help="Existing runtime evidence to revalidate for deployment-check; may query Docker")
     args = parser.parse_args()
     if args.command == "verify-backup":
         if args.destination or args.task:
@@ -73,6 +74,14 @@ def main():
         parser.error("cancel requires --task, --expected-revision and --reason")
     if args.command == "cancel" and not (Path(args.data) / "orch.sqlite").is_file():
         parser.error("cancel requires an existing workflow database")
+    if args.command == "deployment-check":
+        if not args.provider:
+            parser.error("deployment-check requires --provider")
+        if args.runtime_report and not args.image:
+            parser.error("--runtime-report requires --image")
+        from .deployment import deployment_check
+        print(json.dumps(deployment_check(args.provider, args.executable, args.expected_sha256, args.image, args.runtime_report), indent=2))
+        raise SystemExit(2)  # An assessment is never live-provider admission.
     if args.command == "provider-check":
         if not args.provider:
             parser.error("provider-check requires --provider")

@@ -3,6 +3,10 @@
 An internal engineering workflow proof with persisted state, explicit approvals,
 deterministic mock actors, real fixture tests, and simulated PR receipts.
 
+See the [roadmap progress assessment](docs/progress.md) for implemented scope and
+remaining integrations, and [deployment readiness](docs/deployment-readiness.md) for
+an executable report of the gates still blocking live providers.
+
 Phase 1 remains the design baseline below. Phase 2 implements the bounded offline
 vertical slice; see [running Phase 2](docs/phase2.md) for APIs, recovery and limitations.
 Phase 3 adds [runtime hardening and operator recovery](docs/phase3.md), while keeping
