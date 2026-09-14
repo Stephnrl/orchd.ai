@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -56,7 +56,7 @@ def main():
                 journal.close()
         print(json.dumps(report, indent=2))
         raise SystemExit(0 if report['status'] == 'candidate_observed' else 2)
-    if args.command in ("github-inspect", "github-journal-usage"):
+    if args.command in ("github-inspect", "github-journal-usage", "github-journal-audit"):
         if not args.journal or (args.command == "github-inspect" and not args.operation_id):
             parser.error("Journal reads require --journal; github-inspect also requires --operation-id")
         from .github_journal import GitHubJournal
@@ -65,7 +65,8 @@ def main():
         journal = None
         try:
             journal = GitHubJournal(args.journal, read_only=True)
-            print(json.dumps(journal.usage() if args.command == "github-journal-usage" else journal.get(args.operation_id), indent=2))
+            report = journal.audit() if args.command == "github-journal-audit" else journal.usage() if args.command == "github-journal-usage" else journal.get(args.operation_id)
+            print(json.dumps(report, indent=2))
         except (Rejected, OSError, sqlite3.Error):
             parser.error("Cannot inspect GitHub operation; check existing journal, identity and record integrity")
         finally:

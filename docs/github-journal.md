@@ -113,6 +113,32 @@ filesystem usage, and are not enforced against direct SQL, older code or an admi
 Do not delete records or start a replacement journal to regain dispatch capacity: that can
 lose consumed-attempt evidence. Supported archival and retirement remain future work.
 
+## Whole-journal audit
+
+```sh
+python -m orch github-journal-audit --journal .runtime/github-journal.sqlite
+```
+
+The audit opens an existing journal read-only, checks SQLite storage with `quick_check`,
+and validates every retained record within one read transaction. Its report contains
+operation/task IDs, scope digests, states and reservation timestamps in operation-ID order,
+plus record count and retained scope bytes. The report digest covers this complete binding.
+It omits proposal titles and bodies. Unchanged journal content produces the same digest;
+consuming a reservation changes it even though the immutable scope digest stays the same.
+
+Concurrent writers cannot mix old and new records within one audit snapshot. This does
+not make the report current after its transaction ends. A corrupt record, failed storage
+check or exceeded audit budget exits with code 2 and emits no partial report. Successful
+validation exits 0, including for an empty journal. Audits accept at most the admission
+record and aggregate scope-byte limits; oversized existing journals still support individual
+inspection but need a future bounded recovery procedure for a complete audit.
+
+The report is a diagnostic checksum, not a backup, signature, remote verification or
+dispatch authorization. It does not prove that no records were removed before the audit,
+authenticate the file against a trusted historical checkpoint, or verify schema triggers.
+No records or reports are persisted or repaired, and retry/live authorization remain false.
+Python callers can use `GitHubJournal.audit()` on a connection without an active transaction.
+
 ## Storage and remaining recovery work
 
 The database has its own application identity/version and rejects other SQLite databases.
