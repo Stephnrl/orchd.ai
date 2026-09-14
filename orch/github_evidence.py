@@ -15,10 +15,12 @@ MAX_BYTES = 1024 * 1024
 def assess_approval_evidence(journal, store, preview, expected_sha256, evidence):
     """Compose fresh checks, then recheck approval after artifact I/O."""
     approval = check_approval(journal, preview, expected_sha256, evidence)
-    artifacts = claims = None
+    artifacts = claims = tool_scope = None
     if approval['status'] == 'current':
         claims = check_evidence_contents(store, evidence)
         artifacts = claims['binding']['artifact_evidence']
+        tool_scope = _check_tool_scope(store, claims['binding']['claims']['tool_request'], evidence['task_id'],
+                                       preview['binding']['operation_id'], preview['binding']['scope'])
         approval = check_approval(journal, preview, expected_sha256, evidence)
     blockers = ['approval:' + reason for reason in approval['binding']['blockers']]
     if claims is not None:
@@ -27,8 +29,10 @@ def assess_approval_evidence(journal, store, preview, expected_sha256, evidence)
         checked = datetime.fromisoformat(approval['binding']['checked_at'])
         if not datetime.fromisoformat(window['issued_at']) <= checked < datetime.fromisoformat(window['expires_at']):
             blockers.append('evidence:policy_not_current')
+    if tool_scope is not None:
+        blockers.extend('tool:' + reason for reason in tool_scope['binding']['blockers'])
     binding = {"schema_version": "1.0.0", "approval": approval, "artifact_evidence": artifacts,
-               "evidence_claims": claims, "blockers": sorted(set(blockers))}
+               "evidence_claims": claims, "tool_scope": tool_scope, "blockers": sorted(set(blockers))}
     return {"kind": "GitHubCombinedApprovalAssessment", "binding": binding, "sha256": digest(binding),
             "status": 'blocked' if blockers else 'current', "artifact_bytes_verified": artifacts is not None,
             "evidence_verified": False, "live_authorized": False, "retry_allowed": False}
@@ -40,6 +44,54 @@ def check_evidence(store, evidence):
 
 def check_evidence_contents(store, evidence):
     return _check_evidence(store, evidence, contents_check=True)
+
+
+def _artifact_bytes(store, item, task):
+    if not ARTIFACT.is_valid(item) or type(item['size_bytes']) is not int or not 0 <= item['size_bytes'] <= MAX_BYTES:
+        raise Rejected("Invalid or oversized artifact reference")
+    row = store.db.execute("SELECT CASE WHEN length(CAST(payload AS BLOB))<=8192 THEN payload END FROM artifacts WHERE id=? AND task_id=?", (item['artifact_id'], task)).fetchone()
+    if row is None or row[0] != canonical(item).decode():
+        raise Rejected("Artifact reference is not owned by task")
+    directory = store.root / 'artifacts'
+    path = directory / item['sha256']
+    if directory.is_symlink() or not directory.is_dir() or path.is_symlink() or not path.is_file():
+        raise Rejected("Evidence artifact must be a regular file")
+    with path.open('rb') as stream:
+        raw = stream.read(MAX_BYTES + 1)
+    if len(raw) != item['size_bytes'] or hashlib.sha256(raw).hexdigest() != item['sha256']:
+        raise Rejected("Evidence artifact byte mismatch")
+    return raw
+
+
+def _check_tool_scope(store, reference, task, operation, scope):
+    store.db.execute('BEGIN')
+    try:
+        tool = _stored_record(store, reference, task, 'ToolRequest')
+        blockers = []
+        if tool['operation_id'] != operation:
+            blockers.append('operation_mismatch')
+        if tool['request_sha256'] != digest({key: value for key, value in tool.items() if key != 'request_sha256'}):
+            blockers.append('request_digest_mismatch')
+        if (tool['tool'] != 'github' or tool['command'] is not None or tool['target_paths']
+                or tool['secret_references'] or tool['work_order'] is not None or tool['workspace_id'] is not None):
+            blockers.append('unsupported_tool_scope')
+        payload_sha = None
+        if tool['payload'] is None:
+            blockers.append('missing_payload')
+        else:
+            raw = _artifact_bytes(store, tool['payload'], task)
+            payload_sha = hashlib.sha256(raw).hexdigest()
+            if raw != canonical({"adapter": "github-draft-preview", "scope": scope}):
+                blockers.append('payload_scope_mismatch')
+        binding = {"schema_version": "1.0.0", "tool_request": reference, "scope_sha256": digest(scope),
+                   "payload_sha256": payload_sha, "blockers": blockers}
+        result = {"kind": "GitHubToolScopeAssessment", "binding": binding, "sha256": digest(binding),
+                  "status": 'blocked' if blockers else 'matches', "live_authorized": False}
+        store.db.execute('COMMIT')
+        return result
+    except BaseException:
+        store.db.execute('ROLLBACK')
+        raise
 
 
 def _stored_record(store, reference, task, kind):
@@ -121,13 +173,7 @@ def _check_evidence(store, evidence, contents_check=False):
                     raise Rejected("Evidence artifact exceeds budget")
             except (ValueError, TypeError, KeyError, RecursionError) as exc:
                 raise Rejected("Invalid evidence artifact metadata") from exc
-            path = directory / sha
-            if path.is_symlink() or not path.is_file():
-                raise Rejected("Evidence artifact must be a regular file")
-            with path.open('rb') as stream:
-                raw = stream.read(MAX_BYTES + 1)
-            if len(raw) != item['size_bytes'] or hashlib.sha256(raw).hexdigest() != sha:
-                raise Rejected("Evidence artifact byte mismatch")
+            raw = _artifact_bytes(store, item, evidence['task_id'])
             artifacts[role] = {"artifact_id": item['artifact_id'], "sha256": sha, "size_bytes": len(raw)}
             if contents_check:
                 contents[role] = raw

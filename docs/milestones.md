@@ -39,6 +39,8 @@ Stricter evidence-claim checks now validate canonical stored workflow contracts 
 patch/test/review/policy relationships; independent provenance and live approval remain required.
 Combined approval assessment now requires those consistent claims, combines their blockers
 with approval blockers, and checks policy expiry against the final assessment time.
+It also binds the policy's tool operation, request checksum and task-owned canonical
+payload to the exact retained GitHub scope, rejecting simulated or mismatched requests.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

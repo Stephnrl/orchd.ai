@@ -109,6 +109,30 @@ has `evidence_verified`, `live_authorized` and `retry_allowed` false. Semantic e
 policy trust and authenticated approval admission remain separate requirements; no
 requests or decisions are persisted or consumed.
 
+## Binding the policy tool request to the journal proposal
+
+The combined assessment additionally resolves the policy's stored `ToolRequest` and
+checks its operation against the saved preview. `request_sha256` must equal the canonical
+digest of the request with that field omitted. The tool must be `github` with no command,
+target paths, secret references, work order or workspace. The payload must be a task-owned
+artifact whose metadata, size and bytes pass the bounded artifact checks.
+
+Payload bytes must exactly equal canonical JSON with these two fields:
+
+```json
+{"adapter":"github-draft-preview","scope":"<the complete retained scope object>"}
+```
+
+The scope value above denotes the actual object, not a string. It includes the numeric
+repository identity and complete prepared preview. Extra fields, formatting changes,
+the `simulated-github` adapter or any changed request scope cannot match. The existing
+fixture engine does not generate this new payload or authorize live use.
+
+The report includes a `tool_scope` assessment, payload digest and fixed `tool:` blockers.
+Invalid or unowned payload artifacts fail without an assessment. The final approval and
+policy-time checks run after payload verification. This verifies a local request binding;
+it does not authenticate the policy or approver, bind a human decision, or grant credentials.
+
 ## Assessing workflow evidence claims
 
 ```sh
@@ -135,6 +159,9 @@ This is consistency checking of local claims, not authentication of execution, r
 identity or policy authority. It does not validate every transitive dependency, referenced
 diff/log contents, real GitHub commits, or the tool payload against a journal proposal.
 The current engine does not automatically export these records as evidence artifacts.
+The standalone claims check does not compare the tool payload to a journal proposal;
+the combined assessment adds the binding described above.
+
 The combined approval command runs this stricter assessment fresh rather than trusting
 a saved report. `evidence_verified`, `live_authorized` and `retry_allowed` stay false.
 

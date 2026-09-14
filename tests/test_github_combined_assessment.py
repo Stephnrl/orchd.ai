@@ -1,4 +1,5 @@
 from contextlib import redirect_stdout, redirect_stderr
+import copy
 import io
 import json
 from pathlib import Path
@@ -35,7 +36,10 @@ class CombinedAssessmentTests(unittest.TestCase):
         request.update(patch=ref(self.docs['patch']), test_receipts=[ref(self.docs['test'])], implementer_invocation_id='implementer', reviewer_invocation_id='reviewer')
         self.docs['review'].update(request=ref(request), reviewer_invocation_id='reviewer')
         self.docs['tool']['tool'] = 'github'
-        self.docs['policy'].update(request=ref(self.docs['tool']), decision='require_human_approval', approval_request={'id': 'approval', 'sha256': 'a' * 64}, expires_at='2026-01-01T00:10:00Z')
+        self.docs['tool']['operation_id'] = self.saved['operation_id']
+        self.docs['tool']['payload'] = self.store.artifact(task, {'adapter': 'github-draft-preview', 'scope': self.saved['scope']})
+        self.docs['tool']['request_sha256'] = digest({key: value for key, value in self.docs['tool'].items() if key != 'request_sha256'})
+        self.docs['policy'].update(operation_id=self.saved['operation_id'], request=ref(self.docs['tool']), decision='require_human_approval', approval_request={'id': 'approval', 'sha256': 'a' * 64}, expires_at='2026-01-01T00:10:00Z')
         self.evidence = {'task_id': task}
         for role, document in self.docs.items():
             self.store.put(document)
@@ -61,6 +65,7 @@ class CombinedAssessmentTests(unittest.TestCase):
             report = self.assess()
         self.assertEqual(report['status'], 'current')
         self.assertTrue(report['artifact_bytes_verified'])
+        self.assertEqual(report['binding']['tool_scope']['status'], 'matches')
         self.assertEqual(report['sha256'], digest(report['binding']))
         self.assertEqual(report['binding']['artifact_evidence']['binding']['evidence_sha256'], digest(self.evidence))
         self.assertEqual(report['binding']['approval']['binding']['preview_sha256'], self.preview['sha256'])
@@ -127,6 +132,58 @@ class CombinedAssessmentTests(unittest.TestCase):
             self.preview = prepare_approval(self.journal, self.saved['operation_id'], self.saved['sha256'], self.evidence)
         with patch('orch.github_approval.now', return_value='2026-01-01T00:01:00Z'), self.assertRaises(Rejected):
             self.assess()
+
+    def replace_tool(self, tool, tag, recompute=True):
+        tool = {**tool, 'id': 'tool-' + tag}
+        if recompute:
+            tool['request_sha256'] = digest({key: value for key, value in tool.items() if key != 'request_sha256'})
+        self.store.put(tool)
+        policy = {**self.docs['policy'], 'id': 'policy-' + tag, 'request': ref(tool), 'operation_id': tool['operation_id']}
+        self.store.put(policy)
+        self.evidence['policy_sha256'] = self.store.artifact(self.evidence['task_id'], policy)['sha256']
+        with patch('orch.github_approval.now', return_value='2026-01-01T00:00:00Z'):
+            self.preview = prepare_approval(self.journal, self.saved['operation_id'], self.saved['sha256'], self.evidence)
+
+    def test_simulated_or_changed_repository_payload_is_blocked(self):
+        for tag in ('simulated', 'repository'):
+            payload = {'adapter': 'github-draft-preview', 'scope': copy.deepcopy(self.saved['scope'])}
+            if tag == 'simulated':
+                payload['adapter'] = 'simulated-github'
+            else:
+                payload['scope']['repository_id'] = 999
+            item = self.store.artifact(self.evidence['task_id'], payload)
+            self.replace_tool({**self.docs['tool'], 'payload': item}, tag)
+            with patch('orch.github_approval.now', return_value='2026-01-01T00:01:00Z'):
+                report = self.assess()
+            self.assertEqual(report['status'], 'blocked')
+            self.assertIn('tool:payload_scope_mismatch', report['binding']['blockers'])
+
+    def test_operation_checksum_and_missing_payload_block(self):
+        for tag, updates, reason in (
+            ('operation', {'operation_id': 'c' * 32}, 'operation_mismatch'),
+            ('checksum', {'request_sha256': 'f' * 64}, 'request_digest_mismatch'),
+            ('paths', {'target_paths': ['greeting.txt']}, 'unsupported_tool_scope'),
+            ('payload', {'payload': None}, 'missing_payload')):
+            self.replace_tool({**self.docs['tool'], **updates}, tag, recompute=tag != 'checksum')
+            with patch('orch.github_approval.now', return_value='2026-01-01T00:01:00Z'):
+                report = self.assess()
+            self.assertEqual(report['status'], 'blocked')
+            self.assertIn('tool:' + reason, report['binding']['blockers'])
+
+    def test_tool_payload_reference_must_belong_to_same_task(self):
+        other = 'b' * 32
+        self.store.db.execute('INSERT INTO tasks VALUES(?,?,?)', (other, '{}', '{}'))
+        item = self.store.artifact(other, {'adapter': 'github-draft-preview', 'scope': self.saved['scope']})
+        self.replace_tool({**self.docs['tool'], 'payload': item}, 'foreign')
+        with patch('orch.github_approval.now', return_value='2026-01-01T00:01:00Z'), self.assertRaises(Rejected):
+            self.assess()
+
+    def test_tool_payload_corruption_rejects(self):
+        path = self.store.root / 'artifacts' / self.docs['tool']['payload']['sha256']
+        path.write_bytes(b'corrupt')
+        with patch('orch.github_approval.now', return_value='2026-01-01T00:01:00Z'), self.assertRaises(Rejected):
+            self.assess()
+        self.assertFalse(self.store.db.in_transaction)
 
     def test_cli_uses_read_only_stores_and_reports_failure_without_partial_output(self):
         from orch.__main__ import main
