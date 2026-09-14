@@ -1,5 +1,8 @@
 # Local management UI
 
+The [Evidence review panel](evidence-review-ui.md) supports explicit review/policy
+selection, record inspection, claims assessment and selection downloads for bundle export.
+
 Task refreshes clear actionable state and inspection acknowledgements until the
 latest request finishes successfully. Overlapping responses for the same task cannot
 replace a newer view with older state; responses and errors from a previous selection

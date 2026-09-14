@@ -5,6 +5,8 @@ let epoch = 0, cursor = 0, taskNext = null, recordNext = null, busy = false;
 let stateRequest = 0;
 let evidenceRequest = 0;
 let evidenceDownload = null;
+let claimRequest = 0, claimLoading = false, claimResult = null;
+let claimChoices = {review: new Map(), policy: new Map()};
 let taskListRequest = 0, recordListRequest = 0, tasksLoading = false, recordsLoading = false;
 const names = new Map();
 const pretty = value => JSON.stringify(value, null, 2);
@@ -25,6 +27,7 @@ function canRetryCleanup() {
   return !busy && cleanupAvailable() && $("cleanup-reviewed").checked;
 }
 function controls() {
+  claimControls();
   $("save-evidence").disabled = busy || !evidenceDownload || evidenceDownload.epoch !== epoch;
   $("more-tasks").disabled = tasksLoading || taskNext === null;
   $("more-records").disabled = recordsLoading || recordNext === null;
@@ -100,6 +103,99 @@ $("save-evidence").addEventListener("click", () => {
   try { link.click(); }
   finally { link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 });
+function claimControls() {
+  const unavailable = busy || claimLoading || !token || !selected || !snapshot;
+  $("load-claims").disabled = unavailable;
+  for (const role of ["review", "policy"]) $("claim-" + role).disabled = unavailable || !claimChoices[role].size;
+  for (const role of ["review", "policy"]) $("inspect-claim-" + role).disabled = unavailable || !claimChoices[role].has($("claim-" + role).value);
+  $("assess-claims").disabled = unavailable || !claimChoices.review.has($("claim-review").value) || !claimChoices.policy.has($("claim-policy").value);
+  $("save-selection").disabled = unavailable || !claimResult || claimResult.epoch !== epoch;
+}
+function clearClaimResult(message) {
+  claimResult = null;
+  $("claims-status").textContent = message;
+  $("claims-blockers").replaceChildren();
+  $("claims-json").textContent = "";
+  $("claims-details").hidden = true;
+  $("save-selection").disabled = true;
+}
+function resetClaimReview() {
+  claimRequest++; claimLoading = false;
+  claimChoices = {review: new Map(), policy: new Map()};
+  for (const role of ["review", "policy"]) {
+    const select = $("claim-" + role), placeholder = document.createElement("option");
+    placeholder.value = ""; placeholder.textContent = "Choose a " + role;
+    select.replaceChildren(); select.append(placeholder); select.value = "";
+  }
+  clearClaimResult("Load choices to select an evidence chain.");
+}
+async function loadClaimChoices() {
+  if (busy || !selected || !token || !snapshot) return;
+  resetClaimReview();
+  const version = epoch, task = selected, request = ++claimRequest;
+  claimLoading = true; claimControls();
+  $("claims-status").textContent = "Loading review and policy choices…";
+  try {
+    const catalog = await api(`/tasks/${task}/evidence-catalog`);
+    if (version !== epoch || request !== claimRequest) return;
+    for (const item of catalog.binding.records) {
+      if (!["review", "policy"].includes(item.role)) continue;
+      claimChoices[item.role].set(item.record.id, item.record);
+      const option = document.createElement("option");
+      option.value = item.record.id;
+      option.textContent = `${item.created_at} · ${item.record.id}`;
+      $("claim-" + item.role).append(option);
+    }
+    $("claims-status").textContent = claimChoices.review.size && claimChoices.policy.size ?
+      "Choose a review and policy explicitly. No records are selected automatically." :
+      "No complete review and policy pair is available yet. Reload choices after the workflow reaches review.";
+  } catch (error) {
+    if (version === epoch && request === claimRequest) clearClaimResult("Choices unavailable. " + error.message);
+  } finally { if (version === epoch && request === claimRequest) { claimLoading = false; claimControls(); } }
+}
+async function assessClaimSelection() {
+  if (busy || claimLoading || !snapshot || !token) return;
+  const review = claimChoices.review.get($("claim-review").value), policy = claimChoices.policy.get($("claim-policy").value);
+  if (!review || !policy) return;
+  const version = epoch, task = selected, request = ++claimRequest;
+  clearClaimResult("Checking selected evidence…"); claimLoading = true; claimControls();
+  try {
+    const result = await api(`/tasks/${task}/assess-evidence`, {review, policy});
+    if (version !== epoch || request !== claimRequest) return;
+    claimResult = {epoch: version, selection: result.selection};
+    const assessment = result.assessment, claims = assessment.binding.claims;
+    $("claims-status").textContent = (assessment.status === "claims_consistent" ? "Selected evidence claims are consistent." : "Selected evidence is blocked.") +
+      " Checked " + claims.checked_at + ". This does not approve or run the task.";
+    for (const reason of claims.blockers) {
+      const item = document.createElement("li"); item.textContent = reason; $("claims-blockers").append(item);
+    }
+    $("claims-json").textContent = pretty(result);
+    $("claims-details").hidden = false;
+  } catch (error) {
+    if (version === epoch && request === claimRequest) clearClaimResult("Evidence assessment unavailable. " + error.message);
+  } finally { if (version === epoch && request === claimRequest) { claimLoading = false; claimControls(); } }
+}
+$("load-claims").addEventListener("click", loadClaimChoices);
+$("assess-claims").addEventListener("click", assessClaimSelection);
+for (const role of ["review", "policy"]) $("inspect-claim-" + role).addEventListener("click", async () => {
+  const chosen = claimChoices[role].get($("claim-" + role).value), version = epoch;
+  if (busy || claimLoading || !snapshot || !chosen) return;
+  try {
+    await evidence('records', chosen.id);
+    if (version === epoch) $("evidence").scrollIntoView({block: "start", behavior: "smooth"});
+  } catch (error) { if (version === epoch) notice(error.message); }
+});
+for (const role of ["review", "policy"]) $("claim-" + role).addEventListener("change", () => {
+  claimRequest++; claimLoading = false;
+  clearClaimResult("Selection changed. Check the selected evidence again."); claimControls();
+});
+$("save-selection").addEventListener("click", () => {
+  if (busy || claimLoading || !snapshot || !claimResult || claimResult.epoch !== epoch) return;
+  const url = URL.createObjectURL(new Blob([pretty(claimResult.selection)], {type: "application/json;charset=utf-8"}));
+  const link = document.createElement("a"); link.href = url; link.download = "orchd-record-selection.json";
+  document.body.append(link);
+  try { link.click(); } finally { link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+});
 async function tasks(more = false) {
   if (more && (tasksLoading || taskNext === null)) return;
   const version = epoch, request = ++taskListRequest, after = more ? taskNext : 0;
@@ -142,6 +238,7 @@ async function records(more = false) {
 async function state() {
   const version = epoch, task = selected, request = ++stateRequest;
   snapshot = null; approval = null; recovery = null;
+  resetClaimReview();
   $("task-refresh-status").textContent = "Refreshing task… Previous details may be out of date. Actions are disabled until refresh succeeds.";
   $("reviewed").checked = $("recovery-reviewed").checked = $("cleanup-reviewed").checked = false;
   controls();
