@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from pathlib import PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest.mock import patch
 
 from orch.contracts import ref
@@ -9,6 +9,7 @@ from orch.engine import Engine
 from orch.execution import Executor
 from orch.github_evidence import check_record_claims, _fixture_test_command, _fixture_edit_command
 from orch.fixtures import EDIT_CODE, TEST_CODE, recipe
+from orch.github_bundle import export_bundle, verify_bundle
 
 
 class FixtureEvidenceIntegrationTests(unittest.TestCase):
@@ -66,6 +67,13 @@ class FixtureEvidenceIntegrationTests(unittest.TestCase):
                 before = engine.store.db.total_changes
                 with patch('subprocess.Popen', side_effect=AssertionError('No execution during assessment')), patch('socket.socket', side_effect=AssertionError('No network')):
                     report = check_record_claims(engine.store, selection)
+                    with tempfile.TemporaryDirectory() as output:
+                        bundle = Path(output) / 'evidence.json'
+                        exported = export_bundle(engine.store, selection, bundle)
+                        verified = verify_bundle(bundle, exported['binding']['bundle_sha256'])
+                        self.assertEqual(verified['status'], 'claims_consistent')
+                        self.assertEqual(verified['binding']['selection'], selection)
+                        self.assertFalse(verified['live_authorized'])
                 self.assertEqual(report['status'], 'claims_consistent', report['binding']['claims']['blockers'])
                 self.assertEqual(engine.store.db.total_changes, before)
                 self.assertFalse(report['live_authorized'])

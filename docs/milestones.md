@@ -84,6 +84,11 @@ this diagnostic boundary.
 Patch command claims now require the executor's exact fixed edit wrapper, rejecting
 matching receipt/envelope claims for altered scripts, arguments or Docker isolation
 options without executing commands or resolving historical workspace paths.
+[Portable evidence bundles](github-evidence-bundles.md) now provide a complete offline
+handoff: explicit selection, read-only dependency collection, bounded canonical export,
+exclusive publication and standalone verification in disposable storage. Verification
+rechecks current claims and expiry and rejects missing, extra or altered dependencies;
+the format neither restores a workflow nor grants execution authority.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
