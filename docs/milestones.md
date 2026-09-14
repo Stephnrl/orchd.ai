@@ -21,6 +21,8 @@ A whole-journal audit validates every bounded retained record in one consistent 
 snapshot and reports a digest of scope/reservation metadata without proposal text.
 Verified journal backup bundles now preserve a consistent SQLite snapshot and bind its
 bytes and audit report in a completion manifest; restore/adoption remains disabled.
+Read-only backup comparison now identifies missing operations and changed scope or
+reservation evidence against a verified, explicitly selected bundle.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

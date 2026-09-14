@@ -27,7 +27,7 @@ def file_digest(path):
     return sha.hexdigest(), size
 
 
-def verify_journal_backup(directory):
+def _verified_manifest(directory):
     directory = Path(directory)
     if directory.is_symlink() or not directory.is_dir() or {p.name for p in directory.iterdir()} != {'journal.sqlite', 'manifest.json'}:
         raise Rejected("Incomplete or unsupported journal backup")
@@ -55,9 +55,51 @@ def verify_journal_backup(directory):
             raise Rejected("Backup content does not match manifest")
     except (ValueError, TypeError, RecursionError, UnicodeError) as exc:
         raise Rejected("Invalid journal backup") from exc
+    return manifest
+
+
+def verify_journal_backup(directory):
+    manifest = _verified_manifest(directory)
+    audit = manifest['binding']['audit']
     return {"kind": "GitHubJournalBackupVerification", "status": "valid", "sha256": manifest['sha256'],
             "audit_sha256": audit['sha256'], "record_count": audit['binding']['record_count'],
             "restore_allowed": False, "retry_allowed": False, "live_authorized": False}
+
+
+def compare_journal_backup(source, directory, expected_sha256):
+    """Compare verified retained evidence; matching snapshots never authorize restore."""
+    manifest = _verified_manifest(directory)
+    if manifest['sha256'] != expected_sha256:
+        raise Rejected("Unexpected journal backup digest")
+    journal = GitHubJournal(source, read_only=True)
+    try:
+        current = journal.audit()
+    finally:
+        journal.close()
+    saved = manifest['binding']['audit']
+    current_rows = {row['operation_id']: row for row in current['binding']['records']}
+    saved_rows = {row['operation_id']: row for row in saved['binding']['records']}
+    differences = []
+    for operation in sorted(current_rows.keys() | saved_rows.keys()):
+        live, backup = current_rows.get(operation), saved_rows.get(operation)
+        reasons = []
+        if backup is None:
+            reasons.append('missing_from_backup')
+        elif live is None:
+            reasons.append('backup_only_operation')
+        else:
+            if live['task_id'] != backup['task_id'] or live['sha256'] != backup['sha256']:
+                reasons.append('scope_mismatch')
+            if live['state'] != backup['state'] or live['reserved_at'] != backup['reserved_at']:
+                reasons.append('reservation_mismatch')
+        if reasons:
+            differences.append({"operation_id": operation, "reasons": reasons})
+    binding = {"schema_version": "1.0.0", "backup_sha256": manifest['sha256'],
+               "backup_audit_sha256": saved['sha256'], "journal_audit_sha256": current['sha256'],
+               "differences": differences}
+    return {"kind": "GitHubJournalBackupComparison", "binding": binding, "sha256": digest(binding),
+            "status": "different" if differences else "matches", "restore_allowed": False,
+            "retry_allowed": False, "live_authorized": False}
 
 
 def backup_journal(source, destination):

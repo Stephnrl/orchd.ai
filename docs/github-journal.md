@@ -174,6 +174,36 @@ There is no restore/adoption command: `restore_allowed`, `retry_allowed` and
 `live_authorized` remain false. Never replace the active journal with an older backup to
 recover capacity or retry an operation.
 
+## Compare backup evidence with the current journal
+
+```sh
+python -m orch github-compare-journal-backup --journal .runtime/github-journal.sqlite --destination .runtime/github-backup-001 --expected-sha256 <bundle-digest>
+```
+
+Use the bundle `sha256` from backup creation or verification, not its audit or database
+digest. Comparison independently verifies the bundle, checks that expected digest, then
+audits the current journal read-only. It uses the verified backup audit directly; it does
+not reload unverified manifest content for comparison.
+
+The report binds both audit digests, the selected bundle digest and ordered differences:
+
+- `missing_from_backup`: an operation exists only in the current journal.
+- `backup_only_operation`: an operation exists only in the backup.
+- `scope_mismatch`: the same operation has a different task or immutable scope digest.
+- `reservation_mismatch`: its state or reservation timestamp differs.
+
+Exit 0 and `status: matches` mean the audited operation metadata matches. Differences
+yield exit 2 and `status: different`; invalid inputs also exit 2, without a comparison
+report. Proposal text is omitted. A backup taken before a reservation is consumed is
+therefore reported as different even when its immutable intent still matches.
+
+Comparison neither changes the journal nor restores, merges or repairs evidence. It is
+not a freshness guarantee or proof of common history: both local inputs could be stale,
+rewritten or from different journals. The current journal can change after its audit.
+Every report keeps `restore_allowed`, `retry_allowed` and `live_authorized` false,
+including exact matches. An operator recovery procedure and trusted provenance are still
+required before any future restore or success adoption.
+
 ## Storage and remaining recovery work
 
 The database has its own application identity/version and rejects other SQLite databases.
