@@ -56,3 +56,8 @@ apply bounded authenticated reads under an independent credential policy, and bi
 fresh observations to the approved operation. Numeric repository identity must also
 be bound into the eventual human approval. Branch changes between reads or before PR
 creation and uncertain dispatch reconciliation remain unresolved live-broker work.
+
+[Read plans and transcript ingestion](github-read-transcripts.md) now provide the
+offline contract for that boundary: exact planned GETs, bounded response bytes, strict
+JSON and header checks, failure normalization and a fresh journal check before snapshot
+creation. It still does not implement or authenticate a transport.

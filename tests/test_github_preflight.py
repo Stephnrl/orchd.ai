@@ -60,6 +60,31 @@ class PreflightTests(unittest.TestCase):
         self.assertNotIn('hello world', json.dumps(report))
         self.assertEqual(self.journal.get(self.saved['operation_id'])['state'], 'prepared')
 
+    def test_captured_response_pipeline_reaches_preflight_and_preserves_blockers(self):
+        from orch.github_reads import prepare_read_plan, snapshot_from_transcript
+        from test_github_reads import transcript_for
+        plan = prepare_read_plan(self.journal, self.saved['operation_id'], self.saved['sha256'])
+        for failure in (None, 'moved_head', 'unavailable', 'timeout'):
+            transcript = transcript_for(plan)
+            if failure == 'moved_head':
+                seen = observations(intent())
+                seen['head']['body']['object']['sha'] = 'f' * 40
+                transcript = transcript_for(plan, seen)
+            elif failure == 'unavailable':
+                transcript['responses']['head']['response']['status'] = 429
+            elif failure == 'timeout':
+                transcript['responses']['head'].update(error='timeout', response=None)
+            with patch('socket.socket', side_effect=AssertionError('No network')), patch('subprocess.Popen', side_effect=AssertionError('No process')):
+                self.snapshot = snapshot_from_transcript(self.journal, self.saved['operation_id'], self.saved['sha256'], transcript, '2026-01-01T00:01:00Z')
+                self.save(self.snapshot)
+                report = self.assess()
+            self.assertEqual(report['status'], 'blocked' if failure else 'current')
+            if failure:
+                self.assertIn('refs:head_ref_mismatch' if failure == 'moved_head' else 'refs:head_unavailable', report['binding']['blockers'])
+            self.assertFalse(report['remote_refs_verified'])
+            self.assertFalse(report['live_authorized'])
+            self.assertFalse(report['retry_allowed'])
+
     def test_snapshot_preserves_failures_without_claiming_observation_authenticity(self):
         seen = observations(intent())
         seen['head'] = {'status': 503, 'body': {'message': 'private failure text'}}
