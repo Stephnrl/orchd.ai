@@ -58,6 +58,8 @@ Task and record lists fence stale responses and serialize next-page requests to 
 duplicate entries, with retryable failed pages and cleared record links on task switches.
 Task navigation now shows verified specification titles alongside shortened IDs and
 state labels, with literal text rendering and identity-based selection for duplicate names.
+Event replay now marks update failures explicitly, preserves its cursor for retries,
+and ignores responses/errors from earlier task selections.
 
 | Milestone | Deliverable | Exit gate |
 | --- | --- | --- |

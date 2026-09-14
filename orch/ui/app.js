@@ -170,7 +170,7 @@ async function select(task) {
   epoch++; selected = task; cursor = 0; snapshot = null; approval = null; recovery = null;
   recordNext = null; $("records").replaceChildren();
   $("cancel-reason").value = ""; $("cancellation").open = false;
-  $("events").replaceChildren(); $("evidence").hidden = true; $("empty").hidden = true; $("detail").hidden = false; $("approval").hidden = true;
+  $("events").replaceChildren(); $("event-status").textContent = "Loading event history…"; $("evidence").hidden = true; $("empty").hidden = true; $("detail").hidden = false; $("approval").hidden = true;
   for (const [id, b] of names) b.setAttribute("aria-current", String(id === task));
   controls(); await state(); await records(); await replay();
 }
@@ -193,7 +193,15 @@ async function replay() {
       const small = document.createElement("small"); small.textContent = `${e.created_at} · ${e.actor.role}`; li.append(small); $("events").append(li);
     }
     $("event-status").textContent = `Replayed through event ${cursor}`;
-    if (added) { await state(); await records(); }
+    if (added) {
+      await state();
+      if (version === epoch) await records();
+    }
+  } catch (error) {
+    if (version === epoch) {
+      $("event-status").textContent = "Event history update failed. Retained events may be incomplete; polling will retry. Reselect the task to replay from the start.";
+      throw error;
+    }
   } finally { replaying = false; }
 }
 async function mutate(action) {
@@ -260,7 +268,7 @@ $("renew-approval").addEventListener("click", () => {
   mutate(() => api(`/tasks/${task}/renew-approval`, payload)).catch(e => notice(e.message));
 });
 $("create").addEventListener("submit", e => {
-  e.preventDefault(); mutate(async () => { const result = await api("/tasks", {title: $("title").value}); epoch++; selected = result.task_id; cursor = 0; $("cancel-reason").value = ""; $("cancellation").open = false; $("events").replaceChildren(); $("evidence").hidden = true; $("empty").hidden = true; $("detail").hidden = false; }).catch(e => notice(e.message));
+  e.preventDefault(); mutate(async () => { const result = await api("/tasks", {title: $("title").value}); epoch++; selected = result.task_id; cursor = 0; $("cancel-reason").value = ""; $("cancellation").open = false; $("events").replaceChildren(); $("event-status").textContent = "Loading event history…"; $("evidence").hidden = true; $("empty").hidden = true; $("detail").hidden = false; }).catch(e => notice(e.message));
 });
 $("run").addEventListener("click", () => mutate(() => api(`/tasks/${selected}/run`, {})).catch(e => notice(e.message)));
 $("cancel-form").addEventListener("submit", e => {
