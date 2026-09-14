@@ -14,6 +14,12 @@ def register_operations(store, documents):
                        mode='trusted-fixture', image=None, source_digest='a' * 64)
         store.db.execute('INSERT INTO broker_requests VALUES(?,?,?)',
                          (receipt['operation_id'], 1, canonical(request).decode()))
+        envelope = {key: request[key] for key in ('schema_version', 'operation_id', 'task_id', 'generation', 'nonce', 'source_digest')}
+        envelope.update(request_sha256=digest(request), result=dict(command=['fixture'], started=receipt['started_at'],
+                        ended=receipt['ended_at'], code=0, stdout='stdout', stderr='stderr', truncated=False, failure=None))
+        artifact = store.artifact(receipt['task_id'], envelope)
+        store.db.execute('INSERT INTO execution_provenance VALUES(?,?,?,?)',
+                         (receipt['operation_id'], 1, digest(envelope), canonical(artifact).decode()))
 
 
 def link_plan_evidence(documents):

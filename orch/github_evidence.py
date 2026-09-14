@@ -202,6 +202,7 @@ def _execution_claims(store, task, work, patch, test):
         completed = (row['stage'] == stage and row['slot'] == str(work['attempt']) and row['status'] == 'done'
                      and type(row['generation']) is int and row['generation'] >= 1)
         request_sha = None
+        envelope_sha = None
         if not completed:
             blockers.append(role + '_operation_not_completed')
         else:
@@ -222,6 +223,8 @@ def _execution_claims(store, task, work, patch, test):
                     or request['recipe'] != ('edit' if role == 'patch' else 'test')
                     or len(request['args']) != (1 if role == 'patch' else 0)):
                 blockers.append(role + '_broker_request_mismatch')
+            envelope_sha, envelope_blockers = _broker_envelope(store, task, receipt['operation_id'], row['generation'], request)
+            blockers.extend(role + '_' + reason for reason in envelope_blockers)
         result_sha = None
         if row['result'] is not None:
             try:
@@ -236,8 +239,36 @@ def _execution_claims(store, task, work, patch, test):
         else:
             blockers.append(role + '_operation_result_missing')
         operations[role] = {'operation_id': receipt['operation_id'], 'result_sha256': result_sha,
-                            'broker_request_sha256': request_sha}
+                            'broker_request_sha256': request_sha, 'broker_envelope_sha256': envelope_sha}
     return {'operations': operations, 'blockers': blockers}
+
+
+def _broker_envelope(store, task, operation, generation, request):
+    row = store.db.execute('SELECT envelope_sha256,CASE WHEN length(CAST(artifact AS BLOB))<=8192 THEN artifact END AS artifact FROM execution_provenance WHERE operation_id=? AND generation=?',
+                           (operation, generation)).fetchone()
+    if row is None or row['artifact'] is None:
+        raise Rejected('Missing or oversized broker envelope metadata')
+    try:
+        item = json.loads(row['artifact'])
+        if canonical(item).decode() != row['artifact']:
+            raise Rejected('Noncanonical broker envelope metadata')
+        raw = _artifact_bytes(store, item, task)
+        envelope = json.loads(raw)
+        validate_wire(envelope, 'Envelope')
+        if canonical(envelope) != raw or digest(envelope) != row['envelope_sha256']:
+            raise Rejected('Broker envelope digest mismatch')
+    except (ValueError, TypeError, RecursionError) as exc:
+        raise Rejected('Invalid broker envelope evidence') from exc
+    blockers = []
+    if (any(envelope[key] != request[key] for key in ('schema_version', 'operation_id', 'task_id', 'generation', 'nonce', 'source_digest'))
+            or type(envelope['generation']) is not int or envelope['request_sha256'] != digest(request)):
+        blockers.append('broker_envelope_binding_mismatch')
+    result = envelope['result']
+    if result['code'] != 0 or result['failure'] is not None or result['truncated']:
+        blockers.append('broker_execution_not_successful')
+    if any(len(result[channel].encode()) > 262144 for channel in ('stdout', 'stderr')):
+        raise Rejected('Broker envelope output exceeds byte budget')
+    return digest(envelope), blockers
 
 
 def _plan_claims(store, task, work):

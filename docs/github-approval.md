@@ -254,8 +254,20 @@ requests must use `test` with no arguments. Missing, malformed, noncanonical or
 oversized requests fail without a report; mismatched bindings block. Reads are capped
 at 1 MiB and only the request digest is included in the operation report. Incomplete
 operations remain blocked without requiring broker records. This binds a historical
-request to the retained generation; it does not verify a broker result envelope,
-approve the source digest or image, or establish that execution enforced the request.
+request to the retained generation; it does not approve the source digest or image,
+or establish that execution enforced the request.
+
+The same completed operation must now also resolve an `execution_provenance` entry for
+its exact generation. Its canonical artifact reference must belong to the task, pass
+the regular-file and 1 MiB byte checks, and contain a canonical broker `Envelope` whose
+digest matches the provenance row. Envelope version, task, operation, generation,
+nonce and source digest must match the retained request, as must its request digest.
+Broker failure, nonzero/missing exit status or truncated output blocks assessment.
+Each stdout/stderr value has a 256 KiB UTF-8 byte cap in addition to schema limits.
+Missing/corrupt provenance fails without a report, while binding or outcome mismatches
+produce blockers. Only the envelope digest is added to the operation report. This
+does not yet compare envelope command/output/timing with receipt claims, approve the
+declared runtime/image, authenticate the producer or authorize live execution.
 
 This is consistency checking of local claims, not authentication of execution, reviewer
 identity or policy authority. It does not validate every transitive dependency,
