@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -47,7 +47,51 @@ def main():
     parser.add_argument('--jira-profile', help='Explicit Jira deployment mapping JSON; no credentials')
     parser.add_argument('--release-lane', choices=['offline', 'browser', 'full'], default='full', help='Exact required release acceptance lane')
     parser.add_argument('--release-report', help='Saved release verification report; requires its independently retained digest')
+    parser.add_argument('--batch-id', help='Retained serial workflow batch identifier')
+    parser.add_argument('--after-batch', help='Exclusive batch-list cursor from its previous next value')
+    parser.add_argument('--expected-snapshot-sha256', help='Reviewed current task snapshot digest for batch abandonment')
     args = parser.parse_args()
+    if args.command.startswith('batch-'):
+        from .batches import Batches, REVIEW_STATES
+        from .contracts import Rejected, canonical
+        from .github_preview import load_intent
+        import sqlite3
+        if args.command == 'batch-create' and not args.intent:
+            parser.error('batch-create requires an explicit --intent task list')
+        if args.command not in ('batch-create', 'batch-list') and not args.batch_id:
+            parser.error('Batch operation requires --batch-id')
+        if args.command in ('batch-run', 'batch-abandon') and (not args.expected_sha256 or args.expected_revision is None):
+            parser.error('Batch mutation requires reviewed scope --expected-sha256 and journal --expected-revision')
+        if args.command == 'batch-abandon' and not (args.task and args.expected_snapshot_sha256):
+            parser.error('Batch abandonment requires --task and reviewed --expected-snapshot-sha256')
+        if not (Path(args.data) / 'orch.sqlite').is_file():
+            parser.error('Batch operations require an existing workflow store')
+        engine = None
+        try:
+            # Inspection opens a read-only store, without broker setup.
+            if args.command in ('batch-inspect', 'batch-list'):
+                from .storage import Store
+                from types import SimpleNamespace
+                store = Store(args.data, read_only=True)
+                try:
+                    inspector = SimpleNamespace(store=store, task=lambda task: dict(zip(('state', 'context'), store.task(task))))
+                    report = Batches(inspector).list(args.after_batch) if args.command == 'batch-list' else Batches(inspector).inspect(args.batch_id)
+                finally: store.close()
+            else:
+                engine = Engine(args.data, Executor('trusted-fixture' if args.trusted_fixture else 'docker', args.image),
+                                provider_factory=FixtureCliProvider if args.fixture_provider == 'cli' else MockProvider)
+                batches = Batches(engine)
+                if args.command == 'batch-create': report = batches.create(load_intent(args.intent))
+                elif args.command == 'batch-run': report = batches.run(args.batch_id, args.expected_sha256, args.expected_revision)
+                else: report = batches.abandon(args.batch_id, args.expected_sha256, args.expected_revision, args.task, args.expected_snapshot_sha256)
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error('Batch rejected; inspect scope, revisions, current task evidence and recovery state')
+        finally:
+            if engine is not None: engine.close()
+        print(canonical(report).decode())
+        if args.command == 'batch-run' and any(e['status'] == 'running' or (e['status'] == 'stopped' and e['result'] in REVIEW_STATES) for e in report['entries']):
+            raise SystemExit(2)
+        return
     if args.command in ('verify-release', 'check-release'):
         from .contracts import Rejected, canonical
         from .release import verify_release, check_release
