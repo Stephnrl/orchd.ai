@@ -57,7 +57,10 @@ the hostname `localhost` is intentionally not accepted by its Host check.
 Paste the process's operator session into the connection form. It is held only in
 page memory, never placed in a URL, cookie or web storage. Disconnect/reload clears
 the page; restarting the server rotates the session. Disconnect does not revoke the
-server's session for other clients; stop the server to revoke it everywhere.
+server's session for other clients. The **Operator session** controls check its
+remaining lifetime, rotate it or revoke access for all clients. Sessions expire after
+one idle hour or eight hours total. See [session lifecycle and recovery](operator-sessions.md)
+before rotating; a lost replacement token requires a server restart.
 The Chromium regression suite verifies this rotation by restarting a fixture server
 with the same store, then reconnecting to completed and cancelled tasks. It checks
 that event replay and evidence inspection preserve the stored task state and context.

@@ -40,6 +40,8 @@ The [JSON/CLI provider boundary](docs/provider-adapter.md) can now run the offli
 workflow through a fixed subprocess fixture. Live provider execution remains disabled.
 The [local management UI](docs/local-management.md) adds task browsing, explicit
 approvals, evidence inspection and event replay at the existing loopback server.
+[Operator sessions](docs/operator-sessions.md) add idle and absolute expiry, rotation,
+revocation, safe reconnection and strict HTTP request validation.
 [Evidence review](docs/evidence-review-ui.md) now lets operators explicitly select and
 assess a review/policy pair, inspect blockers, save its selection and download a portable
 bundle with a fresh server assessment and browser digest verification.

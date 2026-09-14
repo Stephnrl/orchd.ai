@@ -29,6 +29,7 @@ function canRetryCleanup() {
   return !busy && cleanupAvailable() && $("cleanup-reviewed").checked;
 }
 function controls() {
+  for (const id of ["session-check", "session-rotate", "session-revoke"]) $(id).disabled = busy || !token;
   bundleReviewControls();
   claimControls();
   $("save-evidence").disabled = busy || !evidenceDownload || evidenceDownload.epoch !== epoch;
@@ -49,9 +50,40 @@ function controls() {
   $("cancellation").hidden = !snapshot || ["COMPLETED", "FAILED", "CANCELLED", "PR_CREATED"].includes(snapshot.state.state);
   $("cancel-task").disabled = busy || !snapshot || !!snapshot.state.active_operation_id || !!snapshot.state.active_invocation_id || !!snapshot.state.container_id;
 }
+function clearSessionView() {
+  epoch++; stateRequest++; evidenceRequest++; taskListRequest++; recordListRequest++;
+  selected = snapshot = approval = recovery = evidenceDownload = null;
+  cursor = 0; taskNext = recordNext = null; tasksLoading = recordsLoading = false;
+  names.clear(); resetClaimReview(); clearBundleReview("No bundle checked.");
+  for (const id of ["tasks", "records", "events", "evidence-links", "approval-links"]) $(id).replaceChildren();
+  for (const id of ["state-json", "evidence-json", "approval-json", "maintenance-json", "maintenance-summary", "task-title", "task-id", "recovery-json"]) $(id).textContent = "";
+  $("reviewed").checked = $("recovery-reviewed").checked = $("cleanup-reviewed").checked = false;
+  $("bundle-file").value = $("bundle-expected").value = $("token").value = "";
+  $("session-status").textContent = "Session status has not been checked.";
+  $("detail").hidden = $("evidence").hidden = true; $("empty").hidden = false;
+  controls();
+}
+function endLocalSession(message) {
+  token = ""; clearSessionView();
+  $("workspace").hidden = true; $("login").hidden = false; $("disconnect").hidden = true;
+  notice(message);
+}
+async function sessionFetch(path, options) {
+  const requestedToken = token;
+  const response = await fetch(path, options);
+  if (requestedToken !== token) throw new Error("Session changed; previous response discarded.");
+  if (response.status === 401) {
+    const message = "Session expired or revoked. Use a current token, or restart the server for a new session.";
+    endLocalSession(message);
+    throw new Error(message);
+  }
+  return response;
+}
 async function api(path, payload) {
-  const response = await fetch(path, {method: payload === undefined ? "GET" : "POST", headers: {Authorization: "Bearer " + token, "Content-Type": "application/json"}, body: payload === undefined ? undefined : JSON.stringify(payload), cache: "no-store", credentials: "omit"});
+  const requestedToken = token;
+  const response = await sessionFetch(path, {method: payload === undefined ? "GET" : "POST", headers: {Authorization: "Bearer " + token, "Content-Type": "application/json"}, body: payload === undefined ? undefined : JSON.stringify(payload), cache: "no-store", credentials: "omit"});
   const data = await response.json();
+  if (requestedToken !== token) throw new Error("Session changed; previous response discarded.");
   if (!response.ok) throw new Error(response.status === 401 ? "Session expired. Disconnect and paste the session from the running server." : data.error || "Request failed.");
   return data;
 }
@@ -128,7 +160,7 @@ $("verify-bundle").addEventListener("click", async () => {
     const sha = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), byte => byte.toString(16).padStart(2, "0")).join("");
     if (version !== bundleReviewVersion || controller.signal.aborted) return;
     if (sha !== expected) throw new Error("The file does not match the expected SHA-256. Nothing was uploaded.");
-    const response = await fetch('/evidence-bundles/verify', {method: "POST", headers: {Authorization: "Bearer " + token, "Content-Type": "application/octet-stream", "X-Orch-Expected-SHA256": expected}, body: bytes, cache: "no-store", credentials: "omit", signal: controller.signal});
+    const response = await sessionFetch('/evidence-bundles/verify', {method: "POST", headers: {Authorization: "Bearer " + token, "Content-Type": "application/octet-stream", "X-Orch-Expected-SHA256": expected}, body: bytes, cache: "no-store", credentials: "omit", signal: controller.signal});
     if (!response.ok) throw new Error(response.status === 401 ? "Session expired. Reconnect." : "The server rejected the bundle. Check the file and expected digest.");
     const report = await response.json();
     if (version !== bundleReviewVersion || controller.signal.aborted) return;
@@ -268,7 +300,7 @@ $("download-bundle").addEventListener("click", async () => {
   claimDownloadController = controller; claimControls();
   $("bundle-digest").textContent = "Preparing and verifying bundle…";
   try {
-    const response = await fetch(`/tasks/${task}/evidence-bundle`, {method: "POST", headers: {Authorization: "Bearer " + token, "Content-Type": "application/json"}, body: JSON.stringify(selection), cache: "no-store", credentials: "omit", signal: controller.signal});
+    const response = await sessionFetch(`/tasks/${task}/evidence-bundle`, {method: "POST", headers: {Authorization: "Bearer " + token, "Content-Type": "application/json"}, body: JSON.stringify(selection), cache: "no-store", credentials: "omit", signal: controller.signal});
     const {bytes, sha} = await readBundleResponse(response);
     if (controller.signal.aborted || version !== epoch || request !== claimRequest) return;
     const url = URL.createObjectURL(new Blob([bytes], {type: "application/json"})), link = document.createElement("a");
@@ -397,7 +429,7 @@ async function replay() {
   if (!selected || !token || replaying || busy) return;
   replaying = true; const version = epoch, task = selected;
   try {
-    const response = await fetch(`/tasks/${task}/stream`, {headers: {Authorization: "Bearer " + token, "Last-Event-ID": String(cursor)}, cache: "no-store", credentials: "omit"});
+    const response = await sessionFetch(`/tasks/${task}/stream`, {headers: {Authorization: "Bearer " + token, "Last-Event-ID": String(cursor)}, cache: "no-store", credentials: "omit"});
     if (!response.ok) throw new Error("Event connection unavailable. Reconnect if the server restarted.");
     const text = await response.text(); if (version !== epoch) return;
     let added = false;
@@ -456,10 +488,32 @@ $("storage-report").addEventListener("click", () => maintenanceReport("storage")
 $("integrity-report").addEventListener("click", () => maintenanceReport("integrity"));
 $("connect").addEventListener("submit", async e => {
   e.preventDefault(); token = $("token").value.trim(); $("token").value = "";
-  try { await tasks(); $("login").hidden = true; $("workspace").hidden = false; $("disconnect").hidden = false; notice("Connected to the local operator session."); }
-  catch (error) { token = ""; notice(error.message); }
+  const connectingToken = token;
+  try { await tasks(); if (connectingToken !== token) return; $("login").hidden = true; $("workspace").hidden = false; $("disconnect").hidden = false; notice("Connected to the local operator session."); }
+  catch (error) { if (connectingToken === token) { token = ""; notice(error.message); } }
 });
 $("disconnect").addEventListener("click", () => location.reload());
+function showSessionStatus(status) {
+  $("session-status").textContent = `Session generation ${status.generation}. Expires in at most ${Math.ceil(status.expires_in_seconds / 60)} minutes. Rotation does not extend the eight-hour limit.`;
+}
+async function sessionAction(action) {
+  if (busy || !token) return;
+  busy = true; controls();
+  try {
+    const result = await api(action === "check" ? "/session" : `/session/${action}`, action === "check" ? undefined : {});
+    if (action === "revoke") {
+      endLocalSession("Server session ended. Restart the server to reconnect. Previously admitted work is not cancelled.");
+    } else if (action === "rotate") {
+      if (typeof result.session !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(result.session)) {
+        endLocalSession("Invalid rotation response; restart the server to reconnect."); return;
+      }
+      token = result.session; clearSessionView(); showSessionStatus(result.status);
+      await tasks(); notice("Session rotated. Old tokens no longer work. Select a task and review it again.");
+    } else showSessionStatus(result);
+  } catch (error) { notice(error.message); }
+  finally { busy = false; controls(); }
+}
+for (const action of ["check", "rotate", "revoke"]) $("session-" + action).addEventListener("click", () => sessionAction(action));
 $("refresh").addEventListener("click", () => tasks().catch(e => notice(e.message)));
 $("refresh-task").addEventListener("click", () => {
   if (busy || !token || !selected) return;

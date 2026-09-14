@@ -335,6 +335,41 @@ test('session rejection and disconnect clear access', async ({ page, operator })
   expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
 });
 
+test('rotation retains this tab, invalidates old tokens and revocation ends access', async ({ page, operator }) => {
+  await connect(page, operator.token);
+  await page.locator('#session-check').click();
+  await expect(page.locator('#session-status')).toContainText('generation 1');
+  const old = operator.token;
+  const rotated = page.waitForResponse(response => response.url().endsWith('/session/rotate'));
+  await page.locator('#session-rotate').click();
+  operator.token = (await (await rotated).json()).session;
+  await expect(page.locator('#session-status')).toContainText('generation 2');
+  await expect(page.locator('#workspace')).toBeVisible();
+  await expect(page.locator('#token')).toHaveValue('');
+  const rejected = await page.request.get(operator.url+'/tasks', {headers:{Authorization:'Bearer '+old}});
+  expect(rejected.status()).toBe(401);
+  expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+  await page.locator('#session-revoke').click();
+  await expect(page.locator('#workspace')).toBeHidden();
+  await expect(page.locator('#login')).toBeVisible();
+  await expect(page.locator('#notice')).toContainText('Server session ended');
+  expect((await page.request.get(operator.url+'/session', {headers:{Authorization:'Bearer '+operator.token}})).status()).toBe(401);
+});
+
+test('revocation in another client clears displayed evidence on the next request', async ({ page, operator }) => {
+  await connect(page, operator.token);
+  await page.locator('#create button').click();
+  await expect(page.locator('#detail')).toBeVisible();
+  await page.locator('#records button').first().click();
+  await expect(page.locator('#evidence-json')).not.toBeEmpty();
+  const response = await page.request.post(operator.url+'/session/revoke', {headers:{Authorization:'Bearer '+operator.token}, data:{}});
+  expect(response.status()).toBe(200);
+  await page.locator('#session-check').click();
+  await expect(page.locator('#workspace')).toBeHidden();
+  await expect(page.locator('#evidence-json')).toBeEmpty();
+  await expect(page.locator('#reviewed')).not.toBeChecked();
+});
+
 test('event history reports an outage and retries without duplicate events', async ({ page, operator }) => {
   await connect(page, operator.token);
   await page.locator('#create button').click();

@@ -1,7 +1,5 @@
 """Small localhost HTTP boundary. Session identity never comes from request JSON."""
-import hmac
 import json
-import secrets
 import re
 import sqlite3
 from dataclasses import dataclass
@@ -10,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlsplit, parse_qs
 
 from .contracts import Rejected, ref
+from .operator_session import OperatorSession
 
 
 @dataclass(frozen=True)
@@ -37,12 +36,16 @@ def page(query):
 
 
 class Application:
-    def __init__(self, engine):
+    def __init__(self, engine, sessions=None):
         self.engine = engine
-        self.session = secrets.token_urlsafe(32)  # In-memory local session; never persisted.
+        self.sessions = sessions if sessions is not None else OperatorSession()
+
+    @property
+    def session(self):
+        return self.sessions.token
 
     def dispatch(self, method, path, payload, token):
-        if not isinstance(token, str) or not token.isascii() or not hmac.compare_digest(token, self.session):
+        if not self.sessions.authenticate(token, touch=path != '/session'):
             return 401, {"error": "Operator session required"}
         try:
             parsed = urlsplit(path)
@@ -60,6 +63,16 @@ class Application:
                              "next": rows[limit-1]["rowid"] if len(rows) > limit else None}
             if query and not (method == "GET" and len(parts) == 3 and parts[2] in ("records", "stream")):
                 raise Rejected("Unexpected query")
+            if parts in (['session'], ['session', 'rotate'], ['session', 'revoke']):
+                if payload:
+                    raise Rejected('Session operations accept no payload fields')
+                if method == 'GET' and parts == ['session']:
+                    return 200, self.sessions.status(token)
+                if method == 'POST' and parts == ['session', 'rotate']:
+                    return 200, self.sessions.rotate(token)
+                if method == 'POST' and parts == ['session', 'revoke']:
+                    return 200, self.sessions.revoke(token)
+                return 405, {'error': 'Unsupported session method'}
             if method == 'POST' and parsed.path == '/evidence-bundles/verify':
                 from .github_bundle import verify_bundle_bytes
                 if not isinstance(payload, BundleUpload):
@@ -184,7 +197,9 @@ def serve(engine, port=8080):
 
         def handle_request(self):
             expected_host = "127.0.0.1:" + str(self.server.server_port)
-            if (self.headers.get("Host") != expected_host
+            if (len(self.headers.get_all('Host', [])) != 1 or len(self.headers.get_all('Origin', [])) > 1
+                    or len(self.headers.get_all('Sec-Fetch-Site', [])) > 1
+                    or self.headers.get("Host") != expected_host
                     or self.headers.get("Origin") not in (None, "http://" + expected_host)
                     or self.headers.get("Sec-Fetch-Site") == "cross-site"):
                 self.send_error(403)
@@ -194,13 +209,19 @@ def serve(engine, port=8080):
                 name, mime = assets[self.path]
                 self.respond(200, (Path(__file__).with_name("ui") / name).read_bytes(), mime)
                 return
+            authorization = self.headers.get('Authorization', '')
+            token = authorization[7:] if authorization.startswith('Bearer ') else ''
+            if len(self.headers.get_all('Authorization', [])) != 1 or not app.sessions.authenticate(token, touch=False):
+                self.respond(401, b'{"error":"Operator session required; reconnect or restart the server"}', 'application/json')
+                return
+            if (len(self.headers.get_all('Content-Length', [])) > 1
+                    or len(self.headers.get_all('Content-Type', [])) > 1
+                    or len(self.headers.get_all('Last-Event-ID', [])) > 1
+                    or self.headers.get_all('Transfer-Encoding') or self.headers.get_all('Content-Encoding')):
+                self.send_error(400)
+                return
             if self.command == 'POST' and self.path == '/evidence-bundles/verify':
                 from .github_bundle import MAX_BUNDLE_BYTES
-                authorization = self.headers.get('Authorization', '')
-                token = authorization[7:] if authorization.startswith('Bearer ') else ''
-                if len(self.headers.get_all('Authorization', [])) != 1 or not token.isascii() or not hmac.compare_digest(token, app.session):
-                    self.send_error(401)
-                    return
                 length = self.headers.get('Content-Length', '')
                 expected = self.headers.get('X-Orch-Expected-SHA256', '')
                 if (len(self.headers.get_all('Content-Length', [])) != 1
@@ -225,21 +246,32 @@ def serve(engine, port=8080):
                 self.respond(code, json.dumps(output).encode(), 'application/json')
                 return
             try:
-                length = int(self.headers.get("Content-Length", "0"))
+                raw_length = self.headers.get('Content-Length', '0')
+                if not re.fullmatch('[0-9]{1,8}', raw_length): raise ValueError()
+                length = int(raw_length)
                 if not 0 <= length <= 4096:
                     raise ValueError()
                 if self.headers.get("Transfer-Encoding"):
                     raise ValueError()
                 if self.command == "POST" and self.headers.get_content_type() != "application/json":
                     raise ValueError()
-                body = json.loads(self.rfile.read(length)) if length else {}
+                raw = self.rfile.read(length)
+                if len(raw) != length: raise ValueError()
+                def unique(pairs):
+                    result = {}
+                    for key, value in pairs:
+                        if key in result: raise ValueError('Duplicate JSON key')
+                        result[key] = value
+                    return result
+                def invalid_number(_):
+                    raise ValueError('Non-JSON number')
+                body = json.loads(raw.decode('utf-8'), object_pairs_hook=unique, parse_constant=invalid_number) if length else {}
                 if not isinstance(body, dict):
                     raise ValueError()
-            except (ValueError, UnicodeDecodeError):
+                if self.command == 'GET' and body: raise ValueError()
+            except (ValueError, UnicodeDecodeError, RecursionError, OSError):
                 self.send_error(400)
                 return
-            authorization = self.headers.get("Authorization", "")
-            token = authorization[7:] if authorization.startswith("Bearer ") else ""
             path = self.path
             streaming = self.command == "GET" and urlsplit(path).path.endswith("/stream")
             if streaming and self.headers.get("Last-Event-ID") is not None:

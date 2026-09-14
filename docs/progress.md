@@ -19,7 +19,7 @@ an assumption that more UI features alone will make the system production-ready.
 | 6. Local management UI | Substantially implemented, including restart/replay, evidence and operator controls |
 | 7. GitHub integration | Offline preview, ref comparison, reconciliation classifier and durable intent/reservation journal; platform actions still simulated; no live PR creation |
 | 8. Jira Data Center integration | Consolidated offline comments, Epic/Story/Task preparation, relationships, transitions, GitHub associations, durable journal, review/preflight and recovery; live deployment/admission remains blocked |
-| 9. Credential broker/auth hardening | Local session boundary implemented; production provider credentials/SSO remain |
+| 9. Credential broker/auth hardening | Local session expiry, rotation/revocation, stale-client clearing and strict HTTP parsing implemented; production provider credentials/SSO remain |
 | 10. OWASP/ACS hardening and adversarial tests | Substantial boundary tests; independent deployment review and broader live-system testing remain |
 | 11. Concurrent workers | Deferred; current execution is deliberately bounded |
 | 12. Advanced orchestration | Deferred; needs explicit scope |
@@ -28,13 +28,13 @@ PRs opened while developing this repository are collaboration through developmen
 tools, not evidence that orchd.ai itself has a GitHub integration. Deterministic
 fixture success also does not establish compatibility with live model providers.
 
-The latest full offline run completed 567 Python tests: 562 passed and five expected
-Docker skips. This includes the consolidated Jira action/review/recovery package and its
-synthetic end-to-end acceptance scenario. All 76 focused Jira tests also passed after final
-field-type, retained-author and profile-override checks. The most
-recent UI milestone passed nine Chromium tests and ten targeted UI scripts, including
-downloaded-bundle verification and received-bundle review in an empty workspace after
-removing the source store; UI checks were not rerun for these CLI-only Jira changes.
+The latest full offline run completed 578 Python tests: 573 passed and five expected
+Docker skips. This includes the consolidated Jira package and local operator session/
+HTTP hardening tests. All 11 Chromium tests and 11 targeted UI scripts passed after the
+final session response guard, including rotation, revocation, stale authentication,
+bundle review and restart/replay. Desktop and mobile layouts were inspected without
+horizontal overflow. The preceding Jira milestone also passed its synthetic end-to-end
+acceptance scenario and 76 focused tests.
 Those are dated local results, not a claim that every current host or hosted CI job has
 passed. Docker evidence expires and is tied to source, host, daemon and image.
 
@@ -71,6 +71,9 @@ passed. Docker evidence expires and is tied to source, host, daemon and image.
    independent containment, authenticated approval, verified workflow evidence and authoritative
    reconciliation/restore policy blocked. Completing the offline package does not close Phase 8.
 4. Complete deployment/auth hardening and adversarial release checks before concurrency.
+   [Local operator sessions](operator-sessions.md) now have idle/absolute expiry,
+   rotation/revocation, safe UI reconnection and strict HTTP parsing. Corporate identity,
+   credential brokering and independent deployment review remain separate gates.
 5. Define and implement bounded concurrent-worker and advanced-orchestration milestones.
 
 Missing corporate documentation does not prevent offline contract and broker development,
