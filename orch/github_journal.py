@@ -1,6 +1,8 @@
 """Durable offline GitHub intent/reservation journal, separate from workflow storage."""
 import json
+from datetime import datetime
 from pathlib import Path
+import re
 import sqlite3
 
 from .contracts import Rejected, canonical, digest, now
@@ -16,12 +18,24 @@ def bound_scope(intent, allowed_repository, repository_id):
 
 class GitHubJournal:
     """One immutable operation per task. Reservation is never dispatch authority."""
-    def __init__(self, path):
+    def __init__(self, path, read_only=False):
         if str(path) == ":memory:":
             raise Rejected("GitHub journal requires persistent storage")
         path = Path(path)
         if path.is_symlink():
             raise Rejected("Journal must not be a symlink")
+        self.read_only = read_only
+        if read_only:
+            self.db = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True, isolation_level=None, timeout=5)
+            self.db.row_factory = sqlite3.Row
+            try:
+                if (self.db.execute("PRAGMA user_version").fetchone()[0] != 1
+                        or self.db.execute("PRAGMA application_id").fetchone()[0] != 1330792264):
+                    raise Rejected("Not a supported GitHub journal")
+            except BaseException:
+                self.db.close()
+                raise
+            return
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path, isolation_level=None, timeout=5)
         self.db.row_factory = sqlite3.Row
@@ -53,14 +67,40 @@ class GitHubJournal:
         row = self.db.execute("SELECT * FROM intents WHERE operation_id=?", (operation_id,)).fetchone()
         if row is None:
             raise Rejected("Unknown GitHub operation")
-        scope = json.loads(row['scope'])
-        if digest(scope) != row['sha256']:
-            raise Rejected("GitHub journal scope digest mismatch")
+        try:
+            scope = json.loads(row['scope'])
+            binding = scope['preview']['binding']
+            request = binding['request']
+            destination = re.fullmatch(r"https://api\.github\.com/repos/([^/]+/[^/]+)/pulls", request['url'])
+            if not destination:
+                raise Rejected("Invalid journal destination")
+            intent = {key: binding[key] for key in ('schema_version', 'task_id', 'operation_id', 'expected_base_sha', 'expected_head_sha')}
+            intent.update({key: request['body'][key] for key in ('title', 'body', 'base', 'head')})
+            intent['repository'] = destination[1]
+            expected = bound_scope(intent, destination[1], scope['repository_id'])
+            if (canonical(expected) != canonical(scope) or canonical(scope).decode() != row['scope']
+                    or digest(scope) != row['sha256'] or binding['task_id'] != row['task_id']
+                    or binding['operation_id'] != row['operation_id']):
+                raise Rejected("Invalid journal scope binding")
+            if row['state'] == 'prepared':
+                if row['reserved_at'] is not None:
+                    raise Rejected("Prepared intent has reservation evidence")
+            elif row['state'] == 'uncertain':
+                reserved = row['reserved_at']
+                if not isinstance(reserved, str) or not reserved.endswith('Z'):
+                    raise Rejected("Uncertain intent lacks reservation evidence")
+                datetime.fromisoformat(reserved)
+            else:
+                raise Rejected("Invalid journal state")
+        except (KeyError, TypeError, ValueError, UnicodeError, RecursionError) as exc:
+            raise Rejected("Invalid GitHub journal record") from exc
         return {"operation_id": row['operation_id'], "task_id": row['task_id'], "scope": scope,
                 "sha256": row['sha256'], "state": row['state'], "reserved_at": row['reserved_at'],
                 "live_authorized": False, "retry_allowed": False}
 
     def stage(self, intent, allowed_repository, repository_id):
+        if self.read_only:
+            raise Rejected("Journal is read-only")
         scope = bound_scope(intent, allowed_repository, repository_id)
         sha = digest(scope)
         operation = intent['operation_id']
@@ -80,6 +120,8 @@ class GitHubJournal:
             raise
 
     def reserve(self, operation_id, expected_sha256):
+        if self.read_only:
+            raise Rejected("Journal is read-only")
         self.db.execute("BEGIN IMMEDIATE")
         try:
             current = self.get(operation_id)
