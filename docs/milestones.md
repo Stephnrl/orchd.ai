@@ -3,6 +3,8 @@
 The [original-roadmap progress assessment](progress.md) separates this bounded MVP
 from the remaining production integrations. [Deployment checks](deployment-readiness.md)
 now combine provider inventory and optional worker evidence without authorizing execution.
+The [offline GitHub preview](github-preview.md) supplies a separate destination-bound
+request preparation contract; live transport and approval admission remain unimplemented.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
