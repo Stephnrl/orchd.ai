@@ -237,6 +237,9 @@ scheduling, concurrent workers and retrieval remain outside MVP.
 The [offline Jira foundation](jira-preview.md) now implements explicit instance/project/
 issue validation, a bounded untrusted-text projection and comment previews bound to that
 snapshot. It does not enable Jira calls, task adoption, issue transitions or creation.
+[Jira comment recovery](jira-comment-recovery.md) adds preview-bound read plans and
+paginated candidate assessment, including author/visibility matching. Incomplete or
+ambiguous captures remain unresolved. It does not confirm delivery or authorize another attempt.
 
 ## Decisions to resolve before enabling real execution
 
