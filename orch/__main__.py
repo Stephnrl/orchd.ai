@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -35,6 +35,18 @@ def main():
     parser.add_argument("--observations", help="Offline JSON observations for GitHub assessment")
     parser.add_argument("--journal", help="Separate local GitHub operation journal database")
     args = parser.parse_args()
+    if args.command in ("github-journal-backup", "github-verify-journal-backup"):
+        if not args.destination or (args.command == "github-journal-backup" and not args.journal):
+            parser.error("Journal backups require --destination; creation also requires --journal")
+        from .github_backup import backup_journal, verify_journal_backup
+        from .contracts import Rejected
+        import sqlite3
+        try:
+            report = backup_journal(args.journal, args.destination) if args.command == "github-journal-backup" else verify_journal_backup(args.destination)
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error("Journal backup failed; check source integrity, budgets and destination; incomplete output is not a verified backup")
+        print(json.dumps(report, indent=2))
+        return
     if args.command == "github-reconcile-journal":
         if not args.journal or not args.operation_id or not args.expected_sha256 or not args.observations:
             parser.error("github-reconcile-journal requires --journal, --operation-id, --expected-sha256 and --observations")

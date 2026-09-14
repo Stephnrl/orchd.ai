@@ -139,6 +139,41 @@ authenticate the file against a trusted historical checkpoint, or verify schema 
 No records or reports are persisted or repaired, and retry/live authorization remain false.
 Python callers can use `GitHubJournal.audit()` on a connection without an active transaction.
 
+## Verified backup bundles
+
+```sh
+python -m orch github-journal-backup --journal .runtime/github-journal.sqlite --destination .runtime/github-backup-001
+python -m orch github-verify-journal-backup --destination .runtime/github-backup-001
+```
+
+Creation requires a new destination directory whose parent already exists. Existing
+directories and files are never reused or overwritten. The source is opened read-only,
+audited, and copied using SQLite's backup API with a pinned read snapshot, including
+committed WAL content. Concurrent changes after that snapshot are not included. The
+copied database is converted to a standalone rollback-journal database and audited again.
+
+A complete bundle contains exactly `journal.sqlite` and a canonical `manifest.json`.
+The manifest binds the database byte size/hash and complete audit report, and is written
+last after syncing the copied database. Creation then runs the independent verifier.
+Verification recomputes the file hash and audit, checks the complete manifest, and rejects
+extra files or SQLite sidecars. Database copies are limited to 32 MiB, manifests to 1 MiB,
+and records to the existing audit budgets. Copy progress has a 30-second deadline.
+
+Verification returns a compact report with `status: valid`, the bundle and audit digests,
+and record count. Errors exit 2 without a success report. Interrupted or failed creation
+can leave an incomplete destination; it is not reusable and must not be treated as a
+verified backup. The command does not delete that output. A truncated or missing manifest
+fails verification. File synchronization is not a claim of tested power-loss durability
+on every filesystem.
+
+Bundles contain full proposal text and require the same access protection as the source
+journal. They are not encrypted or signed. Use trusted local directories; these operations
+do not protect against an administrator concurrently replacing files or rewriting a fully
+consistent bundle. A valid backup can be stale and lack later consumed reservations.
+There is no restore/adoption command: `restore_allowed`, `retry_allowed` and
+`live_authorized` remain false. Never replace the active journal with an older backup to
+recover capacity or retry an operation.
+
 ## Storage and remaining recovery work
 
 The database has its own application identity/version and rejects other SQLite databases.
@@ -146,8 +181,9 @@ It never migrates or opens the workflow store through Engine. Do not point it at
 The in-memory SQLite special path and journal-file symlinks are rejected.
 
 This journal is separate from the existing workflow backup, audit and restore commands;
-they do not include or verify it. There is no supported journal reset, success adoption,
-automatic retry or backup/restore procedure yet. Restoring an older journal could lose
+they do not include or verify it. Use the journal-specific backup commands above. There
+is no supported journal reset, success adoption, automatic retry or restore procedure yet.
+Restoring an older journal could lose
 reservation evidence and must not be used to authorize dispatch. Integration with durable
 approval/evidence binding, authenticated reconciliation, journal archival/retirement and a
 reviewed recovery procedure remains required before live use. The current offline
