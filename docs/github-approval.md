@@ -166,6 +166,10 @@ fail without partial output. The resolver is read-only and deliberately does not
 outcomes, policy compatibility or artifacts; a rejected review can still be selected.
 Run the following assessment to evaluate the selected evidence.
 
+For a review handoff, [export a portable evidence bundle](github-evidence-bundles.md)
+from that selection and verify it independently without the source workflow directory.
+Bundles are separate from the artifact-evidence envelope used by combined assessment.
+
 ```sh
 python -m orch github-check-record-claims --data .runtime/phase2 --records records.json
 ```
@@ -363,6 +367,8 @@ This is consistency checking of local claims, not authentication of execution, r
 identity or policy authority. It does not validate every transitive dependency,
 arbitrary repository diffs or log semantics, real GitHub commits, or the tool payload against a journal proposal.
 The current engine does not automatically export these records as evidence artifacts.
+Explicit portable bundle export packages the selected chain separately and does not
+register new artifacts in the workflow store.
 The standalone claims check does not compare the tool payload to a journal proposal;
 the combined assessment adds the binding described above.
 

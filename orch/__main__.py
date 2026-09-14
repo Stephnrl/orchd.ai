@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -27,7 +27,7 @@ def main():
     parser.add_argument("--reason", help="One-line operator cancellation reason (1–500 characters)")
     parser.add_argument("--provider", choices=["github_copilot_cli", "abc_binary_ai_placeholder"])
     parser.add_argument("--executable", help="Absolute provider executable path for read-only inventory")
-    parser.add_argument("--expected-sha256", help="Expected executable digest or retained GitHub scope digest")
+    parser.add_argument("--expected-sha256", help="Expected executable, GitHub scope or evidence bundle digest")
     parser.add_argument("--runtime-report", help="Existing runtime evidence to revalidate for deployment-check; may query Docker")
     parser.add_argument("--intent", help="Local JSON intent for offline github-preview")
     parser.add_argument("--allow-repository", help="Exact owner/name allowed for the GitHub preview")
@@ -37,7 +37,35 @@ def main():
     parser.add_argument("--records", help="Explicit task-owned patch/test/review/policy document references")
     parser.add_argument("--evidence", help="Offline GitHub approval evidence digest envelope")
     parser.add_argument("--approval-preview", help="Saved GitHub approval preview JSON")
+    parser.add_argument("--bundle", help="Portable offline GitHub evidence bundle file")
     args = parser.parse_args()
+    if args.command in ("github-export-evidence-bundle", "github-verify-evidence-bundle"):
+        from .github_bundle import export_bundle, verify_bundle
+        from .github_preview import load_intent
+        from .storage import Store
+        from .contracts import Rejected
+        import sqlite3
+        store = None
+        try:
+            if args.command == "github-export-evidence-bundle":
+                if not args.records or not args.destination:
+                    parser.error("Bundle export requires --records, --destination and existing --data")
+                selection = load_intent(args.records)
+                store = Store(args.data, read_only=True)
+                report = export_bundle(store, selection, args.destination)
+            else:
+                if not args.bundle or not args.expected_sha256:
+                    parser.error("Bundle verification requires --bundle and --expected-sha256")
+                report = verify_bundle(args.bundle, args.expected_sha256)
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error("Evidence bundle failed; check selection, contents, digest, limits and destination")
+        finally:
+            if store is not None:
+                store.close()
+        print(json.dumps(report, indent=2))
+        if report['status'] == 'blocked':
+            raise SystemExit(2)
+        return
     if args.command == "github-resolve-evidence-selection":
         if not args.records:
             parser.error("github-resolve-evidence-selection requires --records and existing --data")

@@ -77,20 +77,24 @@ def list_evidence_records(store, task):
         raise
 
 
-def check_record_claims(store, selection):
+def _record_claims_snapshot(store, selection):
     if (not isinstance(selection, dict) or set(selection) != {'task_id', *RECORD_ROLES}
             or not isinstance(selection['task_id'], str) or not re.fullmatch(r'[a-f0-9]{32}', selection['task_id'])
             or any(not DOCUMENT_REF.is_valid(selection[role]) for role in RECORD_ROLES)):
         raise Rejected('Invalid evidence record selection')
+    contents = {role: canonical(_stored_record(store, selection[role], selection['task_id'], kind))
+                for role, kind in RECORD_ROLES.items()}
+    claims = _assess_contents(store, selection['task_id'], contents)
+    binding = {'schema_version': '1.0.0', 'selection': selection, 'claims': claims}
+    return {'kind': 'GitHubRecordClaimsAssessment', 'binding': binding, 'sha256': digest(binding),
+            'status': 'blocked' if claims['blockers'] else 'claims_consistent',
+            'evidence_verified': False, 'live_authorized': False, 'retry_allowed': False}
+
+
+def check_record_claims(store, selection):
     store.db.execute('BEGIN')
     try:
-        contents = {role: canonical(_stored_record(store, selection[role], selection['task_id'], kind))
-                    for role, kind in RECORD_ROLES.items()}
-        claims = _assess_contents(store, selection['task_id'], contents)
-        binding = {'schema_version': '1.0.0', 'selection': selection, 'claims': claims}
-        report = {'kind': 'GitHubRecordClaimsAssessment', 'binding': binding, 'sha256': digest(binding),
-                  'status': 'blocked' if claims['blockers'] else 'claims_consistent',
-                  'evidence_verified': False, 'live_authorized': False, 'retry_allowed': False}
+        report = _record_claims_snapshot(store, selection)
         store.db.execute('COMMIT')
         return report
     except BaseException:

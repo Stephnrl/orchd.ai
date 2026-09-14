@@ -8,6 +8,8 @@ remaining integrations, and [deployment readiness](docs/deployment-readiness.md)
 an executable report of the gates still blocking live providers.
 The [offline GitHub request preview](docs/github-preview.md) begins external broker
 preparation with explicit destination checks and a digest of the proposed scope.
+[Portable evidence bundles](docs/github-evidence-bundles.md) package an explicitly
+selected workflow chain for bounded offline verification without the original store.
 
 Phase 1 remains the design baseline below. Phase 2 implements the bounded offline
 vertical slice; see [running Phase 2](docs/phase2.md) for APIs, recovery and limitations.
