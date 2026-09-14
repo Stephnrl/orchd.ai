@@ -114,6 +114,8 @@ Epic creation, transitions, linking and automatic task intake remain unimplement
 [Offline comment recovery](jira-comment-recovery.md) now adds an exact read plan and
 bounded paginated comparison against the proposed text, visibility and expected author.
 Candidate observations remain non-authoritative and never permit automatic reposting.
+[Retained operations](jira-journal.md) now bind these inputs to an immutable local record,
+with reservation tracking, auditing and recovery from saved scope across restarts.
 
 Tests cover the complete CLI flow, explicit target binding, issue moves, snapshot drift,
 redaction/provenance, visibility, malformed URLs, encoding/byte limits and no network or

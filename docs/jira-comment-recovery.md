@@ -87,8 +87,9 @@ A matching comment may predate the proposed operation or have been posted indepe
 by the same account. A stable captured total also does not prove a stable remote list.
 These are unauthenticated saved observations, without freshness or delivery provenance.
 An empty list is not permission to repost. Live use still needs credentials, trusted
-collection, durable dispatch intent, authoritative reconciliation and an approved
-operator recovery policy. No such admission or journal is created by this milestone.
+collection, authoritative reconciliation and an approved operator recovery policy.
+The separate [Jira journal](jira-journal.md) now retains immutable scope and one-use
+reservations and can run these checks from a saved record. It adds no live admission.
 
 Tests cover CLI preparation/recovery, unrelated comments, exact author/body/visibility,
 duplicate candidates and IDs, changed totals, empty/truncated pages, invalid origins,

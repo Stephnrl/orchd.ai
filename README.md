@@ -22,6 +22,8 @@ paginated PR lookup and retained-reservation reconciliation without retry author
 and snapshot-bound comment previews using saved responses, with live actions disabled.
 [Jira comment recovery](docs/jira-comment-recovery.md) checks captured comment pages
 against the exact preview and expected author without permitting automatic reposting.
+[Retained Jira operations](docs/jira-journal.md) add durable staging, one-use reservation
+tracking, integrity audits and recovery from saved scope across restarts.
 
 Phase 1 remains the design baseline below. Phase 2 implements the bounded offline
 vertical slice; see [running Phase 2](docs/phase2.md) for APIs, recovery and limitations.
