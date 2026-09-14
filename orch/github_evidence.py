@@ -15,13 +15,22 @@ MAX_BYTES = 1024 * 1024
 def assess_approval_evidence(journal, store, preview, expected_sha256, evidence):
     """Compose fresh checks, then recheck approval after artifact I/O."""
     approval = check_approval(journal, preview, expected_sha256, evidence)
-    artifacts = None
+    artifacts = claims = None
     if approval['status'] == 'current':
-        artifacts = check_evidence(store, evidence)
+        claims = check_evidence_contents(store, evidence)
+        artifacts = claims['binding']['artifact_evidence']
         approval = check_approval(journal, preview, expected_sha256, evidence)
-    binding = {"schema_version": "1.0.0", "approval": approval, "artifact_evidence": artifacts}
+    blockers = ['approval:' + reason for reason in approval['binding']['blockers']]
+    if claims is not None:
+        blockers.extend('evidence:' + reason for reason in claims['binding']['claims']['blockers'])
+        window = claims['binding']['claims']['policy_window']
+        checked = datetime.fromisoformat(approval['binding']['checked_at'])
+        if not datetime.fromisoformat(window['issued_at']) <= checked < datetime.fromisoformat(window['expires_at']):
+            blockers.append('evidence:policy_not_current')
+    binding = {"schema_version": "1.0.0", "approval": approval, "artifact_evidence": artifacts,
+               "evidence_claims": claims, "blockers": sorted(set(blockers))}
     return {"kind": "GitHubCombinedApprovalAssessment", "binding": binding, "sha256": digest(binding),
-            "status": approval['status'], "artifact_bytes_verified": artifacts is not None,
+            "status": 'blocked' if blockers else 'current', "artifact_bytes_verified": artifacts is not None,
             "evidence_verified": False, "live_authorized": False, "retry_allowed": False}
 
 
@@ -84,6 +93,7 @@ def _assess_contents(store, task, contents):
         blockers.append('policy_not_current')
     return {"records": {role: ref(document) for role, document in documents.items()},
             "review_request": ref(review_request), "tool_request": ref(tool), "checked_at": checked,
+            "policy_window": {"issued_at": policy['created_at'], "expires_at": policy['expires_at']},
             "blockers": blockers}
 
 
