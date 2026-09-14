@@ -3,6 +3,7 @@ import hashlib
 import json
 import stat
 import re
+from pathlib import PureWindowsPath, PurePosixPath
 from datetime import datetime
 
 from jsonschema import Draft202012Validator
@@ -178,8 +179,6 @@ def _assess_contents(store, task, contents):
         blockers.append('test_patch_mismatch')
     if test['outcome'] != 'passed' or test['exit_code'] != 0 or test['output_truncated']:
         blockers.append('test_not_passed_completely')
-    if test['requested_command']['argv'] != test['executed_argv']:
-        blockers.append('test_command_mismatch')
     if any(command['exit_code'] != 0 for command in patch['executed_commands']):
         blockers.append('patch_command_failed')
     if review['decision'] != 'ACCEPT' or review['findings']:
@@ -267,7 +266,7 @@ def _execution_claims(store, task, work, patch, test):
                 if not isinstance(result, dict) or canonical(result).decode() != row['result']:
                     raise Rejected('Invalid execution result')
                 result_sha = digest(result)
-                if result.get(role) != ref(receipt) or 'failure' not in result or result['failure'] is not None:
+                if result.get(role) != ref(receipt) or result.get('failure') is not None:
                     blockers.append(role + '_operation_result_mismatch')
             except (ValueError, TypeError, RecursionError) as exc:
                 raise Rejected('Invalid execution result') from exc
@@ -310,6 +309,8 @@ def _broker_envelope(store, task, operation, generation, request, role, receipt)
     else:
         command = receipt if role == 'test' else receipt['executed_commands'][0]
         argv = command['executed_argv'] if role == 'test' else command['argv']
+        if role == 'test' and receipt['requested_command']['argv'] != argv and not _fixture_test_command(request, receipt):
+            blockers.append('command_mismatch')
         if command['working_directory'] != request['workspace']:
             blockers.append('broker_receipt_workspace_mismatch')
         if (argv != result['command'] or command['exit_code'] != result['code']
@@ -323,6 +324,21 @@ def _broker_envelope(store, task, operation, generation, request, role, receipt)
             if command[channel]['sha256'] != hashlib.sha256(output).hexdigest() or command[channel]['size_bytes'] != len(output):
                 blockers.append('broker_receipt_' + channel + '_mismatch')
     return digest(envelope), blockers
+
+
+def _fixture_test_command(request, receipt):
+    from .execution import Executor
+    from .fixtures import TEST_CODE, recipe
+    if receipt['requested_command'] != recipe() or request['recipe'] != 'test' or request['args']:
+        return False
+    workspace = request['workspace']
+    path = PureWindowsPath(workspace) if '\\' in workspace or re.match(r'^[A-Za-z]:', workspace) else PurePosixPath(workspace)
+    try:
+        expected = Executor(request['mode'], request['image']).command_for(
+            path, TEST_CODE, [], request['operation_id'], python_executable=receipt['executed_argv'][0])
+        return receipt['executed_argv'] == expected
+    except Rejected:
+        return False
 
 
 def _plan_claims(store, task, work):
