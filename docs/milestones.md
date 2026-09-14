@@ -74,6 +74,8 @@ accepts the executor's exact fixed-recipe wrapper and optional success failure f
 with end-to-end coverage and rejection of modified wrappers.
 A bounded read-only task catalog now exposes candidate receipt/policy references and
 creation times, retaining multiple candidates for explicit record-assessment selection.
+An explicit review/policy anchor resolver now produces assessment-ready selections by
+following retained review links, rejecting ambiguity and conflicting patch references.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

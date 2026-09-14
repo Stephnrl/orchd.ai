@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from orch.contracts import Rejected, canonical, digest, ref
-from orch.github_evidence import check_evidence_contents, check_record_claims, list_evidence_records
+from orch.github_evidence import check_evidence_contents, check_record_claims, list_evidence_records, resolve_record_selection
 from orch.storage import Store
 from github_evidence_support import register_support, link_plan_evidence, register_operations
 
@@ -76,6 +76,58 @@ class EvidenceClaimsTests(unittest.TestCase):
 
     def selection(self):
         return {'task_id': self.task, **{role: ref(self.docs[role]) for role in ('patch', 'test', 'review', 'policy')}}
+
+    def anchors(self):
+        return {'task_id': self.task, 'review': ref(self.docs['review']), 'policy': ref(self.docs['policy'])}
+
+    def test_selection_resolves_exact_review_links_without_writes(self):
+        self.persist()
+        other = {**self.docs['review'], 'id': 'later-review'}
+        self.store.put(other)
+        before = self.store.db.total_changes
+        self.assertEqual(resolve_record_selection(self.store, self.anchors()), self.selection())
+        self.assertEqual(self.store.db.total_changes, before)
+
+    def test_selection_rejects_multiple_test_references(self):
+        self.docs['review_request']['test_receipts'].append(ref(self.docs['test']))
+        self.docs['review']['request'] = ref(self.docs['review_request'])
+        self.persist()
+        with self.assertRaisesRegex(Rejected, 'exactly one'):
+            resolve_record_selection(self.store, self.anchors())
+        self.assertFalse(self.store.db.in_transaction)
+
+    def test_selection_rejects_conflicting_patch_reference(self):
+        self.docs['test']['patch'] = {'id': 'different', 'sha256': 'b' * 64}
+        self.docs['review_request']['test_receipts'] = [ref(self.docs['test'])]
+        self.docs['review']['request'] = ref(self.docs['review_request'])
+        self.persist()
+        with self.assertRaisesRegex(Rejected, 'different patches'):
+            resolve_record_selection(self.store, self.anchors())
+
+    def test_selection_requires_exact_task_owned_anchors(self):
+        self.persist()
+        for anchors in ({**self.anchors(), 'extra': True}, {**self.anchors(), 'task_id': 'b' * 32},
+                        {**self.anchors(), 'review': {'id': 'review', 'sha256': 'b' * 64}}):
+            with self.assertRaises(Rejected):
+                resolve_record_selection(self.store, anchors)
+            self.assertFalse(self.store.db.in_transaction)
+
+    def test_selection_cli_emits_usable_json_without_assessing_outcomes(self):
+        from orch.__main__ import main
+        self.docs['review']['decision'] = 'REJECT'
+        self.persist()
+        path = Path(self.temp.name) / 'anchors.json'
+        path.write_text(json.dumps(self.anchors()))
+        argv = ['orch', 'github-resolve-evidence-selection', '--records', str(path), '--data', str(self.store.root)]
+        output = io.StringIO()
+        with patch.object(sys, 'argv', argv), redirect_stdout(output), patch('orch.__main__.Engine', side_effect=AssertionError('No workflow')):
+            main()
+        self.assertEqual(json.loads(output.getvalue()), self.selection())
+        path.write_text('{}')
+        output = io.StringIO()
+        with patch.object(sys, 'argv', argv), redirect_stdout(output), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            main()
+        self.assertEqual(output.getvalue(), '')
 
     def test_record_catalog_returns_exact_references_without_contents(self):
         self.persist()
