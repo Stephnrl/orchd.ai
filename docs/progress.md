@@ -20,7 +20,7 @@ an assumption that more UI features alone will make the system production-ready.
 | 7. GitHub integration | Offline preview, ref comparison, reconciliation classifier and durable intent/reservation journal; platform actions still simulated; no live PR creation |
 | 8. Jira Data Center integration | Consolidated offline comments, Epic/Story/Task preparation, relationships, transitions, GitHub associations, durable journal, review/preflight and recovery; live deployment/admission remains blocked |
 | 9. Credential broker/auth hardening | Local session expiry, rotation/revocation, stale-client clearing and strict HTTP parsing implemented; production provider credentials/SSO remain |
-| 10. OWASP/ACS hardening and adversarial tests | Substantial boundary tests; independent deployment review and broader live-system testing remain |
+| 10. OWASP/ACS hardening and adversarial tests | Substantial boundary tests and consolidated source-bound offline release verification; independent deployment review and broader live-system testing remain |
 | 11. Concurrent workers | Deferred; current execution is deliberately bounded |
 | 12. Advanced orchestration | Deferred; needs explicit scope |
 
@@ -28,7 +28,7 @@ PRs opened while developing this repository are collaboration through developmen
 tools, not evidence that orchd.ai itself has a GitHub integration. Deterministic
 fixture success also does not establish compatibility with live model providers.
 
-The latest full offline run completed 578 Python tests: 573 passed and five expected
+The operator-session milestone's full offline run completed 578 Python tests: 573 passed and five expected
 Docker skips. This includes the consolidated Jira package and local operator session/
 HTTP hardening tests. All 11 Chromium tests and 11 targeted UI scripts passed after the
 final session response guard, including rotation, revocation, stale authentication,
@@ -37,6 +37,12 @@ horizontal overflow. The preceding Jira milestone also passed its synthetic end-
 acceptance scenario and 76 focused tests.
 Those are dated local results, not a claim that every current host or hosted CI job has
 passed. Docker evidence expires and is tied to source, host, daemon and image.
+
+The release-verification milestone adds a single command for contract, Python,
+synthetic Jira, discovered UI-script and Chromium acceptance, with fixed CI lanes.
+Its retained report records the actual test counts and exact skips for each run;
+read-only verification rejects changed source, altered reports, partial lanes and
+expired results. It supplies unsigned local evidence, not production authorization.
 
 ## Next delivery sequence
 
@@ -71,6 +77,8 @@ passed. Docker evidence expires and is tied to source, host, daemon and image.
    independent containment, authenticated approval, verified workflow evidence and authoritative
    reconciliation/restore policy blocked. Completing the offline package does not close Phase 8.
 4. Complete deployment/auth hardening and adversarial release checks before concurrency.
+   [Release verification](release-verification.md) now consolidates offline acceptance
+   and source/lane/expiry checking, while retaining all external deployment gates.
    [Local operator sessions](operator-sessions.md) now have idle/absolute expiry,
    rotation/revocation, safe UI reconnection and strict HTTP parsing. Corporate identity,
    credential brokering and independent deployment review remain separate gates.
