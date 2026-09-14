@@ -1,6 +1,6 @@
 const { test: base, expect } = require('@playwright/test');
 const { spawn } = require('node:child_process');
-const { mkdtemp, rm } = require('node:fs/promises');
+const { mkdtemp, rm, readFile } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
 const { createInterface } = require('node:readline');
@@ -162,6 +162,31 @@ test('task titles remain literal and duplicate titles select distinct tasks', as
     await expect(page.locator('#task-title')).toHaveText(title);
     await expect(entry).toHaveAttribute('aria-current', 'true');
   }
+});
+
+test('displayed evidence downloads match the view and failed reads disable saving', async ({ page, operator }, testInfo) => {
+  await connect(page, operator.token);
+  await page.locator('#create button').click();
+  await expect(page.locator('#task-id')).not.toBeEmpty();
+  const task = await page.locator('#task-id').textContent();
+  const before = await readTask(page, operator, task);
+  for (const [selector, filename] of [['#records button', 'orchd-record.json'], ['#events button', 'orchd-artifact.txt']]) {
+    await page.locator(selector).first().click();
+    await expect(page.locator('#save-evidence')).toBeEnabled();
+    const displayed = await page.locator('#evidence-json').textContent();
+    const downloadEvent = page.waitForEvent('download');
+    await page.locator('#save-evidence').click();
+    const download = await downloadEvent;
+    expect(download.suggestedFilename()).toBe(filename);
+    const destination = testInfo.outputPath(filename);
+    await download.saveAs(destination);
+    expect(await readFile(destination, 'utf8')).toBe(displayed);
+  }
+  await page.route('**/records/*', route => route.fulfill({status: 409, contentType: 'application/json', body: '{"error":"Read unavailable"}'}));
+  await page.locator('#records button').first().click();
+  await expect(page.locator('#evidence-title')).toContainText('Evidence unavailable');
+  await expect(page.locator('#save-evidence')).toBeDisabled();
+  expect(await readTask(page, operator, task)).toEqual(before);
 });
 
 test('session rejection and disconnect clear access', async ({ page, operator }) => {

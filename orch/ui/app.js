@@ -4,6 +4,7 @@ let token = "", selected = null, snapshot = null, approval = null, recovery = nu
 let epoch = 0, cursor = 0, taskNext = null, recordNext = null, busy = false;
 let stateRequest = 0;
 let evidenceRequest = 0;
+let evidenceDownload = null;
 let taskListRequest = 0, recordListRequest = 0, tasksLoading = false, recordsLoading = false;
 const names = new Map();
 const pretty = value => JSON.stringify(value, null, 2);
@@ -24,6 +25,7 @@ function canRetryCleanup() {
   return !busy && cleanupAvailable() && $("cleanup-reviewed").checked;
 }
 function controls() {
+  $("save-evidence").disabled = busy || !evidenceDownload || evidenceDownload.epoch !== epoch;
   $("more-tasks").disabled = tasksLoading || taskNext === null;
   $("more-records").disabled = recordsLoading || recordNext === null;
   $("refresh-task").disabled = busy || !token || !selected;
@@ -62,6 +64,7 @@ function references(value, target) {
 }
 async function evidence(type, id) {
   const version = epoch, task = selected, request = ++evidenceRequest;
+  evidenceDownload = null; $("save-evidence").disabled = true;
   $("evidence").hidden = false;
   $("evidence-title").textContent = "Loading evidence…";
   $("evidence-trust").textContent = type + " · " + id;
@@ -76,6 +79,9 @@ async function evidence(type, id) {
     let linked = data;
     if (type === "artifacts") { try { linked = JSON.parse(data.content); } catch { linked = null; } }
     references(linked, $("evidence-links"));
+    evidenceDownload = {epoch: version, text: $("evidence-json").textContent,
+      filename: type === "records" ? "orchd-record.json" : "orchd-artifact.txt"};
+    $("save-evidence").disabled = busy;
   } catch (error) {
     if (version === epoch && request === evidenceRequest) {
       $("evidence-title").textContent = "Evidence unavailable. Select the reference to retry.";
@@ -85,6 +91,15 @@ async function evidence(type, id) {
     }
   }
 }
+$("save-evidence").addEventListener("click", () => {
+  if (busy || !evidenceDownload || evidenceDownload.epoch !== epoch) return;
+  const url = URL.createObjectURL(new Blob([evidenceDownload.text], {type: "text/plain;charset=utf-8"}));
+  const link = document.createElement("a");
+  link.href = url; link.download = evidenceDownload.filename;
+  document.body.append(link);
+  try { link.click(); }
+  finally { link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+});
 async function tasks(more = false) {
   if (more && (tasksLoading || taskNext === null)) return;
   const version = epoch, request = ++taskListRequest, after = more ? taskNext : 0;

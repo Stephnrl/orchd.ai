@@ -23,6 +23,7 @@ production authentication. It checks invalid-session rejection, disconnect, rend
 approval guards, evidence inspection, refresh review reset, separate approval/execution,
 literal task-title rendering and distinct selection of tasks sharing a title,
 event-history outage feedback and recovery without duplicate events,
+record/artifact downloads matching displayed content and failed-read save guards,
 and storage/integrity reports. Completion and cancellation tests also stop the server,
 restart it against the same test store, reject the old session, and reconnect with the
 new session. They compare persisted state/context, replayed event labels, a contract

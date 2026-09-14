@@ -24,6 +24,12 @@ selection cannot overwrite the current evidence. A failed selected read leaves a
 unavailable message and can be retried by selecting its reference again. Switching tasks
 prevents an old evidence response from reopening the panel. Content remains rendered
 as text, including untrusted markup.
+**Save displayed evidence** downloads the successfully loaded content shown in the
+viewer, using `orchd-record.json` for a formatted record or `orchd-artifact.txt` for
+artifact text. Filenames do not come from evidence. The browser creates a local text
+download; no additional API read, store write or workflow action is made. Loading,
+failed reads, task switches and busy operations prevent saving stale content. The file
+is a review copy, not a store backup, and does not change the evidence's trust status.
 Task and record lists also ignore superseded responses and errors. Only one next-page
 request is dispatched at a time; failed pages retain their cursor for an explicit retry.
 A fresh list request disables paging until it succeeds, preventing an older cursor from
