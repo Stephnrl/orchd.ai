@@ -58,6 +58,33 @@ Inspection does not reconcile, repair, reset or dispatch an operation.
 Python callers can use `GitHubJournal(path, read_only=True)` and `get(operation_id)`;
 both mutation methods reject this mode, and SQLite itself rejects writes.
 
+## Reconcile observations against a retained reservation
+
+```sh
+python -m orch github-reconcile-journal --journal .runtime/github-journal.sqlite --operation-id bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --expected-sha256 <scope-digest> --observations observations.json
+```
+
+Use the outer scope `sha256` returned by staging or inspection, not the nested preview
+digest. This command requires an existing `uncertain` reservation and an exact expected
+scope digest. It validates the retained record and derives the intent and repository
+identity from it. Intent and repository overrides are rejected. A prepared operation has
+no consumed attempt to reconcile and is rejected; the standalone `github-reconcile`
+command remains available for offline proposal assessment.
+
+The bounded observations file uses the same [reconciliation envelope](github-reconciliation.md)
+as the standalone classifier, including the nested preview digest. Exit code 0 means one
+matching candidate was observed; exit code 2 means unresolved observations or invalid
+input. A classification report includes the complete assessment, task/operation IDs,
+scope digest, state and reservation timestamp under a new digest. Its checksum covers
+the assessment result as well as its input bindings; it is not a signature or approval.
+
+The journal is opened read-only. No report is persisted, no network request is made,
+and no reservation is changed. Even a matching candidate leaves the operation uncertain
+and unavailable for another reservation. Supplied observations are unauthenticated, and
+the retained repository identity is not a fresh allowlist decision. Every result keeps
+`retry_allowed`, `remote_effect_confirmed` and `live_authorized` false. Python callers
+can use `GitHubJournal.reconcile(operation_id, expected_sha256, observations)`.
+
 ## Storage and remaining recovery work
 
 The database has its own application identity/version and rejects other SQLite databases.

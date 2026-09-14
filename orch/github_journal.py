@@ -16,6 +16,22 @@ def bound_scope(intent, allowed_repository, repository_id):
     return {"preview": preview, "repository_id": repository_id}
 
 
+def validated_intent(scope):
+    """Recover intent only when the entire stored preview matches its reconstruction."""
+    binding = scope['preview']['binding']
+    request = binding['request']
+    destination = re.fullmatch(r"https://api\.github\.com/repos/([^/]+/[^/]+)/pulls", request['url'])
+    if not destination:
+        raise Rejected("Invalid journal destination")
+    intent = {key: binding[key] for key in ('schema_version', 'task_id', 'operation_id', 'expected_base_sha', 'expected_head_sha')}
+    intent.update({key: request['body'][key] for key in ('title', 'body', 'base', 'head')})
+    intent['repository'] = destination[1]
+    expected = bound_scope(intent, destination[1], scope['repository_id'])
+    if canonical(expected) != canonical(scope):
+        raise Rejected("Invalid journal scope binding")
+    return intent
+
+
 class GitHubJournal:
     """One immutable operation per task. Reservation is never dispatch authority."""
     def __init__(self, path, read_only=False):
@@ -69,18 +85,10 @@ class GitHubJournal:
             raise Rejected("Unknown GitHub operation")
         try:
             scope = json.loads(row['scope'])
-            binding = scope['preview']['binding']
-            request = binding['request']
-            destination = re.fullmatch(r"https://api\.github\.com/repos/([^/]+/[^/]+)/pulls", request['url'])
-            if not destination:
-                raise Rejected("Invalid journal destination")
-            intent = {key: binding[key] for key in ('schema_version', 'task_id', 'operation_id', 'expected_base_sha', 'expected_head_sha')}
-            intent.update({key: request['body'][key] for key in ('title', 'body', 'base', 'head')})
-            intent['repository'] = destination[1]
-            expected = bound_scope(intent, destination[1], scope['repository_id'])
-            if (canonical(expected) != canonical(scope) or canonical(scope).decode() != row['scope']
-                    or digest(scope) != row['sha256'] or binding['task_id'] != row['task_id']
-                    or binding['operation_id'] != row['operation_id']):
+            intent = validated_intent(scope)
+            if (canonical(scope).decode() != row['scope']
+                    or digest(scope) != row['sha256'] or intent['task_id'] != row['task_id']
+                    or intent['operation_id'] != row['operation_id']):
                 raise Rejected("Invalid journal scope binding")
             if row['state'] == 'prepared':
                 if row['reserved_at'] is not None:
@@ -97,6 +105,23 @@ class GitHubJournal:
         return {"operation_id": row['operation_id'], "task_id": row['task_id'], "scope": scope,
                 "sha256": row['sha256'], "state": row['state'], "reserved_at": row['reserved_at'],
                 "live_authorized": False, "retry_allowed": False}
+
+    def reconcile(self, operation_id, expected_sha256, observations):
+        """Classify supplied observations against one validated, retained reservation."""
+        from .github_reconcile import reconcile_pull_request
+
+        record = self.get(operation_id)
+        if record['sha256'] != expected_sha256 or record['state'] != 'uncertain':
+            raise Rejected("Reconciliation requires the expected scope and an uncertain reservation")
+        intent = validated_intent(record['scope'])
+        assessment = reconcile_pull_request(intent, intent['repository'], record['scope']['repository_id'], observations)
+        binding = {"schema_version": "1.0.0", "operation_id": record['operation_id'],
+                   "task_id": record['task_id'], "scope_sha256": record['sha256'],
+                   "state": record['state'], "reserved_at": record['reserved_at'],
+                   "assessment": assessment}
+        return {"kind": "GitHubJournalReconciliation", "binding": binding, "sha256": digest(binding),
+                "status": assessment['status'], "retry_allowed": False,
+                "remote_effect_confirmed": False, "live_authorized": False}
 
     def stage(self, intent, allowed_repository, repository_id):
         if self.read_only:

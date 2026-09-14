@@ -5,6 +5,9 @@ milestone adds a comparison codec for saved list-PR observations. It performs no
 POST, retry, credential access or workflow update. Existing platform actions stay simulated.
 The separate [operation journal](github-journal.md) can retain staged scopes and consumed
 attempt reservations. This classifier cannot update or clear journal state.
+For an existing uncertain reservation, `github-reconcile-journal` derives the intent
+and repository identity from the validated journal and binds this assessment to the
+retained reservation. See the [journal command](github-journal.md#reconcile-observations-against-a-retained-reservation).
 
 ```sh
 python -m orch github-reconcile --intent intent.json --allow-repository example/project --repository-id 123 --observations observations.json
