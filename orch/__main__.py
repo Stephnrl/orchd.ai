@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs"])
+    parser.add_argument("command", choices=["demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -32,20 +32,22 @@ def main():
     parser.add_argument("--intent", help="Local JSON intent for offline github-preview")
     parser.add_argument("--allow-repository", help="Exact owner/name allowed for the GitHub preview")
     parser.add_argument("--repository-id", type=int, help="Expected numeric GitHub repository identity")
-    parser.add_argument("--observations", help="Offline JSON repository/ref responses for github-check-refs")
+    parser.add_argument("--observations", help="Offline JSON observations for GitHub assessment")
     args = parser.parse_args()
-    if args.command == "github-check-refs":
+    if args.command in ("github-check-refs", "github-reconcile"):
         if not args.intent or not args.allow_repository or args.repository_id is None or not args.observations:
-            parser.error("github-check-refs requires --intent, --allow-repository, --repository-id and --observations")
+            parser.error(args.command + " requires --intent, --allow-repository, --repository-id and --observations")
         from .github_preview import load_intent
         from .github_refs import assess_refs
+        from .github_reconcile import reconcile_pull_request
         from .contracts import Rejected
         try:
-            report = assess_refs(load_intent(args.intent), args.allow_repository, args.repository_id, load_intent(args.observations))
+            assess = assess_refs if args.command == "github-check-refs" else reconcile_pull_request
+            report = assess(load_intent(args.intent), args.allow_repository, args.repository_id, load_intent(args.observations))
         except Rejected:
             parser.error("Invalid GitHub intent, identity or observations")
         print(json.dumps(report, indent=2))
-        raise SystemExit(0 if report["status"] == "matches" else 2)
+        raise SystemExit(0 if report["status"] in ("matches", "candidate_observed") else 2)
     if args.command == "github-preview":
         if not args.intent or not args.allow_repository:
             parser.error("github-preview requires --intent and --allow-repository")

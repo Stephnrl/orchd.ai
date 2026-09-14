@@ -51,6 +51,8 @@ digest; it is a scope identifier, not a signature or approval token.
 The [offline repository/ref assessment](github-ref-assessment.md) now compares supplied
 response observations to this preview. It remains separate from authenticated fetching
 and never upgrades the preview to live authorization.
+The [offline reconciliation classifier](github-reconciliation.md) can identify one
+matching observed draft PR, but never confirms a remote effect or permits a POST retry.
 
 Every preview reports `live_authorized: false` and `remote_refs_verified: false`.
 Task IDs and commit hashes are input claims; this function does not prove they match
