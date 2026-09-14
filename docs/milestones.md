@@ -240,6 +240,9 @@ snapshot. It does not enable Jira calls, task adoption, issue transitions or cre
 [Jira comment recovery](jira-comment-recovery.md) adds preview-bound read plans and
 paginated candidate assessment, including author/visibility matching. Incomplete or
 ambiguous captures remain unresolved. It does not confirm delivery or authorize another attempt.
+[Retained Jira operations](jira-journal.md) add immutable staging, one-use reservations,
+capacity enforcement, integrity audits and recovery against saved scope. Live dispatch,
+credential admission and operator retry policy remain unimplemented.
 
 ## Decisions to resolve before enabling real execution
 
