@@ -195,7 +195,11 @@ def _plan_claims(store, task, work):
     original_request = _artifact_bytes(store, spec['request'], task)
     decision = _stored_record(store, work['plan_approval'], task, 'ApprovalDecision')
     request = _stored_record(store, decision['request'], task, 'ApprovalRequest')
+    registration = store.db.execute('SELECT decision_id FROM approvals WHERE request_id=?', (request['id'],)).fetchone()
+    registered = registration is not None and registration[0] == decision['id']
     blockers = []
+    if not registered:
+        blockers.append('plan_approval_not_registered')
     if spec['confirmed_by'] is None:
         blockers.append('spec_not_confirmed')
     if spec['repository'] != plan['repository'] or any(path not in spec['allowed_paths'] for path in plan['allowed_paths']):
@@ -219,7 +223,8 @@ def _plan_claims(store, task, work):
         blockers.append('plan_approval_timeline_invalid')
     return {'spec': ref(spec), 'spec_request': {'artifact_id': spec['request']['artifact_id'],
             'sha256': spec['request']['sha256'], 'size_bytes': len(original_request)},
-            'plan': ref(plan), 'request': ref(request), 'decision': ref(decision), 'blockers': blockers}
+            'plan': ref(plan), 'request': ref(request), 'decision': ref(decision),
+            'registered': registered, 'blockers': blockers}
 
 
 def _timeline_blockers(patch, test, review_request, review, tool, policy, checked):
