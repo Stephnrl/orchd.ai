@@ -22,7 +22,7 @@ an assumption that more UI features alone will make the system production-ready.
 | 9. Credential broker/auth hardening | Local session expiry, rotation/revocation, stale-client clearing and strict HTTP parsing implemented; production provider credentials/SSO remain |
 | 10. OWASP/ACS hardening and adversarial tests | Substantial boundary tests and consolidated source-bound offline release verification; independent deployment review and broader live-system testing remain |
 | 11. Concurrent workers | Deferred; current execution is deliberately bounded |
-| 12. Advanced orchestration | Deferred; needs explicit scope |
+| 12. Advanced orchestration | Bounded serial fixture batches implemented; broader scheduling and orchestration remain to be scoped |
 
 PRs opened while developing this repository are collaboration through development
 tools, not evidence that orchd.ai itself has a GitHub integration. Deterministic
@@ -83,6 +83,11 @@ expired results. It supplies unsigned local evidence, not production authorizati
    rotation/revocation, safe UI reconnection and strict HTTP parsing. Corporate identity,
    credential brokering and independent deployment review remain separate gates.
 5. Define and implement bounded concurrent-worker and advanced-orchestration milestones.
+   [Serial workflow batches](workflow-batches.md) now provide operator-reviewed task
+   lists, snapshot fencing, durable reservations/checkpoints and explicit interruption
+   review. They run existing fixture tasks serially and preserve every approval pause;
+   this does not admit concurrent workers or live integrations. Their two-task walkthrough
+   is part of the consolidated release package.
 
 Missing corporate documentation does not prevent offline contract and broker development,
 but it does prevent a claim that the corporate provider is ready for use.

@@ -496,9 +496,11 @@ class Engine:
             raise Rejected("Tool denied")
         return request
 
-    def advance(self, task_id):
+    def advance(self, task_id, *, expected_snapshot=None):
         with self.store.exclusive():
             state, context = self.store.task(task_id)
+            if expected_snapshot is not None and expected_snapshot != digest({'state': state, 'context': context}):
+                raise Rejected('Task changed since batch review')
             if state["state"] in PAUSED:
                 return self.task(task_id)
             task = task_id

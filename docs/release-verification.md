@@ -13,7 +13,7 @@ and the report's whole-file SHA-256. Keep that digest separately from the report
 Use a new destination for each run; existing evidence is never overwritten.
 
 The default `full` lane runs contract validation, the entire Python offline suite,
-the synthetic Jira acceptance scenario, JavaScript syntax checking, every
+the synthetic Jira and serial-batch acceptance scenarios, JavaScript syntax checking, every
 `tests/test_ui_*.cjs` script, and the Chromium operator suite. CI uses the same
 runner with explicit `--release-lane offline` and `--release-lane browser` lanes
 to retain separate Windows/Linux offline and Linux browser jobs. An individual
@@ -37,6 +37,7 @@ fixed command directly in the trusted development environment:
 | `contracts` | `python scripts/validate_contracts.py` |
 | `python` | `python scripts/ci_tests.py` |
 | `jira_acceptance` | `python scripts/jira_acceptance.py` |
+| `batch_acceptance` | `python scripts/batch_acceptance.py` |
 | `javascript_syntax` | `node --check orch/ui/app.js` |
 | `tests/test_ui_*.cjs` | `node` followed by the reported script path |
 | `browser` | `node node_modules/@playwright/test/cli.js test --reporter=json --forbid-only` |
