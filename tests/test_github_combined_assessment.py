@@ -35,8 +35,8 @@ class CombinedAssessmentTests(unittest.TestCase):
             for field in ('started_at', 'ended_at'):
                 if field in document:
                     document[field] = document['created_at']
-        self.docs['patch']['operation_id'] = 'patch-operation'
-        self.docs['test']['operation_id'] = self.docs['test_request']['operation_id'] = 'test-operation'
+        self.docs['patch']['operation_id'] = 'c' * 32
+        self.docs['test']['operation_id'] = self.docs['test_request']['operation_id'] = 'd' * 32
         self.docs['spec']['confirmed_by'] = 'fixture-operator'
         register_support(self.store, task, self.docs)
         self.docs['work_order']['deadline'] = '2026-01-01T00:00:00Z'

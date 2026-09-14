@@ -7,6 +7,7 @@ from datetime import datetime
 from jsonschema import Draft202012Validator
 
 from .contracts import Rejected, SCHEMA, canonical, digest, validate, ref, now
+from .broker import validate_wire
 from .github_approval import _validate_evidence, check_approval
 
 ARTIFACT = Draft202012Validator({'$defs': SCHEMA['$defs'], '$ref': '#/$defs/ArtifactRef'})
@@ -198,9 +199,29 @@ def _execution_claims(store, task, work, patch, test):
                                (MAX_BYTES, receipt['operation_id'], task)).fetchone()
         if row is None:
             raise Rejected('Missing task-owned execution operation')
-        if (row['stage'] != stage or row['slot'] != str(work['attempt']) or row['status'] != 'done'
-                or type(row['generation']) is not int or row['generation'] < 1):
+        completed = (row['stage'] == stage and row['slot'] == str(work['attempt']) and row['status'] == 'done'
+                     and type(row['generation']) is int and row['generation'] >= 1)
+        request_sha = None
+        if not completed:
             blockers.append(role + '_operation_not_completed')
+        else:
+            request_row = store.db.execute('SELECT CASE WHEN length(CAST(request AS BLOB))<=? THEN request END FROM broker_requests WHERE operation_id=? AND generation=?',
+                                          (MAX_BYTES, receipt['operation_id'], row['generation'])).fetchone()
+            if request_row is None or request_row[0] is None:
+                raise Rejected('Missing or oversized broker request evidence')
+            try:
+                request = json.loads(request_row[0])
+                validate_wire(request, 'Request')
+                if canonical(request).decode() != request_row[0]:
+                    raise Rejected('Noncanonical broker request evidence')
+            except (ValueError, TypeError, RecursionError) as exc:
+                raise Rejected('Invalid broker request evidence') from exc
+            request_sha = digest(request)
+            if (request['operation_id'] != receipt['operation_id'] or request['task_id'] != task
+                    or request['generation'] != row['generation'] or type(request['generation']) is not int
+                    or request['recipe'] != ('edit' if role == 'patch' else 'test')
+                    or len(request['args']) != (1 if role == 'patch' else 0)):
+                blockers.append(role + '_broker_request_mismatch')
         result_sha = None
         if row['result'] is not None:
             try:
@@ -214,7 +235,8 @@ def _execution_claims(store, task, work, patch, test):
                 raise Rejected('Invalid execution result') from exc
         else:
             blockers.append(role + '_operation_result_missing')
-        operations[role] = {'operation_id': receipt['operation_id'], 'result_sha256': result_sha}
+        operations[role] = {'operation_id': receipt['operation_id'], 'result_sha256': result_sha,
+                            'broker_request_sha256': request_sha}
     return {'operations': operations, 'blockers': blockers}
 
 

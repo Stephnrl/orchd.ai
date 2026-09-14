@@ -59,6 +59,8 @@ Plan approval evidence now requires the workflow registry to bind the exact requ
 and decision IDs in the same read snapshot; unregistered decisions cannot pass.
 Patch/test evidence now requires completed task-owned operations at the expected stage
 and attempt, with bounded canonical results naming the exact successful receipts.
+Completed operations now require canonical retained broker requests for their exact
+generation, task, operation and fixture recipe, with request digests in the assessment.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

@@ -8,6 +8,12 @@ def register_operations(store, documents):
         store.db.execute('INSERT INTO operations(id,task_id,stage,slot,status,result) VALUES(?,?,?,?,?,?)',
                          (receipt['operation_id'], receipt['task_id'], stage, str(documents['work_order']['attempt']),
                           'done', canonical({role: ref(receipt), 'failure': None}).decode()))
+        request = dict(schema_version='1.0.0', operation_id=receipt['operation_id'], task_id=receipt['task_id'],
+                       generation=1, nonce='e' * 32, workspace='private-fixture-workspace',
+                       recipe='edit' if role == 'patch' else 'test', args=['hello world\n'] if role == 'patch' else [],
+                       mode='trusted-fixture', image=None, source_digest='a' * 64)
+        store.db.execute('INSERT INTO broker_requests VALUES(?,?,?)',
+                         (receipt['operation_id'], 1, canonical(request).decode()))
 
 
 def link_plan_evidence(documents):
