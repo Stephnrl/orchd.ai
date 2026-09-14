@@ -45,6 +45,8 @@ Strict evidence assessments now verify task-owned patch diffs and test/patch-com
 output artifacts under reference and byte budgets, without claiming execution provenance.
 Evidence chronology now checks execution windows and patch/test/review/tool/policy
 ordering, rejects future records and contains reported commands within patch execution.
+Artifact evidence reads now reject Windows junctions as well as symbolic links, with
+a real directory-link regression and canonical-path mocking for Windows runner aliases.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
