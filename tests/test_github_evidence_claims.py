@@ -539,7 +539,7 @@ class EvidenceClaimsTests(unittest.TestCase):
         self.persist()
         for result in ({'test': {'id': 'other', 'sha256': 'b' * 64}, 'failure': None},
                        {'test': ref(self.docs['test']), 'failure': 'failed'},
-                       {'test': ref(self.docs['test'])}):
+                       {'failure': None}):
             self.store.db.execute('UPDATE operations SET result=? WHERE id=?', (canonical(result).decode(), 'd' * 32))
             self.assertIn('test_operation_result_mismatch', self.check()['binding']['claims']['blockers'])
 

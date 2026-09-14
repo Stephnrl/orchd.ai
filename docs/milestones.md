@@ -69,6 +69,9 @@ Runtime claims now require matching patch/test source, mode and image, digest-pi
 Docker images with matching Linux test metadata, and exact requested workspace strings.
 An explicit read-only stored-record CLI now runs the same claims checks before receipt
 artifact export, exposing blockers without creating artifacts or changing approval admission.
+Real trusted-fixture records now pass that diagnostic at action approval: assessment
+accepts the executor's exact fixed-recipe wrapper and optional success failure field,
+with end-to-end coverage and rejection of modified wrappers.
 
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an

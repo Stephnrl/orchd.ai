@@ -260,7 +260,8 @@ Patch and test receipts must also resolve to task-owned `operations` rows in the
 evidence snapshot. Their stages must be `implementation` and `tests`, their slots must
 equal the work-order attempt, status must be `done`, and generation must be a positive
 integer. A canonical JSON result, read with a 1 MiB cap, must name the exact receipt
-under `patch` or `test` and include `failure: null`. Missing operations fail without a
+under `patch` or `test` and have no non-null `failure` value (successful implementation
+results omit that optional field). Missing operations fail without a
 report; wrong state/binding and absent or oversized results block; malformed or
 noncanonical results fail without a report. The `execution` binding reports operation
 IDs, result hashes and fixed blockers without result contents. This establishes local
@@ -298,6 +299,16 @@ UTF-8 and compared by hash and byte count with the receipt's output artifact ref
 those artifacts independently pass the supporting-file checks. Contradictory commands,
 timing or output produce fixed `broker_receipt_*` blockers. These comparisons do not
 reconstruct workspace contents, evaluate the patch diff or prove producer authenticity.
+
+The test's logical command may differ from executed argv only when it exactly matches
+the built-in fixture recipe and argv exactly matches the executor's fixed wrapper for
+the recorded mode, image, workspace and operation. Execution and assessment share a
+pure command renderer. Windows and POSIX workspace spellings are handled without
+resolving historical paths. The recorded host interpreter path is compared as part of
+the wrapper but is not authenticated. Extra arguments, changed inline scripts and
+altered logical recipe limits cannot qualify through this path. An end-to-end trusted
+fixture run now passes record-claims assessment at `AWAITING_ACTION_APPROVAL`; that
+diagnostic result neither approves nor dispatches its external action.
 
 Patch and test broker requests must agree exactly on source digest, execution mode and
 image reference. Docker claims require a digest-pinned image in the executor's accepted

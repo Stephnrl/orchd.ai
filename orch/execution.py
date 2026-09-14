@@ -37,15 +37,7 @@ class Executor:
         if script not in (TEST_CODE, EDIT_CODE):
             raise Rejected("Untrusted script")
         workspace = Path(workspace).resolve()
-        if self.mode == "docker":
-            command = ["docker", "run", "--rm", "--pull=never", "--name", "orch-" + operation_id,
-                       "--label", "ai.orchd.operation=" + operation_id,
-                       "--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
-                       "--user=65534:65534", "--pids-limit=64", "--cpus=1", "--memory=256m", "--memory-swap=256m", "--log-driver=none",
-                       "--tmpfs=/tmp:rw,noexec,nosuid,size=16m", "--mount", f"type=bind,source={workspace},target=/workspace" + (",readonly" if script == TEST_CODE else ""),
-                       "--workdir=/workspace", self.image, "python", "-I", "-c", script, "/workspace/greeting.txt", *args]
-        else:
-            command = [sys.executable, "-I", "-c", script, str(workspace / "greeting.txt"), *args]
+        command = self.command_for(workspace, script, args, operation_id)
         started = now()
         truncated = False
         env = {k: os.environ[k] for k in ("PATH", "SystemRoot", "WINDIR", "TEMP", "TMP") if k in os.environ}
@@ -61,6 +53,18 @@ class Executor:
         except OSError:
             code, stdout, stderr, failure = None, "", "executor unavailable", "executor_unavailable"
         return dict(command=command, started=started, ended=now(), code=code, stdout=stdout, stderr=stderr, truncated=truncated, failure=failure)
+
+    def command_for(self, workspace, script, args, operation_id, python_executable=None):
+        """Render fixed-recipe argv without resolving paths or executing a process."""
+        if self.mode == "docker":
+            return ["docker", "run", "--rm", "--pull=never", "--name", "orch-" + operation_id,
+                       "--label", "ai.orchd.operation=" + operation_id,
+                       "--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
+                       "--user=65534:65534", "--pids-limit=64", "--cpus=1", "--memory=256m", "--memory-swap=256m", "--log-driver=none",
+                       "--tmpfs=/tmp:rw,noexec,nosuid,size=16m", "--mount", f"type=bind,source={workspace},target=/workspace" + (",readonly" if script == TEST_CODE else ""),
+                       "--workdir=/workspace", self.image, "python", "-I", "-c", script, "/workspace/greeting.txt", *args]
+        else:
+            return [python_executable or sys.executable, "-I", "-c", script, str(workspace / "greeting.txt"), *args]
 
     def reconcile(self, operation_id):
         """Remove only the exact labelled task container; daemon errors are not absence."""
