@@ -6,9 +6,12 @@ def register_operations(store, documents):
     for role, stage in (('patch', 'implementation'), ('test', 'tests')):
         receipt = documents[role]
         command = receipt if role == 'test' else (receipt['executed_commands'] or [documents['test']])[0]
+        result = {role: ref(receipt), 'failure': None}
+        if role == 'patch':
+            result['snapshot'] = store.artifact(receipt['task_id'], 'fixture snapshot', media_type='text/plain')
         store.db.execute('INSERT INTO operations(id,task_id,stage,slot,status,result) VALUES(?,?,?,?,?,?)',
                          (receipt['operation_id'], receipt['task_id'], stage, str(documents['work_order']['attempt']),
-                          'done', canonical({role: ref(receipt), 'failure': None}).decode()))
+                          'done', canonical(result).decode()))
         request = dict(schema_version='1.0.0', operation_id=receipt['operation_id'], task_id=receipt['task_id'],
                        generation=1, nonce='e' * 32, workspace=command['working_directory'],
                        recipe='edit' if role == 'patch' else 'test', args=['hello world\n'] if role == 'patch' else [],
@@ -39,6 +42,9 @@ def link_plan_evidence(documents):
 
 
 def register_support(store, task, documents):
+    snapshot = store.artifact(task, 'fixture snapshot', media_type='text/plain')
+    for role in ('patch', 'test', 'test_request'):
+        documents[role]['snapshot_sha256'] = snapshot['sha256']
     documents['spec']['request'] = store.artifact(task, 'original task request', media_type='text/plain')
     documents['patch']['diff'] = store.artifact(task, 'fixture diff', media_type='text/plain')
     for channel in ('stdout', 'stderr'):
