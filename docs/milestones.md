@@ -234,6 +234,10 @@ Story/Task links, GitHub Issue/PR associations and status updates through the PM
 No Jira credential distribution to workers. Production actions, memory, autonomous
 scheduling, concurrent workers and retrieval remain outside MVP.
 
+The [offline Jira foundation](jira-preview.md) now implements explicit instance/project/
+issue validation, a bounded untrusted-text projection and comment previews bound to that
+snapshot. It does not enable Jira calls, task adoption, issue transitions or creation.
+
 ## Decisions to resolve before enabling real execution
 
 Confirm corporate source-sharing rules and CLI tool-disable/SSO behavior; select approved

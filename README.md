@@ -18,6 +18,8 @@ observations, a fixed freshness window and a final journal/expiry recheck.
 requests and validate bounded captured responses before producing preflight snapshots.
 [Recovery transcripts](docs/github-recovery-transcripts.md) extend that boundary to
 paginated PR lookup and retained-reservation reconciliation without retry authority.
+[Jira Data Center preparation](docs/jira-preview.md) adds explicit issue/project review
+and snapshot-bound comment previews using saved responses, with live actions disabled.
 
 Phase 1 remains the design baseline below. Phase 2 implements the bounded offline
 vertical slice; see [running Phase 2](docs/phase2.md) for APIs, recovery and limitations.

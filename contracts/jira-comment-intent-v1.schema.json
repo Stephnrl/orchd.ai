@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Offline Jira Data Center comment intent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id", "operation_id", "target", "snapshot_sha256", "body", "visibility"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "task_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "operation_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "target": {"$ref": "#/$defs/target"},
+    "snapshot_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "body": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "visibility": {"oneOf": [
+      {"type": "null"},
+      {"type": "object", "additionalProperties": false, "required": ["type", "value"], "properties": {
+        "type": {"enum": ["role", "group"]}, "value": {"type": "string", "minLength": 1, "maxLength": 128}
+      }}
+    ]}
+  },
+  "$defs": {
+    "target": {
+      "type": "object", "additionalProperties": false,
+      "required": ["base_url", "project_id", "project_key", "issue_id", "issue_key"],
+      "properties": {
+        "base_url": {"type": "string", "minLength": 9, "maxLength": 512},
+        "project_id": {"type": "string", "pattern": "^[1-9][0-9]{0,14}$"},
+        "project_key": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,31}$"},
+        "issue_id": {"type": "string", "pattern": "^[1-9][0-9]{0,14}$"},
+        "issue_key": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,31}-[1-9][0-9]{0,14}$"}
+      }
+    }
+  }
+}
