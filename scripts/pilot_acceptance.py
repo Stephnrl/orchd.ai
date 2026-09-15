@@ -69,9 +69,22 @@ def main():
             assert all(recovered['workers']['cleanup'][-1]['absent'].values())
             assert all(entry['observation']['container_absent'] for entry in result['workers']['phases'].values())
             assert result['workers']['phases']['edit']['identity']['name'] != result['workers']['phases']['test']['identity']['name']
+        # Retention: usage is read-only; reclamation is reviewed, fenced and keeps the journal row.
+        report = cli('pilot-usage')
+        entries = {entry['id']: entry for entry in report['pilots']}
+        assert report['journal_rows'] == report['live_pilots'] == 2 and entries[prepared['id']]['eligible']
+        assert entries[interrupted['id']]['eligible'] == bool(worker_args), entries[interrupted['id']]['reasons']
+        preview = cli('pilot-reclaim', '--pilot-id', prepared['id'], '--expected-sha256', prepared['scope_sha256'], '--expected-revision', '2', '--dry-run')
+        assert preview['files'] == ['settings.json'] and not preview['recorded'] and (data / prepared['id']).is_dir()
+        reclaimed = cli('pilot-reclaim', '--pilot-id', prepared['id'], '--expected-sha256', prepared['scope_sha256'], '--expected-revision', '2')
+        assert reclaimed['deleted'] and not (data / prepared['id']).exists()
+        retained = cli('pilot-inspect', '--pilot-id', prepared['id'])
+        assert retained['receipt'] == result['receipt'] and retained['reclamation'] == 'reclaimed' and not retained['matches_receipt']
+        after = cli('pilot-usage')
+        assert after['journal_rows'] == 2 and after['live_pilots'] == 1 and after['workspace_bytes'] < report['workspace_bytes']
         assert (repo / 'settings.json').read_bytes() == b'{"service":{"retries":1}}\n'
         assert git('status', '--porcelain') == ''
-    print('PASS: disposable Git pilot CLI review, exact approval, trusted checks, restart and no-retry recovery (' + ('Docker' if args.image else 'local data') + ')')
+    print('PASS: disposable Git pilot CLI review, exact approval, trusted checks, restart, no-retry recovery and reviewed reclamation (' + ('Docker' if args.image else 'local data') + ')')
 
 
 if __name__ == '__main__':

@@ -1,5 +1,11 @@
 # Roadmap progress — September 15, 2026
 
+The [pilot retention milestone](pilot-retention.md) adds a read-only usage report and
+explicitly reviewed, two-phase workspace reclamation for terminal pilots, including
+those left `prepared` by kernel rejection or cancellation. Journal rows, receipts and
+kernel snapshots are never deleted; a live cap of 128 unreclaimed pilots sits under an
+absolute journal cap of 1024. No automatic reclamation, archive or restore is added.
+
 The [repository-task kernel milestone](repository-tasks.md) connects the bounded
 JSON pilot to shared task records/events, explicit execution and local-result
 approvals, retained snapshots, authenticated controls and no-retry recovery.

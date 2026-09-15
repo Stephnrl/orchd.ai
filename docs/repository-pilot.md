@@ -92,9 +92,11 @@ scope if another attempt is appropriate. Completed receipts bind the scope and
 actual file hashes; changed or unexpected files make `matches_receipt` false.
 Docker reservations additionally support explicit, ownership-checked container
 reconciliation, ending in `interrupted` once absence is confirmed. This never
-retries work. No workspace cleanup, archive, resume or automatic retention deletion is enabled.
-The journal caps retained preparations at 128. Standard workflow backup commands
-do not include this separate pilot database or its workspaces.
+retries work. No archive, resume or automatic retention deletion is enabled. Explicitly
+[reviewed workspace reclamation](pilot-retention.md) can delete a terminal pilot's
+disposable directory while retaining its journal row and receipt. The journal caps
+live (unreclaimed) pilots at 128 and retained rows at 1024. Standard workflow backup
+commands do not include this separate pilot database or its workspaces.
 
 ## Acceptance and next boundary
 

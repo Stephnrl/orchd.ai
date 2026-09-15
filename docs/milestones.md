@@ -269,6 +269,11 @@ shared evidence/replay/backup and explicit recovery across the pilot/kernel comm
 boundary. It adds authenticated task controls and browser acceptance while rejecting
 fixture-batch adoption and remote-action claims for this workload.
 
+The [pilot retention milestone](pilot-retention.md) adds `pilot-usage` and reviewed
+`pilot-reclaim` with dry-run, a durable `reclaiming`/`reclaimed` record, tamper-retaining
+eligibility checks, bound-task terminal gating and release-lane acceptance. It releases
+live journal capacity without deleting evidence, archive or automation.
+
 The [pilot container-worker milestone](pilot-container-workers.md) extends the
 Git JSON pilot with two restricted containers, runtime-bound approval, per-phase
 durable dispatch and ownership-checked cleanup after interruption. It adds real

@@ -118,5 +118,8 @@ means human acceptance of a validated local snapshot.
 Use the [bounded Git JSON pilot](docs/repository-pilot.md) to prepare, review and
 test a small data change in a disposable workspace with durable recovery inspection.
 Run `python scripts/pilot_acceptance.py` for its disposable end-to-end walkthrough.
+[Reviewed pilot retention](docs/pilot-retention.md) reports journal and workspace usage
+and reclaims a terminal pilot's disposable workspace after explicit review, retaining
+every journal row, receipt and kernel snapshot.
 The optional [Docker worker profile](docs/pilot-container-workers.md) uses separate
 restricted edit/test containers with runtime-bound approvals and explicit recovery.

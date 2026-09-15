@@ -78,8 +78,9 @@ receipt and no retry authority. Otherwise it remains `reserved`; another cleanup
 attempt must use its new revision. Cleanup can handle a recipe code update without
 readmitting execution. Changes to the required runtime identity still block it.
 Workspaces and evidence remain retained. No automatic workspace deletion, journal
-archive, resume or integration write is enabled. Standard workflow backups do not
-include this separate pilot journal.
+archive, resume or integration write is enabled. [Reviewed reclamation](pilot-retention.md)
+can delete a terminal pilot's workspace without the daemon or image once no phase is
+still dispatched. Standard workflow backups do not include this separate pilot journal.
 
 ## Acceptance and retained evidence
 

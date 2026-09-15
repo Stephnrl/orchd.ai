@@ -71,9 +71,27 @@ def main():
             assert engine.recover(interrupted, state['revision'])['state']['state'] == 'FAILED'
             audit(engine.store)
         finally: engine.close()
+        # Retention: both bound pilots are terminal in the kernel, so their workspaces may be reclaimed
+        # through the pilot CLI while task records, approvals and snapshots stay in the common store.
+        journal = str(store / 'repository-pilots')
+        def pilot_cli(*argv):
+            return json.loads(subprocess.check_output([sys.executable, '-m', 'orch', *argv, '--data', journal], cwd=ROOT))
+        report = pilot_cli('pilot-usage')
+        assert report['journal_rows'] == 2 and report['reclaimable'] == 2, report
+        for entry in report['pilots']:
+            assert pilot_cli('pilot-reclaim', '--pilot-id', entry['id'], '--expected-sha256', pilot_cli('pilot-inspect', '--pilot-id', entry['id'])['scope_sha256'],
+                             '--expected-revision', str(pilot_cli('pilot-inspect', '--pilot-id', entry['id'])['revision']))['deleted']
+        assert pilot_cli('pilot-usage')['live_pilots'] == 0
+        engine = Engine(store, executor)
+        try:
+            audit(engine.store)
+            assert engine.run(task)['state']['state'] == 'COMPLETED'
+            result = engine.store.get(engine.task(task)['context']['repository_result'], task, 'RepositoryTaskResult')
+            assert [engine.store.read_artifact(item['content'], task) for item in result['snapshots']] == ['{"retries":3}\n']
+        finally: engine.close()
         assert (repo / 'settings.json').read_bytes() == b'{"retries":1}\n'
         assert git('status', '--porcelain') == ''
-    print('PASS: repository task CLI approvals, retained snapshot, replay/backup and no-retry recovery ('+('Docker' if args.image else 'local data')+')')
+    print('PASS: repository task CLI approvals, retained snapshot, replay/backup, no-retry recovery and reviewed reclamation ('+('Docker' if args.image else 'local data')+')')
 
 
 if __name__ == '__main__':
