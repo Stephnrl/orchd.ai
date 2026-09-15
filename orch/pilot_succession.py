@@ -28,10 +28,14 @@ def ensure_table(db):
     db.execute("CREATE TABLE IF NOT EXISTS " + TABLE + " (role TEXT PRIMARY KEY, record TEXT NOT NULL, hash TEXT NOT NULL)")
 
 
-def record(pilot, role):
-    """The retained succession record for this journal, or None on a legacy one."""
+def read_record(db, role, journal_root=None):
+    """A succession record read from any connection, or None on a legacy journal.
+
+    `journal_root` binds the record to the journal it was written in, so a record
+    copied from another journal, or rewritten to describe one, is refused.
+    """
     try:
-        row = pilot.db.execute("SELECT record,hash FROM " + TABLE + " WHERE role=?", (role,)).fetchone()
+        row = db.execute("SELECT record,hash FROM " + TABLE + " WHERE role=?", (role,)).fetchone()
     except sqlite3.OperationalError:
         return None
     if not row:
@@ -39,7 +43,25 @@ def record(pilot, role):
     saved = json.loads(row[0])
     if digest(saved) != row[1] or saved.get("role") != role:
         raise Rejected("Journal succession record integrity mismatch")
+    if journal_root is not None and saved.get("journal_root") != str(journal_root):
+        raise Rejected("Journal succession record names another journal")
     return saved
+
+
+def record(pilot, role):
+    """The retained succession record for this journal, or None on a legacy one."""
+    return read_record(pilot.db, role, pilot.root)
+
+
+def summary(db, journal_root=None):
+    """Succession state from any connection, small enough to bind into an audit."""
+    retired = read_record(db, "retired", journal_root)
+    follows = read_record(db, "follows", journal_root)
+    return {"status": "retired" if retired else "active",
+            "successor": retired["successor"] if retired else None,
+            "predecessor": follows["predecessor"] if follows else None,
+            "snapshot_sha256": retired["snapshot_sha256"] if retired else None,
+            "retired_at": retired["retired_at"] if retired else None}
 
 
 def state(pilot):
@@ -76,18 +98,19 @@ def retire(root, snapshot, expected_sha256, successor, reason, principal="local-
         raise Rejected("A successor journal must be a separate directory")
     if root in successor.parents or successor in root.parents:
         raise Rejected("A successor journal must not contain, or sit inside, its predecessor")
-    comparison = pilot_backup.compare_journal_backup(root, snapshot, expected_sha256)
-    if comparison["status"] != "matches":
-        raise Rejected("Retire only against a snapshot that matches the journal exactly")
     pilot = Pilot(root)
     try:
         ensure_table(pilot.db)
-        # Report the journal's own reasons before anything about the successor path.
+        # Report the journal's own reasons first: a journal retired earlier would also
+        # fail the snapshot comparison below, with a message about the wrong thing.
         if state(pilot)["status"] == "retired":
             raise Rejected("This pilot journal is already retired")
         _settled(pilot)
         if (successor / "pilot.sqlite").exists():
             raise Rejected("A successor journal must not already exist")
+        comparison = pilot_backup.compare_journal_backup(root, snapshot, expected_sha256)
+        if comparison["status"] != "matches":
+            raise Rejected("Retire only against a snapshot that matches the journal exactly")
         rows = pilot.db.execute("SELECT count(*) FROM pilots").fetchone()[0]
         retired = {"schema_version": "1.0.0", "role": "retired", "journal_root": str(root),
                    "successor": str(successor), "snapshot_sha256": expected_sha256,

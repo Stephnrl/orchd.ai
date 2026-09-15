@@ -117,6 +117,27 @@ class PilotBackupTests(unittest.TestCase):
         for flag in ("restore_allowed", "retry_allowed", "execution_authorized", "live_authorized"):
             self.assertFalse(later[flag])
 
+    def test_retiring_the_journal_is_drift_a_snapshot_notices(self):
+        """Retirement changes the journal, so a snapshot taken before it must not match."""
+        self.passed()
+        created = self.create()
+        self.assertEqual(created["journal_status"], "active")
+        self.assertEqual(compare_journal_backup(self.pilot.root, self.bundle, created["sha256"])["status"], "matches")
+        from orch.pilot_succession import retire
+        second = backup_journal(self.pilot.root, self.root / "pre-retirement")
+        retire(self.pilot.root, self.root / "pre-retirement", second["sha256"], self.root / "successor",
+               "Snapshot drift check")
+        report = compare_journal_backup(self.pilot.root, self.bundle, created["sha256"])
+        self.assertEqual(report["status"], "different")
+        self.assertTrue(report["binding"]["succession_changed"])
+        self.assertEqual(report["binding"]["differences"], [])  # No row changed; the journal closed.
+        self.assertEqual(report["binding"]["backup_succession"]["status"], "active")
+        self.assertEqual(report["binding"]["journal_succession"]["status"], "retired")
+        # A snapshot of the retired journal records that status and matches again.
+        third = backup_journal(self.pilot.root, self.root / "post-retirement")
+        self.assertEqual(third["journal_status"], "retired")
+        self.assertEqual(compare_journal_backup(self.pilot.root, self.root / "post-retirement", third["sha256"])["status"], "matches")
+
     def test_lifecycle_advance_and_backup_only_pilots_are_named(self):
         prepared = self.pilot.prepare(self.intent)
         created = self.create()

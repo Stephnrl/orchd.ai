@@ -128,6 +128,9 @@ never runs Docker itself: three more routes carry its fixed-recipe workers.
 | `POST /pilot-execute` | Run one edit/test phase for a scope prepared for this broker; a second identical delivery returns the retained observation, a different scope for the same pilot id is a conflict. |
 | `POST /pilot-reconcile` | Ownership-checked container removal for one phase. |
 
+A `--pilot-root` naming a [retired journal](pilot-journal-succession.md) is refused at
+startup, with the successor named: the broker's root is its own policy boundary and is
+never moved by a successor link the orchestrator wrote.
 The broker refuses a scope whose journal root is not its configured `--pilot-root`,
 whose image is not its own, whose executor names another broker account, or whose
 workspace is not `PILOT_ROOT/<pilot id>`. Because the broker identity is part of the

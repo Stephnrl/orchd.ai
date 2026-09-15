@@ -116,10 +116,14 @@ def _record(db, identifier, scope_json, scope_hash, revision, status, receipt_js
             "task_id": binding["task_id"] if binding else None}
 
 
-def audit(db):
+def audit(db, journal_root=None):
     """Integrity of every retained row, derived only from the database.
 
     Identical for a live journal and for a snapshot of it, so the two can be compared.
+    `journal_root` is the directory the database is being read from, which a live
+    journal knows and a snapshot cannot; supplying it binds the retained scopes and the
+    succession record to that directory, so a record borrowed from another journal is
+    refused even when there are no pilots to derive the root from.
     """
     rows = db.execute("SELECT id,scope,hash,revision,status,receipt FROM pilots ORDER BY id").fetchall()
     if len(rows) > pilot_retention.JOURNAL_CAP:
@@ -142,8 +146,16 @@ def audit(db):
         pass
     if orphans:
         raise Rejected("Retained worker or reclamation rows reference no pilot")
+    # Bind the succession state too: retiring a journal is a real change to it, and a
+    # snapshot that ignored it would keep reporting a match after the journal closed.
+    from .pilot_succession import summary
+    if journal_root is not None and roots and str(journal_root) not in roots:
+        raise Rejected("Retained scopes name another journal root")
+    bound = journal_root if journal_root is not None else (next(iter(roots)) if roots else None)
+    succession = summary(db, bound)
     binding = {"schema_version": "1.0.0", "records": records, "record_count": len(records),
                "scope_bytes": scope_bytes, "live_pilots": pilot_retention.live_count(db),
+               "succession": succession,
                "journal_cap": pilot_retention.JOURNAL_CAP, "live_cap": pilot_retention.LIVE_CAP}
     return {"kind": "PilotJournalAudit", "binding": binding, "sha256": digest(binding), "status": "valid", **FLAGS}
 
@@ -152,7 +164,7 @@ def audit_journal(root):
     """Audit a live journal read-only. Workspaces are neither read nor changed."""
     pilot = Pilot(root, read_only=True)
     try:
-        return audit(pilot.db)
+        return audit(pilot.db, pilot.root)
     finally:
         pilot.close()
 
@@ -223,7 +235,9 @@ def verify_journal_backup(directory, expected_sha256=None):
     report = manifest["binding"]["audit"]
     return {"kind": "PilotJournalBackupVerification", "status": "valid", "sha256": manifest["sha256"],
             "audit_sha256": report["sha256"], "record_count": report["binding"]["record_count"],
-            "live_pilots": report["binding"]["live_pilots"], "workspaces_included": False, **FLAGS}
+            "live_pilots": report["binding"]["live_pilots"],
+            "journal_status": report["binding"]["succession"]["status"],
+            "workspaces_included": False, **FLAGS}
 
 
 def compare_journal_backup(root, directory, expected_sha256):
@@ -256,11 +270,15 @@ def compare_journal_backup(root, directory, expected_sha256):
                 reasons.append("reclamation_mismatch")
         if reasons:
             differences.append({"id": identifier, "reasons": reasons})
+    succession_changed = saved["binding"].get("succession") != current["binding"]["succession"]
     binding = {"schema_version": "1.0.0", "backup_sha256": manifest["sha256"],
                "backup_audit_sha256": saved["sha256"], "journal_audit_sha256": current["sha256"],
+               "succession_changed": succession_changed,
+               "backup_succession": saved["binding"].get("succession"),
+               "journal_succession": current["binding"]["succession"],
                "differences": differences}
     return {"kind": "PilotJournalBackupComparison", "binding": binding, "sha256": digest(binding),
-            "status": "different" if differences else "matches", **FLAGS}
+            "status": "different" if differences or succession_changed else "matches", **FLAGS}
 
 
 def backup_journal(root, destination):
@@ -273,7 +291,7 @@ def backup_journal(root, destination):
         raise Rejected("Use a new snapshot directory; existing evidence is never reused or overwritten")
     pilot = Pilot(root, read_only=True)
     try:
-        audit(pilot.db)  # Reject an invalid source before creating any output.
+        audit(pilot.db, pilot.root)  # Reject an invalid source before creating any output.
         pilot.db.execute("BEGIN")
         pages = pilot.db.execute("PRAGMA page_count").fetchone()[0]
         page_size = pilot.db.execute("PRAGMA page_size").fetchone()[0]
@@ -316,4 +334,5 @@ def backup_journal(root, destination):
     return {"kind": "PilotJournalBackupVerification", "status": "valid", "sha256": manifest["sha256"],
             "audit_sha256": report["sha256"], "record_count": report["binding"]["record_count"],
             "live_pilots": report["binding"]["live_pilots"], "created_at": now(),
+            "journal_status": report["binding"]["succession"]["status"],
             "workspaces_included": False, **FLAGS}
