@@ -1,5 +1,11 @@
 # Roadmap progress — September 15, 2026
 
+The [pilot journal snapshot milestone](pilot-journal-backups.md) gives the pilot journal
+the audit and verified backup the GitHub and Jira journals already had: a
+workspace-independent integrity audit, a two-file bundle bound by manifest digest,
+verification that proves a snapshot refuses its own scopes, and a comparison that names
+per-pilot drift. Workspaces are never copied and there is no restore.
+
 The [security acceptance milestone](security-acceptance.md) makes the ten mandatory
 criteria executable: each one names the tests that exercise it, the release lane runs
 them, and the report states per criterion what local evidence establishes, what the

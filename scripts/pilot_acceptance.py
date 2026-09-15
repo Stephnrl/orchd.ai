@@ -113,6 +113,26 @@ def walkthrough(root, repo, data, worker_args, worker_config, args):
     assert retained['receipt'] == result['receipt'] and retained['reclamation'] == 'reclaimed' and not retained['matches_receipt']
     after = cli('pilot-usage')
     assert after['journal_rows'] == 2 and after['live_pilots'] == 1 and after['workspace_bytes'] < report['workspace_bytes']
+    # Verified journal snapshot: audit, copy, verify and compare, without any workspace.
+    audited = cli('pilot-journal-audit')
+    assert audited['kind'] == 'PilotJournalAudit' and audited['status'] == 'valid'
+    assert audited['binding']['record_count'] == after['journal_rows'] and not audited['live_authorized']
+    bundle = root / 'journal-backup'
+    created = cli('pilot-journal-backup', '--destination', str(bundle))
+    assert created['record_count'] == audited['binding']['record_count'] and not created['workspaces_included']
+    assert sorted(entry.name for entry in bundle.iterdir()) == ['manifest.json', 'pilot.sqlite']
+    verified = cli('pilot-verify-journal-backup', '--destination', str(bundle), '--expected-sha256', created['sha256'])
+    assert verified['status'] == 'valid' and verified['audit_sha256'] == audited['sha256']
+    assert cli('pilot-compare-journal-backup', '--destination', str(bundle), '--expected-sha256', created['sha256'])['status'] == 'matches'
+    # A pilot prepared after the snapshot is drift the comparison names, and exits 2.
+    fresh = cli('pilot-prepare', '--intent', str(intent_file))
+    drifted = subprocess.run([sys.executable, '-m', 'orch', 'pilot-compare-journal-backup', '--destination', str(bundle),
+                              '--expected-sha256', created['sha256'], '--data', str(data), *worker_args],
+                             cwd=ROOT, capture_output=True, text=True)
+    assert drifted.returncode == 2, drifted.stderr[-300:]
+    comparison = json.loads(drifted.stdout)
+    assert comparison['status'] == 'different' and not comparison['restore_allowed']
+    assert comparison['binding']['differences'] == [{'id': fresh['id'], 'reasons': ['missing_from_backup']}]
     assert (repo / 'settings.json').read_bytes() == b'{"service":{"retries":1}}\n'
     assert git('status', '--porcelain') == ''
     if args.broker:

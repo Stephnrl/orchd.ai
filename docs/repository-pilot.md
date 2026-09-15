@@ -83,6 +83,9 @@ An unused preparation can be consumed without execution:
 python -m orch pilot-abandon --data .runtime/pilot --pilot-id ID --expected-sha256 REVIEWED_SCOPE_SHA256 --expected-revision 0
 ```
 
+Retained rows can be audited and snapshotted with
+[pilot journal backups](pilot-journal-backups.md), which never copy a workspace.
+
 ## Durable recovery
 
 SQLite serializes admission across processes. `prepared` becomes `reserved` and

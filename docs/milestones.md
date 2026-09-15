@@ -269,6 +269,11 @@ shared evidence/replay/backup and explicit recovery across the pilot/kernel comm
 boundary. It adds authenticated task controls and browser acceptance while rejecting
 fixture-batch adoption and remote-action claims for this workload.
 
+The [pilot journal snapshot milestone](pilot-journal-backups.md) adds
+`pilot-journal-audit`, `pilot-journal-backup`, `pilot-verify-journal-backup` and
+`pilot-compare-journal-backup`, mirroring the existing journal backup pattern for the
+records of work that actually ran. No restore, no workspaces, no execution authority.
+
 The [security acceptance milestone](security-acceptance.md) binds each mandatory
 criterion to the tests that exercise it, runs them as a release-lane stage and reports
 coverage, Docker-gated evidence, other stages and deferred limits per criterion.

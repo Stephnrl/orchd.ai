@@ -74,7 +74,8 @@ read-only unchanged and gain the table on their next writable open.
 
 ## Boundaries
 
-Reclamation is not archive, compaction or backup. Journal rows are never deleted,
+Reclamation is not archive, compaction or backup; [verified journal snapshots](pilot-journal-backups.md)
+are a separate read-only command set. Journal rows are never deleted,
 so the absolute journal cap is reached eventually and requires a new journal.
 Standard workflow backups continue to exclude the live pilot journal, and a
 reclaimed workspace cannot be restored; task-bound results are served from the
