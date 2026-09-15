@@ -118,11 +118,22 @@ class PilotRetentionTests(unittest.TestCase):
         with self.assertRaisesRegex(Rejected, 'not reclaimable'): reclaim(self.pilot, done['id'], done['scope_sha256'], 2)
         self.assertTrue((workspace / 'extra.txt').exists())
         (workspace / 'extra.txt').unlink()
-        (workspace / 'link.json').symlink_to(self.repo / 'config.json')
-        with self.assertRaises(Rejected): reclaim(self.pilot, done['id'], done['scope_sha256'], 2)
-        self.assertTrue((self.repo / 'config.json').exists())
-        (workspace / 'link.json').unlink()
+        try: (workspace / 'link.json').symlink_to(self.repo / 'config.json')
+        except OSError: pass  # Symlink creation needs a privilege some Windows accounts lack; the extra-file case above still ran.
+        else:
+            with self.assertRaises(Rejected): reclaim(self.pilot, done['id'], done['scope_sha256'], 2)
+            self.assertTrue((self.repo / 'config.json').exists())
+            (workspace / 'link.json').unlink()
         self.assertTrue(reclaim(self.pilot, done['id'], done['scope_sha256'], 2)['deleted'])
+
+    def test_read_only_workspace_files_are_reclaimed(self):
+        # Docker workers leave frozen 0444 files; reclamation must still delete them on every host.
+        done = self.passed()
+        workspace = self.pilot.root / done['id']
+        (workspace / 'config.json').chmod(0o444)
+        self.assertTrue(reclaim(self.pilot, done['id'], done['scope_sha256'], 2)['deleted'])
+        self.assertFalse(workspace.exists())
+        self.assertEqual(self.pilot.inspect(done['id'])['reclamation'], 'reclaimed')
 
     def test_crash_after_intent_is_visible_and_resumable(self):
         done = self.passed()

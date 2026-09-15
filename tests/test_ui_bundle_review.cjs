@@ -2,10 +2,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const {webcrypto, createHash} = require('node:crypto');
-const nodes = new Map(), pending = [];
+const nodes = new Map(), pending = [], waiters = new Set();
 function node() { return {value: '', textContent: '', handlers: {}, append() {}, replaceChildren() {}, querySelector() { return node(); }, addEventListener(name, fn) { this.handlers[name] = fn; }}; }
 function element(id) { if (!nodes.has(id)) nodes.set(id, node()); return nodes.get(id); }
-const context = vm.createContext({document: {getElementById: element, createElement: node}, setInterval() {}, Date, Map, Set, Uint8Array, crypto: webcrypto, AbortController, fetch(route, options) { return new Promise(resolve => pending.push({route, options, resolve})); }});
+const context = vm.createContext({document: {getElementById: element, createElement: node}, setInterval() {}, Date, Map, Set, Uint8Array, crypto: webcrypto, AbortController, fetch(route, options) { return new Promise(resolve => { pending.push({route, options, resolve}); for (const waiter of [...waiters]) waiter(); }); }});
 vm.runInContext(fs.readFileSync(require('node:path').join(__dirname, '../orch/ui/app.js'), 'utf8'), context);
 const bytes = new TextEncoder().encode('{}');
 const sha = createHash('sha256').update(bytes).digest('hex');
@@ -17,7 +17,16 @@ function ready() {
   element('bundle-file').files = [file]; element('bundle-expected').value = sha;
   element('bundle-expected').handlers.input();
 }
-async function fetched(count) { for (let n = 0; n < 100 && pending.length < count; n++) await new Promise(resolve => setImmediate(resolve)); assert.equal(pending.length, count); }
+// The click path awaits crypto.subtle.digest on the libuv threadpool before it calls
+// fetch, so tick polling is racy. Wait for the mocked fetch to register the request
+// and keep only a wall-clock bound as the failure timeout.
+function fetched(count) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { waiters.delete(check); reject(new Error(`Expected ${count} fetch calls, observed ${pending.length}`)); }, 5000);
+    function check() { if (pending.length >= count) { clearTimeout(timer); waiters.delete(check); resolve(); } }
+    waiters.add(check); check();
+  }).then(() => assert.equal(pending.length, count));
+}
 (async () => {
   ready(); assert.equal(element('verify-bundle').disabled, false);
   element('bundle-file').files = [{...file, size: 16777217}];
