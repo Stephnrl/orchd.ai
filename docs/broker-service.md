@@ -84,6 +84,31 @@ local account in `docker-users`, grant it and the operator read access to the se
 with `icacls`, and start `broker-serve` as that account (scheduled task or `runas`).
 The orchestrator must not be able to write the broker journal directory.
 
+## Pilot Docker workers through the broker
+
+Start the broker with `--image IMAGE@sha256:DIGEST --pilot-root JOURNAL` and give the
+pilot commands (or the task kernel's `serve`/`repository-task-*` commands) the same
+`--broker-endpoint`/`--broker-secret`. The [Git JSON pilot](repository-pilot.md) then
+never runs Docker itself: three more routes carry its fixed-recipe workers.
+
+| Route | Effect |
+| --- | --- |
+| `POST /pilot-profile` | The runtime the approval binds to: daemon, image identity, recipe hash **and the broker account**. |
+| `POST /pilot-execute` | Run one edit/test phase for a scope prepared for this broker; a second identical delivery returns the retained observation, a different scope for the same pilot id is a conflict. |
+| `POST /pilot-reconcile` | Ownership-checked container removal for one phase. |
+
+The broker refuses a scope whose journal root is not its configured `--pilot-root`,
+whose image is not its own, whose executor names another broker account, or whose
+workspace is not `PILOT_ROOT/<pilot id>`. Because the broker identity is part of the
+scope's `executor`, a scope prepared through the service cannot be run or reconciled
+directly, and a directly prepared scope cannot be run through the service. Every
+retained worker observation records `transport` and the broker account, and the
+receipt binds that journal. Local-data pilots launch nothing and ignore the service.
+The pilot routes accept bodies up to 1 MiB because the scope carries the baseline.
+
+`scripts/pilot_acceptance.py --image IMAGE --broker` runs the real Docker walkthrough
+through a real `broker-serve` process and is a step of the Docker CI lane.
+
 ## Recovery semantics
 
 The workflow semantics are unchanged. `recover` first asks `/result`; an existing
@@ -97,6 +122,11 @@ repaired by re-reading that journal, across broker and orchestrator restarts.
 
 ## Verification
 
+`tests/test_pilot_broker.py` covers pilot workers launched from the service thread with
+the broker identity bound into scope and observations, service/direct scope cross-refusal,
+retained redelivery and foreign-scope refusal, broker crash after launch with
+reconciliation through the broker, unavailable or changed broker before launch, the
+task-kernel path and CLI threading.
 `tests/test_broker_service.py` covers the complete workflow through a threaded service,
 unauthenticated/tampered/oversized/cross-origin requests, profile and workspace
 policy, idempotent redelivery, the read-only result route, crash before the journal
@@ -112,8 +142,8 @@ relaunch. It runs in the offline and full release lanes.
 - The acceptance and CI hosts run both processes as **one** account, so their evidence
   says `shared`. A real `separate` assessment requires the provisioning above on a
   deployment host; nothing in this repository can create OS accounts.
-- The Git JSON pilot's Docker workers (`pilot-run --pilot-executor docker`) still call
-  Docker from the operator's process; routing them through the service is a later step.
+- The pilot's `pilot-profile` route calls the Docker daemon for identity on every
+  preparation, run and dispatch check, exactly as the direct path did.
 - No TLS, per-request authorization beyond fixed recipes, secret rotation, Windows ACL
   verification, service supervision or multiple brokers. One shared secret, one service.
 - Live providers, GitHub and Jira remain gated exactly as before; a separate broker

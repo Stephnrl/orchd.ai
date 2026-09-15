@@ -10,8 +10,10 @@ The [broker service milestone](broker-service.md) adds `broker-serve`, a loopbac
 broker the operator can start under a separate OS account, an HMAC-authenticated
 five-route transport for fixture edits/tests, broker-owned journals and Docker
 reconciliation, per-execution identity evidence and a `broker_identity` deployment
-gate. The subprocess transport stays the default; the pilot's Docker workers and the
-actual second-account provisioning remain deployment work.
+gate. The [pilot workers now dispatch through that service](broker-service.md) as well,
+with the broker account bound into the approved executor profile and every retained
+observation. The subprocess and direct transports stay the defaults; the actual
+second-account provisioning remains deployment work.
 
 The [pilot retention milestone](pilot-retention.md) adds a read-only usage report and
 explicitly reviewed, two-phase workspace reclamation for terminal pilots, including

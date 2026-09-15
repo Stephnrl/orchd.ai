@@ -90,3 +90,5 @@ jobs:
         run: python scripts/pilot_worker_acceptance.py --image "$ORCH_DOCKER_TEST_IMAGE" --destination .runtime/ci-pilot-workers.json
       - name: Verify task-kernel repository approval and recovery with Docker
         run: python scripts/repository_task_acceptance.py --image "$ORCH_DOCKER_TEST_IMAGE"
+      - name: Verify pilot Docker workers dispatched through the broker service
+        run: python scripts/pilot_acceptance.py --image "$ORCH_DOCKER_TEST_IMAGE" --broker

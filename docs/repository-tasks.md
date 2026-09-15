@@ -119,7 +119,8 @@ the real-worker variant. Browser acceptance checks both approval labels and rest
 
 This connects the bounded workload to the task kernel, not a general engineering
 agent. Independent review, real proposal-only providers, custom executable recipes,
-concurrent scheduling and live integrations remain future milestones. The fixture
-broker can now run under a [separate OS identity](broker-service.md); the pilot's
-own Docker workers do not use that service yet. Python remains the control plane
+concurrent scheduling and live integrations remain future milestones. Both the fixture
+broker and the pilot's Docker workers can now run under a [separate OS identity](broker-service.md)
+when the server is started with `--broker-endpoint`/`--broker-secret`; the kernel passes
+that configuration to every pilot it prepares. Python remains the control plane
 and fixed worker language.

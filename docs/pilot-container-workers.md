@@ -105,11 +105,13 @@ Preflight availability alone is not host qualification.
 
 Standalone pilots retain their own journal. The [repository task workload](repository-tasks.md)
 now binds newly prepared pilots to kernel approvals and common task evidence;
-they remain outside fixture batches, provider adapters and external integrations. The pilot worker supervisor
-still runs under the local operator's identity and can access Docker; the
-[broker service](broker-service.md) provides a separate-identity transport for the
-fixture broker only, and independent security review remains a deployment gate. A compromised
-host administrator or trusted image is outside the claim of this bounded proof.
+they remain outside fixture batches, provider adapters and external integrations. With
+`--broker-endpoint`/`--broker-secret` the worker supervisor no longer runs Docker itself:
+the [broker service](broker-service.md) started with `--image` and `--pilot-root` owns the
+daemon, its account is bound into the approved executor profile and every retained
+observation, and reconciliation goes through it. Without those flags the supervisor still
+runs under the local operator's identity. Independent security review remains a deployment
+gate. A compromised host administrator or trusted image is outside the claim of this bounded proof.
 
 Keep the fixed recipes and control plane in Python. A Rust supervisor becomes worth
 considering when custom images or broader process lifecycle requirements establish

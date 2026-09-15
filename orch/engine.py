@@ -47,6 +47,7 @@ class Engine:
         self.store = Store(root)
         self.executor = executor or Executor()
         self.executor.broker = BrokerClient(self.store, self.executor.mode, self.executor.image, executor=self.executor, service=broker_service)
+        self.broker_service = broker_service
         self.worker = FixtureWorker(self.store, self.executor)
         self.provider_factory = provider_factory
         self.guardian = FixtureGuardian()
