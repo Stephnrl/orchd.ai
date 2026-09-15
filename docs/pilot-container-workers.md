@@ -102,8 +102,9 @@ Preflight availability alone is not host qualification.
 
 ## Remaining architecture boundary
 
-The pilot is still a CLI-only workflow with its own journal, not an `Engine` task,
-UI batch entry, provider adapter or external integration. Its worker supervisor
+Standalone pilots retain their own journal. The [repository task workload](repository-tasks.md)
+now binds newly prepared pilots to kernel approvals and common task evidence;
+they remain outside fixture batches, provider adapters and external integrations. The worker supervisor
 runs under the local operator's identity and can access Docker; a separate OS broker
 identity and independent security review remain deployment gates. A compromised
 host administrator or trusted image is outside the claim of this bounded proof.

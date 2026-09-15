@@ -263,6 +263,12 @@ justifies it.
 
 ## Decisions to resolve before enabling real execution
 
+The [repository-task kernel milestone](repository-tasks.md) connects JSON pilots to
+TaskSpec, dedicated plan/result contracts, execution approval, local snapshot sign-off,
+shared evidence/replay/backup and explicit recovery across the pilot/kernel commit
+boundary. It adds authenticated task controls and browser acceptance while rejecting
+fixture-batch adoption and remote-action claims for this workload.
+
 The [pilot container-worker milestone](pilot-container-workers.md) extends the
 Git JSON pilot with two restricted containers, runtime-bound approval, per-phase
 durable dispatch and ownership-checked cleanup after interruption. It adds real

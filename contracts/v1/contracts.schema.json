@@ -59,6 +59,12 @@
     },
     {
       "$ref": "#/$defs/TaskState"
+    },
+    {
+      "$ref": "#/$defs/RepositoryTaskPlan"
+    },
+    {
+      "$ref": "#/$defs/RepositoryTaskResult"
     }
   ],
   "$defs": {
@@ -2544,6 +2550,126 @@
         "pending_approval",
         "last_event_sequence",
         "error"
+      ]
+    },
+    "RepositoryTaskPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "RepositoryTaskPlan"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "spec": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "pilot_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        },
+        "scope_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "scope": {
+          "$ref": "#/$defs/ArtifactRef"
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "spec",
+        "pilot_id",
+        "scope_sha256",
+        "scope"
+      ]
+    },
+    "RepositoryTaskResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "contract_type": {
+          "const": "RepositoryTaskResult"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "task_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "plan": {
+          "$ref": "#/$defs/DocumentRef"
+        },
+        "outcome": {
+          "enum": [
+            "passed",
+            "failed",
+            "interrupted"
+          ]
+        },
+        "report": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "snapshots": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$"
+              },
+              "content": {
+                "$ref": "#/$defs/ArtifactRef"
+              }
+            },
+            "required": [
+              "path",
+              "content"
+            ]
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "contract_type",
+        "id",
+        "task_id",
+        "created_at",
+        "plan",
+        "outcome",
+        "report",
+        "snapshots"
       ]
     }
   }

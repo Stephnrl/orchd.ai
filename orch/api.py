@@ -74,6 +74,11 @@ class Application:
                     return 200, batches.abandon(parts[1], payload['scope_sha256'], payload['expected_revision'],
                                                 payload['task_id'], payload['expected_snapshot_sha256'])
                 return 405, {'error': 'Unsupported batch route or method'}
+            if method == 'POST' and parts == ['repository-tasks']:
+                if query or not isinstance(payload, dict) or set(payload) != {'title', 'intent'}:
+                    raise Rejected('Explicit repository task title and intent required')
+                task = self.engine.create_repository_task(payload['intent'], payload['title'])
+                return 201, self.engine.task(task)
             if method == "GET" and parts == ["tasks"]:
                 after, limit = page(query)
                 rows = self.engine.store.db.execute("SELECT rowid,id,state FROM tasks WHERE rowid>? ORDER BY rowid LIMIT ?", (after, limit + 1)).fetchall()

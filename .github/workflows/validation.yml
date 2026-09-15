@@ -88,3 +88,5 @@ jobs:
         run: python -m orch verify-runtime --image "$ORCH_DOCKER_TEST_IMAGE" --destination .runtime/ci-runtime.json
       - name: Verify pilot container workers and interrupted-container recovery
         run: python scripts/pilot_worker_acceptance.py --image "$ORCH_DOCKER_TEST_IMAGE" --destination .runtime/ci-pilot-workers.json
+      - name: Verify task-kernel repository approval and recovery with Docker
+        run: python scripts/repository_task_acceptance.py --image "$ORCH_DOCKER_TEST_IMAGE"

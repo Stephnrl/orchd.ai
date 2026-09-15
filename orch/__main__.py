@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["pilot-reconcile", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
+    parser.add_argument("command", choices=["repository-task-create", "repository-task-run", "repository-task-approve", "pilot-reconcile", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -52,7 +52,31 @@ def main():
     parser.add_argument('--expected-snapshot-sha256', help='Reviewed current task snapshot digest for batch abandonment')
     parser.add_argument("--pilot-id", help="Local repository pilot identifier")
     parser.add_argument("--pilot-executor", choices=["local-data", "docker"], default="local-data", help="Explicit pilot execution profile")
+    parser.add_argument("--title", default="Repository JSON validation")
+    parser.add_argument("--decision", choices=["approve", "reject"])
     args = parser.parse_args()
+    if args.command.startswith('repository-task-'):
+        from .contracts import Rejected
+        from .github_preview import load_intent
+        import sqlite3
+        if args.command == 'repository-task-create' and not args.intent: parser.error('Repository creation requires --intent')
+        if args.command != 'repository-task-create' and not args.task: parser.error('Repository operation requires --task')
+        if args.command == 'repository-task-approve' and (not args.request_id or not args.decision or args.expected_revision is None):
+            parser.error('Repository approval requires --request-id, --decision and --expected-revision')
+        engine = None
+        try:
+            engine = Engine(args.data, Executor('trusted-fixture' if args.trusted_fixture else 'docker', args.image))
+            if args.command == 'repository-task-create':
+                task = engine.create_repository_task(load_intent(args.intent), args.title)
+                result = engine.task(task)
+            else:
+                if engine.repository_tasks(args.task) is None: raise Rejected('Not a repository task')
+                result = engine.run(args.task) if args.command == 'repository-task-run' else engine.approve(args.task, args.request_id, args.decision, args.expected_revision)
+        except (Rejected, OSError, sqlite3.Error): parser.error('Repository task rejected; inspect current scope, state and approval')
+        finally:
+            if engine is not None: engine.close()
+        print(json.dumps(result, indent=2))
+        return
     if args.command.startswith('pilot-'):
         from .pilot import Pilot
         from .contracts import Rejected

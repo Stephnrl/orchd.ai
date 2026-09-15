@@ -123,6 +123,7 @@ class Batches:
                     raise Rejected('Invalid batch request')
                 task = identifier(request['task_id'])
                 value, sha = snapshot(self.engine, task)
+                if value['context'].get('workload') == 'repository-json-v1': raise Rejected('Repository tasks are not admitted to fixture batches')
                 state = value['state']
                 if (task in seen or type(request['expected_revision']) is not int
                         or request['expected_revision'] != state['revision'] or state['state'] in PAUSED

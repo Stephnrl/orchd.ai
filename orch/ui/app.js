@@ -45,8 +45,8 @@ function controls() {
   const expired = !!approval && Date.parse(approval.expires_at) <= Date.now();
   $("approve").disabled = $("reject").disabled = busy || !approval || expired || !$("reviewed").checked;
   $("renew-approval").hidden = !expired;
-  $("renew-approval").disabled = busy || !expired;
-  $("approval-expiry").textContent = expired ? "This request has expired. Request a fresh approval, then review its evidence and decide separately." : "";
+  $("renew-approval").disabled = busy || !expired || (snapshot?.context?.workload === "repository-json-v1" && approval?.kind === "plan");
+  $("approval-expiry").textContent = expired ? (snapshot?.context?.workload === "repository-json-v1" && approval?.kind === "plan" ? "Execution scope expired. Cancel this task and create a newly prepared repository task." : "This request has expired. Request a fresh approval, then review its evidence and decide separately.") : "";
   $("create").querySelector("button").disabled = busy;
   $("cancellation").hidden = !snapshot || ["COMPLETED", "FAILED", "CANCELLED", "PR_CREATED"].includes(snapshot.state.state);
   $("cancel-task").disabled = busy || !snapshot || !!snapshot.state.active_operation_id || !!snapshot.state.active_invocation_id || !!snapshot.state.container_id;
@@ -390,7 +390,7 @@ async function state() {
     if (version !== epoch || request !== stateRequest) return;
     snapshot = data; approval = pending; recovery = diagnostics;
     $("task-title").textContent = spec.title; $("task-id").textContent = task;
-    $("state").textContent = data.state.state.replaceAll("_", " "); $("revision").textContent = "Revision " + data.state.revision;
+    $("state").textContent = data.context?.workload === "repository-json-v1" && data.state.state === "COMPLETED" ? "LOCAL SNAPSHOT ACCEPTED" : data.state.state.replaceAll("_", " "); $("revision").textContent = "Revision " + data.state.revision;
     $("state-json").textContent = pretty(data); $("approval").hidden = !pending; $("reviewed").checked = false;
     $("recovery-diagnostics").hidden = !diagnostics;
     const outcome = data.context?.operator_recovery;
@@ -404,7 +404,7 @@ async function state() {
       $("recovery-json").textContent = pretty(diagnostics);
     }
     if (pending) {
-      $("approval-summary").textContent = `${pending.kind === "plan" ? "Plan" : "Simulated action"} approval · Expires ${pending.expires_at}`;
+      $("approval-summary").textContent = `${data.context?.workload === "repository-json-v1" ? pending.summary : (pending.kind === "plan" ? "Plan approval" : "Simulated action approval")} · Expires ${pending.expires_at}`;
       $("approval-json").textContent = pretty(pending); references(pending, $("approval-links"));
     }
     $("task-refresh-status").textContent = "Task refreshed. Review the current evidence before taking action.";

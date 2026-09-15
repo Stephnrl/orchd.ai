@@ -6,6 +6,7 @@ const { tmpdir } = require('node:os');
 const path = require('node:path');
 const { createInterface } = require('node:readline');
 
+
 const test = base.extend({
   operator: async ({ page }, use) => {
     const data = await mkdtemp(path.join(tmpdir(), 'orchd-browser-'));
@@ -472,4 +473,55 @@ test('operator reviews evidence, refreshes, approves and inspects maintenance', 
   await page.locator('#integrity-report').click();
   await expect(page.locator('#maintenance-status')).toHaveText('Integrity audit passed.');
   await expect(page.locator('#state')).toHaveText('AWAITING ACTION APPROVAL');
+});
+
+test('repository task uses execution approval and local-result sign-off across restart', async ({ page, operator }) => {
+  const { writeFile } = require('node:fs/promises');
+  const repo = await mkdtemp(path.join(tmpdir(), 'orchd-repository-browser-'));
+  const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  gitEnv.GIT_CONFIG_NOSYSTEM = '1';
+  gitEnv.GIT_CONFIG_GLOBAL = process.platform === 'win32' ? 'NUL' : '/dev/null';
+  const git = (...args) => execFileSync('git', ['-c', 'core.autocrlf=false', '-c', 'core.hooksPath=' + gitEnv.GIT_CONFIG_GLOBAL, '-C', repo, ...args], {env: gitEnv, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']}).toString().trim();
+  try {
+    git('init');
+    await writeFile(path.join(repo, 'settings.json'), '{"retries":1}\n');
+    git('add', '.');
+    git('-c', 'user.name=Pilot', '-c', 'user.email=pilot@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-m', 'Disposable baseline');
+    const response = await page.request.post(`${operator.url}/repository-tasks`, {
+      headers: {Authorization: `Bearer ${operator.token}`},
+      data: {title: 'Repository JSON task', intent: {repository: repo, base_commit: git('rev-parse', 'HEAD'),
+        replacements: {'settings.json': '{"retries":3}\n'}, checks: [{path: 'settings.json', keys: ['retries'], equals: 3}]}},
+    });
+    expect(response.status()).toBe(201);
+    const task = (await response.json()).state.task_id;
+    await connect(page, operator.token);
+    await page.locator('#tasks button').click();
+    await expect(page.locator('#approval-summary')).toContainText('Approve exact repository pilot execution');
+    let state = await readTask(page, operator, task);
+    await expect(page.locator('#events li')).toHaveCount(state.state.last_event_sequence);
+    await page.locator('#reviewed').check();
+    await page.locator('#approve').click();
+    await expect(page.locator('#state')).toHaveText('READY FOR IMPLEMENTATION');
+    await expect(page.locator('#batch-add')).toBeDisabled();
+    await page.locator('#run').click();
+    await expect(page.locator('#state')).toHaveText('AWAITING ACTION APPROVAL');
+    await expect(page.locator('#approval-summary')).toContainText('Accept validated local snapshot; no remote action');
+    state = await readTask(page, operator, task);
+    await expect(page.locator('#events li')).toHaveCount(state.state.last_event_sequence);
+    await page.locator('#reviewed').check();
+    await page.locator('#approve').click();
+    await expect(page.locator('#state')).toHaveText('LOCAL SNAPSHOT ACCEPTED');
+    await expect(page.locator('#run')).toBeDisabled();
+    const completed = await readTask(page, operator, task);
+    expect(completed.context.external).toBeUndefined();
+    await operator.restart();
+    await connect(page, operator.token);
+    await page.locator('#tasks button').click();
+    await expect(page.locator('#state')).toHaveText('LOCAL SNAPSHOT ACCEPTED');
+    expect(await readTask(page, operator, task)).toEqual(completed);
+    expect(await readFile(path.join(repo, 'settings.json'), 'utf8')).toBe('{"retries":1}\n');
+  } finally {
+    if (path.dirname(repo) !== path.resolve(tmpdir()) || !path.basename(repo).startsWith('orchd-repository-browser-')) throw new Error('Unexpected disposable repository path');
+    await rm(repo, {recursive: true, force: true, maxRetries: 5, retryDelay: 200});
+  }
 });

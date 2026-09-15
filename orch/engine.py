@@ -53,6 +53,14 @@ class Engine:
         self.external_action = SimulatedPRAction(self.store)
         self.after_operation = None  # Test crash injection, after durable receipt commit.
 
+    def repository_tasks(self, task_id):
+        from .repository_tasks import RepositoryTasks, WORKLOAD
+        return RepositoryTasks(self) if self.store.task(task_id)[1].get('workload') == WORKLOAD else None
+
+    def create_repository_task(self, intent, title='Repository JSON validation', principal='local-operator'):
+        from .repository_tasks import RepositoryTasks
+        return RepositoryTasks(self).create(intent, title, principal)
+
     def close(self):
         self.store.close()
 
@@ -78,6 +86,7 @@ class Engine:
         self.store.db.execute("UPDATE tasks SET state=?,context=? WHERE id=?", (canonical(state).decode(), canonical(context).decode(), state["task_id"]))
 
     def _transition(self, state, context, target):
+        if context.get("workload") == "repository-json-v1": raise Rejected("Use repository task transitions")
         source = state["state"]
         if not allowed(source, target, state["resume_state"]):
             raise Rejected("Forbidden transition")
@@ -165,6 +174,7 @@ class Engine:
 
     def renew_approval(self, task_id, request_id, expected_revision, principal="local-operator"):
         """Replace an expired pending request without granting or extending a decision."""
+        if repository := self.repository_tasks(task_id): return repository.renew(task_id, request_id, expected_revision, principal)
         if type(expected_revision) is not int or expected_revision < 0 or not isinstance(request_id, str):
             raise Rejected("Invalid renewal request")
         with self.store.exclusive(), self.store.transaction():
@@ -200,6 +210,7 @@ class Engine:
 
     def approve(self, task_id, request_id, decision, expected_revision, principal="local-operator"):
         """Human boundary only; no receipt/actor/identity accepted from agent payloads."""
+        if repository := self.repository_tasks(task_id): return repository.approve(task_id, request_id, decision, expected_revision, principal)
         if decision not in ("approve", "reject"):
             raise Rejected("Invalid approval decision")
         with self.store.exclusive(), self.store.transaction():
@@ -294,6 +305,7 @@ class Engine:
 
     def cancel(self, task_id, expected_revision, reason, principal="local-operator"):
         """Cancel at a quiescent boundary; never claim to stop unresolved execution."""
+        if repository := self.repository_tasks(task_id): return repository.cancel(task_id, expected_revision, reason, principal)
         if type(expected_revision) is not int or expected_revision < 0 or not isinstance(reason, str):
             raise Rejected("Invalid cancellation request")
         reason = reason.strip()
@@ -323,6 +335,7 @@ class Engine:
 
     def recovery_diagnostics(self, task_id):
         """Inspect persisted recovery preconditions; never probe or reconcile a process."""
+        if repository := self.repository_tasks(task_id): return repository.diagnostics(task_id)
         with self.store.exclusive():
             state, context = self.store.task(task_id)
             rows = self.store.db.execute("SELECT id,stage,generation FROM operations WHERE task_id=? AND status='started' ORDER BY rowid LIMIT 21", (task_id,)).fetchall()
@@ -354,6 +367,7 @@ class Engine:
 
     def recover(self, task_id, expected_revision, principal="local-operator"):
         """Operator requests reconciliation; no arbitrary resume state or approval bypass."""
+        if repository := self.repository_tasks(task_id): return repository.recover(task_id, expected_revision, principal)
         if type(expected_revision) is not int or expected_revision < 0:
             raise Rejected("Invalid recovery revision")
         with self.store.exclusive():
@@ -413,6 +427,7 @@ class Engine:
 
     def retry_cleanup(self, task_id, operation_id, expected_revision, principal="local-operator"):
         """Explicitly retry retained workspace cleanup after committed recovery."""
+        if repository := self.repository_tasks(task_id): raise Rejected("Repository tasks use task recovery and retain their workspaces")
         if type(expected_revision) is not int or expected_revision < 0:
             raise Rejected("Invalid cleanup revision")
         with self.store.exclusive():
@@ -497,6 +512,7 @@ class Engine:
         return request
 
     def advance(self, task_id, *, expected_snapshot=None):
+        if repository := self.repository_tasks(task_id): return repository.advance(task_id, expected_snapshot)
         with self.store.exclusive():
             state, context = self.store.task(task_id)
             if expected_snapshot is not None and expected_snapshot != digest({'state': state, 'context': context}):

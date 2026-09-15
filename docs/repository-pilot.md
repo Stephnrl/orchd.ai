@@ -9,9 +9,12 @@ test in separate containers with retained dispatch and cleanup evidence. The sou
 is never modified. No repository programs, package managers, hooks, model
 providers or integration writes run.
 
-This is a separate CLI pilot journal, not a generalized `Engine` task. It does
+The standalone pilot remains a separate journal. The optional
+[repository task workload](repository-tasks.md) now binds newly prepared pilots
+to kernel approvals and retains their results in the common task store. The pilot does
 not produce fixture TaskState, broker PatchReceipt or GitHub approval authority.
-The existing fixture API/UI and serial batches remain scoped to fixture tasks.
+Serial batches remain scoped to fixture tasks; repository tasks use the common
+task approval, evidence and recovery controls.
 
 ## Supported policy
 

@@ -111,6 +111,10 @@ Opening the design PR itself is repository collaboration, not an implemented pla
 
 ## Local repository pilot
 
+[Repository JSON tasks](docs/repository-tasks.md) connect the pilot to durable task
+approvals, retained result snapshots and common UI/API recovery controls. Completion
+means human acceptance of a validated local snapshot.
+
 Use the [bounded Git JSON pilot](docs/repository-pilot.md) to prepare, review and
 test a small data change in a disposable workspace with durable recovery inspection.
 Run `python scripts/pilot_acceptance.py` for its disposable end-to-end walkthrough.
