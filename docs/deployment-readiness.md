@@ -22,8 +22,11 @@ Rejected or missing reports remain blocking. Generate fresh evidence separately 
 the [runtime-readiness commands](runtime-readiness.md).
 
 The JSON report lists stable gate IDs and next steps for executable digest, worker
-runtime, native protocol, provider containment, credentials and live admission. Even
-matching executable and worker evidence leave the last four gates blocked. Docker worker
+runtime, broker identity, native protocol, provider containment, credentials and live
+admission. Add `--broker-endpoint 127.0.0.1:PORT --broker-secret FILE` to assess a
+running [broker service](broker-service.md); the gate passes only when the broker
+answers as a different OS account with the same source digest. Even matching
+executable, worker and broker evidence leave the last four gates blocked. Docker worker
 isolation does not establish containment for a native provider process. Corporate native
 protocol guidance remains distinct from the available offline Copilot codec.
 

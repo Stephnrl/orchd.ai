@@ -40,6 +40,9 @@ Phase 1 remains the design baseline below. Phase 2 implements the bounded offlin
 vertical slice; see [running Phase 2](docs/phase2.md) for APIs, recovery and limitations.
 Phase 3 adds [runtime hardening and operator recovery](docs/phase3.md), while keeping
 the control plane and broker in Python. Real providers remain gated on containment tests.
+The [broker service](docs/broker-service.md) lets that fixture broker run under a separate
+OS account behind five HMAC-authenticated loopback routes, records the broker and
+orchestrator identities with every execution, and adds a `broker_identity` deployment gate.
 Use the [runtime-readiness commands](docs/runtime-readiness.md) to check the intended
 Docker host/image and record the remaining pre-provider gate.
 The [JSON/CLI provider boundary](docs/provider-adapter.md) can now run the offline

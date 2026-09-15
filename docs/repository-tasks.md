@@ -118,6 +118,8 @@ The offline/full release lane includes local acceptance; the Docker CI lane incl
 the real-worker variant. Browser acceptance checks both approval labels and restart.
 
 This connects the bounded workload to the task kernel, not a general engineering
-agent. Separate broker OS identity, independent review, real proposal-only providers,
-custom executable recipes, concurrent scheduling and live integrations remain future
-milestones. Python remains the control plane and fixed worker language.
+agent. Independent review, real proposal-only providers, custom executable recipes,
+concurrent scheduling and live integrations remain future milestones. The fixture
+broker can now run under a [separate OS identity](broker-service.md); the pilot's
+own Docker workers do not use that service yet. Python remains the control plane
+and fixed worker language.

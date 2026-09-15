@@ -12,7 +12,7 @@ from .fixtures import recipe, repository
 from .provider import MockProvider, Scenario
 from .cli_provider import FixtureCliProvider
 from .storage import Store
-from .broker import BrokerClient, BrokerUncertain, file_lock, atomic_json
+from .broker import BrokerClient, BrokerUncertain
 
 EDGES = {
     "DRAFT_SPEC": {"AWAITING_CLARIFICATION", "SPEC_READY"},
@@ -41,12 +41,12 @@ def allowed(source, target, resume=None):
 
 
 class Engine:
-    def __init__(self, root, executor=None, provider_factory=MockProvider):
+    def __init__(self, root, executor=None, provider_factory=MockProvider, broker_service=None):
         if provider_factory not in (MockProvider, FixtureCliProvider):
             raise Rejected("Real provider execution is not enabled; containment and provider authorization are required")
         self.store = Store(root)
         self.executor = executor or Executor()
-        self.executor.broker = BrokerClient(self.store, self.executor.mode, self.executor.image)
+        self.executor.broker = BrokerClient(self.store, self.executor.mode, self.executor.image, executor=self.executor, service=broker_service)
         self.worker = FixtureWorker(self.store, self.executor)
         self.provider_factory = provider_factory
         self.guardian = FixtureGuardian()
@@ -392,19 +392,15 @@ class Engine:
                 execution = self.executor.broker.result(operation_id, op["generation"])
             except Rejected:
                 # Only Docker offers an independently discoverable/reapable execution.
-                # Holding the broker lock plus a durable tombstone prevents late launch.
+                # The broker writes a durable tombstone under its lock before proving
+                # absence, so a late launch is prevented whichever account it runs as.
                 if self.executor.mode != "docker":
                     raise
-                root = self.executor.broker.root
-                with file_lock(root / (operation_id + ".lock")):
-                    if (root / (operation_id + ".json")).exists():
-                        raise Rejected("Invalid journal must be investigated, not discarded")
-                    atomic_json(root / (operation_id + ".retired"), {"generation": op["generation"]})
-                    if not self.executor.reconcile(operation_id):
-                        raise Rejected("Cannot prove Docker execution is stopped")
+                if not self.executor.broker.retire(operation_id, op["generation"]):
+                    raise Rejected("Cannot prove Docker execution is stopped")
                 execution = {"failure": "stopped_without_receipt"}
             if execution["failure"] in ("cleanup_uncertain", "unreaped_stream"):
-                if not self.executor.reconcile(operation_id):
+                if not self.executor.broker.reconcile(operation_id):
                     raise Rejected("Container cleanup remains uncertain")
             # Retire the uncertain workflow attempt after preserving execution evidence.
             # A fresh WorkOrder follows via the existing CHANGES_REQUESTED edge.

@@ -40,6 +40,81 @@
         "nonce": {"$ref": "#/$defs/Id"}, "source_digest": {"$ref": "#/$defs/Hash"},
         "request_sha256": {"$ref": "#/$defs/Hash"}, "result": {"$ref": "#/$defs/Result"}
       }
+    },
+    "Identity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["system", "account_sha256", "uid", "gid"],
+      "properties": {
+        "system": {"type": "string", "minLength": 1, "maxLength": 64},
+        "account_sha256": {"$ref": "#/$defs/Hash"},
+        "uid": {"type": ["integer", "null"], "minimum": 0},
+        "gid": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "Profile": {
+      "type": "object", "additionalProperties": false, "required": ["mode", "image"],
+      "properties": {"mode": {"enum": ["docker", "trusted-fixture"]}, "image": {"type": ["string", "null"], "maxLength": 4096}}
+    },
+    "IdentityRequest": {
+      "type": "object", "additionalProperties": false, "required": ["schema_version", "kind", "nonce"],
+      "properties": {"schema_version": {"const": "1.0.0"}, "kind": {"const": "identity"}, "nonce": {"$ref": "#/$defs/Id"}}
+    },
+    "IdentityReply": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "kind", "nonce", "identity", "source_digest", "profile"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"}, "kind": {"const": "identity"}, "nonce": {"$ref": "#/$defs/Id"},
+        "identity": {"$ref": "#/$defs/Identity"}, "source_digest": {"$ref": "#/$defs/Hash"}, "profile": {"$ref": "#/$defs/Profile"}
+      }
+    },
+    "ExecuteRequest": {
+      "type": "object", "additionalProperties": false, "required": ["schema_version", "kind", "request"],
+      "properties": {"schema_version": {"const": "1.0.0"}, "kind": {"enum": ["execute", "result"]}, "request": {"$ref": "#/$defs/Request"}}
+    },
+    "ExecuteReply": {
+      "type": "object", "additionalProperties": false, "required": ["schema_version", "kind", "envelope", "identity"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"}, "kind": {"enum": ["execute", "result"]},
+        "envelope": {"$ref": "#/$defs/Envelope"}, "identity": {"$ref": "#/$defs/Identity"}
+      }
+    },
+    "RetireRequest": {
+      "type": "object", "additionalProperties": false, "required": ["schema_version", "kind", "nonce", "operation_id", "generation"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"}, "kind": {"const": "retire"}, "nonce": {"$ref": "#/$defs/Id"},
+        "operation_id": {"$ref": "#/$defs/Id"}, "generation": {"type": "integer", "minimum": 1}
+      }
+    },
+    "RetireReply": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "kind", "nonce", "operation_id", "generation", "container_absent"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"}, "kind": {"const": "retire"}, "nonce": {"$ref": "#/$defs/Id"},
+        "operation_id": {"$ref": "#/$defs/Id"}, "generation": {"type": "integer", "minimum": 1}, "container_absent": {"type": "boolean"}
+      }
+    },
+    "ReconcileRequest": {
+      "type": "object", "additionalProperties": false, "required": ["schema_version", "kind", "nonce", "operation_id"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"}, "kind": {"const": "reconcile"}, "nonce": {"$ref": "#/$defs/Id"},
+        "operation_id": {"$ref": "#/$defs/Id"}
+      }
+    },
+    "ReconcileReply": {
+      "type": "object", "additionalProperties": false, "required": ["schema_version", "kind", "nonce", "operation_id", "container_absent"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"}, "kind": {"const": "reconcile"}, "nonce": {"$ref": "#/$defs/Id"},
+        "operation_id": {"$ref": "#/$defs/Id"}, "container_absent": {"type": "boolean"}
+      }
+    },
+    "ExecutionIdentity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "transport", "broker", "orchestrator", "separate_identity", "recorded_at"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"}, "transport": {"enum": ["subprocess", "service"]},
+        "broker": {"$ref": "#/$defs/Identity"}, "orchestrator": {"$ref": "#/$defs/Identity"},
+        "separate_identity": {"type": "boolean"}, "recorded_at": {"type": "string", "format": "date-time"}
+      }
     }
   }
 }

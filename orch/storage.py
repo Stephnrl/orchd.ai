@@ -50,10 +50,11 @@ class Store:
                 self.db.execute("ALTER TABLE operations ADD COLUMN generation INTEGER NOT NULL DEFAULT 1")
             self.db.execute("CREATE TABLE IF NOT EXISTS broker_requests(operation_id TEXT NOT NULL REFERENCES operations(id), generation INTEGER NOT NULL, request TEXT NOT NULL, PRIMARY KEY(operation_id,generation))")
             self.db.execute("CREATE TABLE IF NOT EXISTS execution_provenance(operation_id TEXT NOT NULL REFERENCES operations(id), generation INTEGER NOT NULL, envelope_sha256 TEXT NOT NULL, artifact TEXT NOT NULL, PRIMARY KEY(operation_id,generation))")
+            self.db.execute("CREATE TABLE IF NOT EXISTS broker_identities(operation_id TEXT NOT NULL REFERENCES operations(id), generation INTEGER NOT NULL, record TEXT NOT NULL, sha256 TEXT NOT NULL, PRIMARY KEY(operation_id,generation))")
             self.db.execute("PRAGMA user_version=2")
         self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_execution_receipt ON records(task_id,kind,json_extract(payload,'$.operation_id')) WHERE kind IN ('PatchReceipt','TestReceipt','ExternalActionReceipt')")
         self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_invocation_receipt ON records(task_id,json_extract(payload,'$.invocation_id')) WHERE kind='AgentInvocationReceipt'")
-        for table in ("records", "events", "artifacts", "approvals", "effects", "broker_requests", "execution_provenance"):
+        for table in ("records", "events", "artifacts", "approvals", "effects", "broker_requests", "execution_provenance", "broker_identities"):
             for action in ("UPDATE", "DELETE"):
                 self.db.execute(f"CREATE TRIGGER IF NOT EXISTS {table}_{action.lower()} BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT, 'append-only'); END")
 
