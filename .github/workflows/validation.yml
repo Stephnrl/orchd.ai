@@ -21,7 +21,9 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2022]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # The Windows runner takes about four times as long as Linux for the same lane, and
+    # has been within a minute or two of this cap since the journal backup milestone.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

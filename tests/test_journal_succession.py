@@ -3,6 +3,8 @@
 Every behaviour is proven against both journals, because the point of the shared module
 is that one operation journal cannot quietly diverge from the other.
 """
+from contextlib import redirect_stderr, redirect_stdout
+import io
 import json
 import os
 from pathlib import Path
@@ -13,6 +15,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from orch.__main__ import main
 from orch.contracts import Rejected, canonical, digest
 from orch.maintenance import real_path
 from orch import journal_succession
@@ -397,27 +400,35 @@ class SuccessionBase:
         created = self.snap()
         self.journal.close()
         prefix = self.label.lower()
-        env = {**os.environ, 'PYTHONPATH': str(ROOT)}
-
-        def cli(*args, expect=0):
-            result = subprocess.run([sys.executable, '-m', 'orch', *args], cwd=ROOT, env=env,
-                                    capture_output=True, text=True, timeout=300)
-            self.assertEqual(result.returncode, expect, result.stderr[-400:])
-            return json.loads(result.stdout) if result.returncode == 0 else result
-
         retire_command, chain_command = prefix + '-journal-retire', prefix + '-journal-chain'
+
+        def cli(*argv, expect=0):
+            # In process: a real CLI run without paying for an interpreter start per command.
+            # One spawned run below proves the entry point itself.
+            output = io.StringIO()
+            try:
+                with (patch.object(sys, 'argv', ['orch', *argv]), redirect_stdout(output),
+                      redirect_stderr(io.StringIO())):
+                    main()
+            except SystemExit as exit_code:
+                self.assertEqual(exit_code.code, expect)
+                return None
+            self.assertEqual(expect, 0)
+            return json.loads(output.getvalue())
+
         cli(retire_command, '--journal', str(self.first), '--destination', str(self.snapshot),
             '--expected-sha256', created['sha256'], '--successor', str(self.successor), expect=2)
         report = cli(retire_command, '--journal', str(self.first), '--destination', str(self.snapshot),
                      '--expected-sha256', created['sha256'], '--successor', str(self.successor),
                      '--reason', REASON)
         self.assertEqual((report['status'], report['records_deleted']), ('retired', 0))
-        walked = cli(chain_command, '--journal', str(self.successor))
+        self.assertEqual(cli(prefix + '-journal-usage', '--journal', str(self.first))['journal_status'], 'retired')
+        cli(chain_command, '--journal', str(self.root / 'absent.sqlite'), expect=2)
+        walked = json.loads(subprocess.check_output(
+            [sys.executable, '-m', 'orch', chain_command, '--journal', str(self.successor)],
+            cwd=ROOT, env={**os.environ, 'PYTHONPATH': str(ROOT)}, timeout=120))
         self.assertEqual(walked['journal_count'], 2)
         self.assertEqual(walked['journals'][0]['predecessor'], str(self.first))
-        usage = cli(prefix + '-journal-usage', '--journal', str(self.first))
-        self.assertEqual(usage['journal_status'], 'retired')
-        cli(chain_command, '--journal', str(self.root / 'absent.sqlite'), expect=2)
         self.journal = self.open(self.first)
 
 

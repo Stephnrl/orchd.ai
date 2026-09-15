@@ -27,7 +27,9 @@ no runner errors, and exactly one passing result per reported test: skipped,
 expected-failure, retried and flaky results cannot pass. UI scripts are discovered
 from the bound source inventory, so adding a script does not require another CI step.
 
-Each stage has a ten-minute deadline and a 4 MiB limit per output stream. The runner
+Each stage has a deadline bounding a hang, not a performance budget: twenty minutes for
+the Python suite, fifteen for the browser lane and ten for everything else, with a 4 MiB
+limit per output stream. The suite takes about ten minutes on the slowest hosted runner. The runner
 continues other stages after a failure to collect all failing stage IDs, then exits
 with code 2. Reports retain status, test counts and skip identities, never raw
 subprocess output, tokens or exception text. To diagnose a failed stage, rerun its

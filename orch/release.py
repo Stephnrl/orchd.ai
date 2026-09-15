@@ -83,6 +83,13 @@ def browser_count(document):
     return count
 
 
+# Per-stage deadlines bound a hung stage; they are not a performance budget. The offline
+# suite legitimately runs for about ten minutes on the slowest hosted runner, and grows
+# with each milestone, so the two long stages get their own bound instead of forcing the
+# cheap ones to share a loose one.
+DEADLINES = {'python': 1200, 'browser': 900}
+
+
 def _execute(stage, root, python, node, env):
     count, skipped = None, []
     with tempfile.TemporaryDirectory(prefix='orchd-release-') as directory:
@@ -104,7 +111,7 @@ def _execute(stage, root, python, node, env):
         if not argv[0]:
             return {'id': stage, 'status': 'failed', 'reason': 'executable_missing', 'tests_run': None, 'skipped': []}
         try:
-            output = capture(argv, cwd=root, env=env, timeout=600, limit=4 * 1024 * 1024)
+            output = capture(argv, cwd=root, env=env, timeout=DEADLINES.get(stage, 600), limit=4 * 1024 * 1024)
             if output['code'] != 0 or output['failure']:
                 reason = output['failure'] or 'nonzero_exit'
             else:
