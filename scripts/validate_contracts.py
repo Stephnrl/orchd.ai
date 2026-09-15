@@ -21,7 +21,7 @@ def utc_timestamp(value):
 
 validator = Draft202012Validator(schema, format_checker=formats)
 expected = {r["$ref"].split("/")[-1] for r in schema["oneOf"]}
-assert len(expected) == 19 and set(examples) == expected
+assert len(expected) == 21 and set(examples) == expected
 
 
 def check_refs(value):
@@ -66,4 +66,4 @@ rejected({**examples["TestReceipt"], "producer": {"principal_id": "agent", "role
 rejected({**examples["ToolDecision"], "decision": "modify", "effective_request": None})
 rejected({**examples["ToolDecision"], "decision": "require_human_approval", "approval_request": None})
 rejected({**examples["ExternalActionReceipt"], "simulated": True, "external_url": "https://github.com/example/example/pull/1"})
-print(f"PASS: 19 examples, {negative_count} negative cases, metaschema and local references")
+print(f"PASS: 21 examples, {negative_count} negative cases, metaschema and local references")

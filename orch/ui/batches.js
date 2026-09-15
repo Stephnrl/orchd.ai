@@ -44,7 +44,7 @@ function batchAbandonObservation() {
 function batchControls() {
   const blocked = busy || !token || batchLoading;
   const state = snapshot?.state;
-  $("batch-add").disabled = blocked || !state || batchPaused.has(state.state) || !!state.active_operation_id || !!state.active_invocation_id || !!state.container_id || (batchDraft.size >= 16 && !batchDraft.has(selected));
+  $("batch-add").disabled = blocked || !state || snapshot?.context?.workload === "repository-json-v1" || batchPaused.has(state.state) || !!state.active_operation_id || !!state.active_invocation_id || !!state.container_id || (batchDraft.size >= 16 && !batchDraft.has(selected));
   $("batch-create").disabled = blocked || !batchDraft.size;
   $("batch-clear").disabled = busy || !batchDraft.size;
   $("batch-list-refresh").disabled = busy || !token || batchListing;

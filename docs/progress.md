@@ -1,16 +1,22 @@
 # Roadmap progress — September 15, 2026
 
+The [repository-task kernel milestone](repository-tasks.md) connects the bounded
+JSON pilot to shared task records/events, explicit execution and local-result
+approvals, retained snapshots, authenticated controls and no-retry recovery.
+It adds two distinct contracts (21 total). Fixture batches and external-action
+evidence remain isolated; general code execution and live providers remain deferred.
+
 The [pilot container-worker milestone](pilot-container-workers.md) adds separate
 restricted Docker edit/test processes, image/daemon-bound approval, retained
 dispatch phases and explicit interruption cleanup. The Docker CI lane includes
-real pilot isolation/recovery acceptance. This remains a CLI-only JSON workload;
-kernel integration, separate broker identity and live-provider admission remain.
+real pilot isolation/recovery acceptance. The task-kernel milestone above now
+integrates this JSON workload; separate broker identity and live-provider admission remain.
 
 The [local Git repository pilot](repository-pilot.md) adds a separate CLI path for
 reviewed JSON replacements in a disposable workspace, exact baseline/scope fencing,
 trusted JSON checks and durable no-retry recovery inspection. This goes beyond the
-greeting fixture for a narrow data workload. It does not generalize Engine tasks,
-enable arbitrary repository tests, admit a live provider or qualify Docker hosts.
+greeting fixture for a narrow data workload. The subsequent milestones add Docker
+qualification and kernel admission without arbitrary repository tests or live providers.
 
 Engineering estimate: **40–50% of the original 12-phase roadmap**, or **85–90% of
 the bounded offline MVP**. These ranges describe implemented scope, not elapsed effort,
@@ -23,7 +29,7 @@ an assumption that more UI features alone will make the system production-ready.
 
 | Original phase | Current position |
 | --- | --- |
-| 1. Design/contracts/threat model | Implemented design baseline, 19 contracts and adversarial acceptance criteria |
+| 1. Design/contracts/threat model | Implemented design baseline, 21 contracts and adversarial acceptance criteria |
 | 2. Kernel and mocks | Implemented durable fixture workflow, approvals, replay and recovery |
 | 3. Real AI adapters | Partial: fixture CLI transport and offline Copilot codec; live launch disabled; corporate protocol unknown |
 | 4. Isolated Docker worker | Implemented for bounded fixture edits/tests, with five host-specific isolation gates |

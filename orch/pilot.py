@@ -20,7 +20,7 @@ POLICY = 'git-json-data-v1'
 
 def source_hash():
     return digest({name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
-                   for name in ('pilot.py', 'pilot_worker.py', 'process.py', 'contracts.py', 'maintenance.py', 'broker.py', 'readiness.py', 'execution.py')})
+                   for name in ('pilot.py', 'pilot_worker.py', 'repository_tasks.py', 'engine.py', 'storage.py', 'process.py', 'contracts.py', 'maintenance.py', 'broker.py', 'readiness.py', 'execution.py')})
 
 
 def path_name(value):
@@ -201,7 +201,7 @@ class Pilot:
     def close(self):
         self.db.close()
 
-    def prepare(self, intent):
+    def prepare(self, intent, task_binding=None):
         validate_intent(intent)
         repository = str(plain(Path(intent['repository']).absolute()))
         if self.root.is_relative_to(Path(repository)) or Path(repository).is_relative_to(self.root):
@@ -212,6 +212,12 @@ class Pilot:
                  'journal_root': str(self.root), 'id': uid(), 'created_at': now(),
                  'executor': pilot_worker.profile(self.executor, self.image),
                  'expires_at': (datetime.now(timezone.utc)+timedelta(minutes=30)).isoformat()}
+        if task_binding is not None:
+            if (not isinstance(task_binding, dict) or set(task_binding) != {'store', 'task_id'}
+                    or not isinstance(task_binding['store'], str) or not Path(task_binding['store']).is_absolute()
+                    or not isinstance(task_binding['task_id'], str) or not re.fullmatch('[a-f0-9]{32}', task_binding['task_id'])):
+                raise Rejected('Invalid task-kernel binding')
+            scope['task_binding'] = task_binding
         if self.executor == 'docker':
             for phase in ('edit', 'test'): pilot_worker.command(scope, phase, self.root / scope['id'])
         encoded = canonical(scope).decode()
@@ -324,6 +330,9 @@ class Pilot:
         self.db.execute('BEGIN IMMEDIATE')
         try:
             scope = self._fence(identifier, expected_hash, revision)
+            if 'task_binding' in scope:
+                from .repository_tasks import require_task_admission
+                require_task_admission(scope)
             if scope['source_sha256'] != source_hash() or datetime.now(timezone.utc) >= datetime.fromisoformat(scope['expires_at']):
                 raise Rejected('Pilot source or approval expired')
             if scope.get('executor') != pilot_worker.profile(self.executor, self.image):
@@ -400,15 +409,21 @@ class Pilot:
                     raise Rejected('Stale or inapplicable worker reconciliation')
                 retained = {k: v for k, v in scope.get('executor', {}).items() if k != 'recipe_sha256'}
                 current = {k: v for k, v in pilot_worker.profile(self.executor, self.image).items() if k != 'recipe_sha256'}
-                if self.executor != 'docker' or retained != current:
+                if retained != current:
                     raise Rejected('Worker reconciliation requires the same Docker host and image')
-                journal = self._workers(scope)
-                if not journal: raise Rejected('Missing worker reservation')
-                absent = {phase: pilot_worker.reconcile(scope, phase) for phase in ('edit', 'test')}
-                journal['cleanup'].append({'at': now(), 'absent': absent})
-                self._save_workers(scope, journal)
+                if self.executor == 'local-data':
+                    # Local data mode creates no child processes. Holding the same
+                    # process lock proves its only writer has relinquished ownership.
+                    status = 'interrupted'
+                else:
+                    journal = self._workers(scope)
+                    if not journal: raise Rejected('Missing worker reservation')
+                    absent = {phase: pilot_worker.reconcile(scope, phase) for phase in ('edit', 'test')}
+                    journal['cleanup'].append({'at': now(), 'absent': absent})
+                    self._save_workers(scope, journal)
+                    status = 'interrupted' if all(absent.values()) else 'reserved'
                 self.db.execute('UPDATE pilots SET status=?,revision=revision+1 WHERE id=?',
-                                ('interrupted' if all(absent.values()) else 'reserved', identifier))
+                                (status, identifier))
                 self.db.execute('COMMIT')
             except BaseException:
                 self.db.execute('ROLLBACK')

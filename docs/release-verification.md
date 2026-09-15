@@ -39,6 +39,7 @@ fixed command directly in the trusted development environment:
 | `jira_acceptance` | `python scripts/jira_acceptance.py` |
 | `batch_acceptance` | `python scripts/batch_acceptance.py` |
 | `pilot_acceptance` | `python scripts/pilot_acceptance.py` |
+| `repository_task_acceptance` | `python scripts/repository_task_acceptance.py` |
 | `javascript_syntax` | `node --check orch/ui/app.js` |
 | `tests/test_ui_*.cjs` | `node` followed by the reported script path |
 | `browser` | `node node_modules/@playwright/test/cli.js test --reporter=json --forbid-only` |

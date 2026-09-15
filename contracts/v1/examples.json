@@ -560,5 +560,62 @@
     "pending_approval": null,
     "last_event_sequence": 0,
     "error": null
+  },
+  "RepositoryTaskPlan": {
+    "schema_version": "1.0.0",
+    "contract_type": "RepositoryTaskPlan",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "spec": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "pilot_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "scope_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "scope": {
+      "artifact_id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "example",
+      "size_bytes": 0,
+      "trust": "untrusted",
+      "producer_id": "example",
+      "redacted": false
+    }
+  },
+  "RepositoryTaskResult": {
+    "schema_version": "1.0.0",
+    "contract_type": "RepositoryTaskResult",
+    "id": "example",
+    "task_id": "example",
+    "created_at": "2026-09-12T14:00:00Z",
+    "plan": {
+      "id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "outcome": "passed",
+    "report": {
+      "artifact_id": "example",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "example",
+      "size_bytes": 0,
+      "trust": "untrusted",
+      "producer_id": "example",
+      "redacted": false
+    },
+    "snapshots": [
+      {
+        "path": "settings.json",
+        "content": {
+          "artifact_id": "example",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "media_type": "example",
+          "size_bytes": 0,
+          "trust": "untrusted",
+          "producer_id": "example",
+          "redacted": false
+        }
+      }
+    ]
   }
 }
