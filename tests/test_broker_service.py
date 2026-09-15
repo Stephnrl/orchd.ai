@@ -53,7 +53,7 @@ class Harness:
         self.thread = threading.Thread(target=self.service.serve_forever, daemon=True)
         self.thread.start()
         self.config = {"endpoint": "127.0.0.1:" + str(self.service.port), "secret": str(self.secret)}
-        self.key = self.service.key
+        self.key = self.service.secret.current
 
     def close(self):
         self.service.shutdown()

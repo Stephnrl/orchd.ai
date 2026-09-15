@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["broker-serve", "broker-check", "repository-task-create", "repository-task-run", "repository-task-approve", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
+    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "repository-task-create", "repository-task-run", "repository-task-approve", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -57,10 +57,11 @@ def main():
     parser.add_argument("--broker-root", help="Broker-owned journal directory for broker-serve")
     parser.add_argument("--workspaces", help="Orchestrator workspace parent directory that broker-serve may execute in")
     parser.add_argument("--pilot-root", help="Pilot journal directory whose Docker workers broker-serve may run; requires --image")
+    parser.add_argument("--complete", action="store_true", help="For broker-rotate-secret, drop the previous secret after every process has re-read the file")
     parser.add_argument("--title", default="Repository JSON validation")
     parser.add_argument("--decision", choices=["approve", "reject"])
     args = parser.parse_args()
-    if args.command != "broker-serve" and bool(args.broker_endpoint) != bool(args.broker_secret):
+    if args.command not in ("broker-serve", "broker-rotate-secret") and bool(args.broker_endpoint) != bool(args.broker_secret):
         parser.error("--broker-endpoint and --broker-secret are required together")
     broker_service = {"endpoint": args.broker_endpoint, "secret": args.broker_secret} if args.broker_endpoint else None
     if args.command == "broker-serve":
@@ -77,6 +78,17 @@ def main():
             parser.error("Broker service rejected its configuration; check the journal, secret, workspace and profile")
         print(f"Broker service: http://127.0.0.1:{service.port}", flush=True)
         service.serve_forever()
+        return
+    if args.command == "broker-rotate-secret":
+        if not args.broker_secret:
+            parser.error("broker-rotate-secret requires --broker-secret")
+        from .broker import rotate_secret
+        from .contracts import Rejected
+        try:
+            report = rotate_secret(args.broker_secret, complete=args.complete)
+        except (Rejected, OSError):
+            parser.error("Secret rotation refused; check the file's contents, links, permissions and current rotation stage")
+        print(json.dumps(report, indent=2))
         return
     if args.command == "broker-check":
         if not broker_service:

@@ -10,7 +10,8 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from orch.broker import BrokerClient, ServiceClient, VERSION
+from orch.broker import BrokerClient, ServiceClient, VERSION, rotate_secret
+from orch.contracts import uid
 from orch.engine import Engine
 from orch.execution import Executor
 from orch.maintenance import audit, integrity_report
@@ -71,6 +72,17 @@ def main():
             assert all(r["separate_identity"] == report["separate_identity"] for r in records)
             assert all((journal / (row["operation_id"] + ".json")).is_file() for row in rows)
             assert not (engine.store.root / "broker").exists()
+            # Rotation without restarting either process: the overlap keeps the running
+            # engine working, and completion leaves only the new secret accepted.
+            def ask():
+                return ServiceClient(config).call("identity", {"schema_version": VERSION, "kind": "identity", "nonce": uid()})["secret"]
+            assert ask() == {"accepted": 1, "rotating": False, "age_seconds": ask()["age_seconds"], "stale": False}
+            begun = rotate_secret(secret)
+            assert begun["stage"] == "overlap" and begun["accepted"] == 2 and begun["rotating"]
+            assert ask()["accepted"] == 2
+            finished = rotate_secret(secret, complete=True)
+            assert finished["stage"] == "completed" and finished["accepted"] == 1 and not finished["rotating"]
+            assert ask() == {"accepted": 1, "rotating": False, "age_seconds": ask()["age_seconds"], "stale": False}
             # Crash after the broker's durable result, before the orchestrator accepted it.
             second = engine.create_task("Broker service crash boundary")
             engine.run(second)
@@ -127,7 +139,8 @@ def main():
                 engine.close()
             stop(process)
     print("PASS: broker service identity check, authenticated fixed-route execution, broker-owned journal, "
-          "crash-boundary recovery without relaunch and broker/orchestrator restart (" + report["status"] + " identity)")
+          "secret rotation without restart, crash-boundary recovery without relaunch and broker/orchestrator "
+          "restart (" + report["status"] + " identity)")
 
 
 if __name__ == "__main__":

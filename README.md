@@ -44,7 +44,8 @@ The [broker service](docs/broker-service.md) lets that fixture broker run under 
 OS account behind five HMAC-authenticated loopback routes, records the broker and
 orchestrator identities with every execution, and adds a `broker_identity` deployment gate.
 The Git JSON pilot's Docker workers dispatch through the same service when it is started
-with `--image` and `--pilot-root`.
+with `--image` and `--pilot-root`. Its shared secret rotates through a two-secret overlap
+window without restarting either process.
 Use the [runtime-readiness commands](docs/runtime-readiness.md) to check the intended
 Docker host/image and record the remaining pre-provider gate.
 The [JSON/CLI provider boundary](docs/provider-adapter.md) can now run the offline

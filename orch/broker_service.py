@@ -11,7 +11,7 @@ import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-from .broker import LIMITS, MAX_MESSAGE, MAX_REPLY, ROUTES, VERSION, atomic_json, file_lock, identity, load_secret, safe_id, sign, source_digest, validate_wire, verify
+from .broker import LIMITS, MAX_MESSAGE, MAX_REPLY, ROUTES, VERSION, SecretFile, atomic_json, authenticate, file_lock, identity, safe_id, sign, source_digest, validate_wire
 from .broker_process import check_request, journal, perform
 from .contracts import Rejected, canonical, digest
 from .execution import Executor
@@ -50,7 +50,7 @@ class BrokerService:
             raise Rejected("Pilot routes require the Docker execution profile")
         if type(port) is not int or not 0 <= port <= 65535:
             raise Rejected("Invalid broker port")
-        self.key = load_secret(secret)
+        self.secret = SecretFile(secret)
         self.executor = Executor(mode, image)
         self.profile = {"mode": mode, "image": image}
         self.identity = identity()
@@ -74,7 +74,7 @@ class BrokerService:
             raise Rejected("Broker message kind does not match its route")
         if route == "identity":
             return {"schema_version": VERSION, "kind": "identity", "nonce": body["nonce"], "identity": self.identity,
-                    "source_digest": source_digest(), "profile": self.profile}
+                    "source_digest": source_digest(), "profile": self.profile, "secret": self.secret.state()}
         if route in ("execute", "result"):
             request = body["request"]
             operation = check_request(request, self.workspaces, self.profile)
@@ -142,13 +142,15 @@ class BrokerService:
                 super().setup()
                 self.connection.settimeout(5)
 
-            def reply(self, status, route, payload):
+            def reply(self, status, route, payload, key):
+                """Signed with the secret that authenticated the request, so a caller
+                still holding the previous secret can verify its own reply."""
                 raw = canonical(payload)
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(raw)))
                 self.send_header("Cache-Control", "no-store")
-                self.send_header("X-Orch-Broker-Auth", sign(service.key, "reply", route, raw))
+                self.send_header("X-Orch-Broker-Auth", sign(key, "reply", route, raw))
                 self.end_headers()
                 self.wfile.write(raw)
 
@@ -175,7 +177,13 @@ class BrokerService:
                 if len(raw) != int(length):
                     self.send_error(400)
                     return
-                if not verify(service.key, "request", route, raw, self.headers.get("X-Orch-Broker-Auth")):
+                try:
+                    accepted = service.secret.accepted
+                except Rejected:
+                    self.send_error(503)  # The secret was withdrawn or became unreadable.
+                    return
+                key = authenticate(accepted, "request", route, raw, self.headers.get("X-Orch-Broker-Auth"))
+                if key is None:
                     self.send_error(401)
                     return
                 try:
@@ -184,7 +192,7 @@ class BrokerService:
                         raise ValueError("Object required")
                     validate_wire(body, ROUTES[route][0])
                 except (ValueError, UnicodeDecodeError, RecursionError, Rejected):
-                    self.reply(400, route, {"error": "invalid_broker_message"})
+                    self.reply(400, route, {"error": "invalid_broker_message"}, key)
                     return
                 try:
                     payload = service.handle(route, body)
@@ -196,6 +204,6 @@ class BrokerService:
                     status, payload = 409, {"error": "broker_refused"}
                 except Exception:  # A broker crash must answer, not hang the fenced caller.
                     status, payload = 500, {"error": "broker_internal_failure"}
-                self.reply(status, route, payload)
+                self.reply(status, route, payload, key)
 
         return Handler

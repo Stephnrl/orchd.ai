@@ -277,7 +277,8 @@
         "nonce",
         "identity",
         "source_digest",
-        "profile"
+        "profile",
+        "secret"
       ],
       "properties": {
         "schema_version": {
@@ -297,6 +298,9 @@
         },
         "profile": {
           "$ref": "#/$defs/Profile"
+        },
+        "secret": {
+          "$ref": "#/$defs/SecretState"
         }
       }
     },
@@ -990,6 +994,33 @@
         },
         "identity": {
           "$ref": "#/$defs/Identity"
+        }
+      }
+    },
+    "SecretState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accepted",
+        "rotating",
+        "age_seconds",
+        "stale"
+      ],
+      "properties": {
+        "accepted": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "rotating": {
+          "type": "boolean"
+        },
+        "age_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stale": {
+          "type": "boolean"
         }
       }
     }

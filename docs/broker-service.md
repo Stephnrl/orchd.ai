@@ -57,6 +57,37 @@ them explicitly. Compromise of the secret lets a local process submit fixed-reci
 executions for assigned workspaces; it does not yield a shell, another image or the
 broker journal.
 
+## Rotating the shared secret
+
+The secret file may hold **two** secrets, one per line: the current one first and the
+previous one below it. Both are accepted, and a reply is signed with whichever secret
+authenticated its request, so a process that has not yet re-read the file still
+verifies its own answer. Both the service and every client re-read the file whenever
+its identity, size or modification time changes, so rotation needs no restart and
+drops no operation in flight. A file that becomes unreadable or is withdrawn refuses
+the request (`503`) rather than reusing a secret the operator has just taken away.
+
+```text
+python -m orch broker-rotate-secret --broker-secret /etc/orchd/broker.secret
+python -m orch broker-rotate-secret --broker-secret /etc/orchd/broker.secret --complete
+```
+
+The first stage writes a fresh current secret above the previous one; the second drops
+the previous one once every process has re-read the file. Each stage rewrites the file
+atomically with owner-only permissions and prints a report that never contains a
+secret. Beginning a rotation twice, or completing one that has not begun, is refused.
+Whoever runs these commands must be able to write the file, which the broker account
+owns; the orchestrator account does not need write access.
+
+`broker-check` reports `accepted`, `rotating`, `age_seconds` and `stale` for the
+secret, against a documented 30-day maximum age. Age is **reported, never enforced**:
+an old secret keeps working, and the deployment gate is what stays blocked. A broker
+that is otherwise separate but mid-rotation or past that age reports
+`secret_attention` rather than `separate`, and `deployment-check` keeps
+`broker_identity` blocked with that reason. Identity separation is still reported
+first: a broker sharing the orchestrator's account reports `shared` whatever the
+secret's state.
+
 ## Identity evidence
 
 Every accepted execution now records a `broker_identities` row (append-only, digest
@@ -122,6 +153,10 @@ repaired by re-reading that journal, across broker and orchestrator restarts.
 
 ## Verification
 
+`tests/test_broker_secret.py` covers the accepted file formats, live re-read, a
+withdrawn file, the overlap window, a client pinned to the previous secret verifying
+its own reply, a rotation completed during a call, both rotation stages and their
+out-of-order refusals, file permissions, and the reported age and deployment gate.
 `tests/test_pilot_broker.py` covers pilot workers launched from the service thread with
 the broker identity bound into scope and observations, service/direct scope cross-refusal,
 retained redelivery and foreign-scope refusal, broker crash after launch with
@@ -133,9 +168,10 @@ policy, idempotent redelivery, the read-only result route, crash before the jour
 (fixture and simulated Docker), forged replies, secret/endpoint guards, identity
 assessment and deployment gating, restart with audit tamper detection, subprocess
 identity rows, and the real CLI. `scripts/broker_service_acceptance.py` runs the real
-`broker-serve` process, `broker-check`, a completed task, an injected orchestrator crash
-after the broker commit, broker and orchestrator restarts and recovery without
-relaunch. It runs in the offline and full release lanes.
+`broker-serve` process, `broker-check`, a completed task, a full secret rotation against
+the running service, an injected orchestrator crash after the broker commit, broker and
+orchestrator restarts and recovery without relaunch. It runs in the offline and full
+release lanes.
 
 ## Not done
 
@@ -144,7 +180,9 @@ relaunch. It runs in the offline and full release lanes.
   deployment host; nothing in this repository can create OS accounts.
 - The pilot's `pilot-profile` route calls the Docker daemon for identity on every
   preparation, run and dispatch check, exactly as the direct path did.
-- No TLS, per-request authorization beyond fixed recipes, secret rotation, Windows ACL
-  verification, service supervision or multiple brokers. One shared secret, one service.
+- No TLS, per-request authorization beyond fixed recipes, Windows ACL verification,
+  service supervision or multiple brokers. One secret file, one service. Rotation is an
+  operator action on that file; nothing schedules or enforces it, and a stale secret
+  blocks only the deployment gate.
 - Live providers, GitHub and Jira remain gated exactly as before; a separate broker
   account is one deployment gate among several, not admission.

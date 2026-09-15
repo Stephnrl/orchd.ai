@@ -269,6 +269,12 @@ shared evidence/replay/backup and explicit recovery across the pilot/kernel comm
 boundary. It adds authenticated task controls and browser acceptance while rejecting
 fixture-batch adoption and remote-action claims for this workload.
 
+The broker secret rotation follow-up in [the broker service](broker-service.md) adds a
+two-secret overlap window, live re-read without restart, replies signed with the
+authenticating secret, `broker-rotate-secret`, and reported freshness that keeps the
+`broker_identity` deployment gate blocked while a rotation is unfinished or a secret
+is past its documented maximum age.
+
 The [operator visibility follow-up](pilot-operator-visibility.md) surfaces pilot usage
 in the authenticated UI/API, pilot state in repository recovery diagnostics and an
 audited reason on live reclamation, without adding any UI mutation.
