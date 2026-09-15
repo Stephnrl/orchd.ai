@@ -7,6 +7,8 @@ import stat
 
 from .contracts import Rejected, canonical, digest, now
 from .jira_reconcile import prepare_comment_read_plan, assess_comments
+from .maintenance import real_path
+from . import journal_succession
 
 APPLICATION_ID = 1330793034
 MAX_RECORDS = 1000
@@ -55,12 +57,17 @@ def _validated_scope(scope):
 
 class JiraJournal:
     """One immutable comment operation per task, in a separate identified database."""
+    FAMILY = "Jira"
+
     def __init__(self, path, read_only=False):
         if str(path) == ':memory:':
             raise Rejected('Jira journal requires persistent storage')
         path = Path(path).absolute()
         if any(_linked_path(item) for item in (path, *path.parents)):
             raise Rejected('Jira journal path must not contain links')
+        # One canonical spelling: succession records name journals by path, and Windows
+        # can spell the same file in 8.3 short form.
+        path = self.path = real_path(path)
         self.read_only = read_only
         if not read_only:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -99,11 +106,18 @@ class JiraJournal:
                     ('index', 'sqlite_autoindex_intents_2', 'intents', None)}
         expected.update(('trigger', name, 'intents', sql) for name, sql in zip(
             ('immutable_scope', 'no_delete', 'one_reservation'), SCHEMA_SQL[1:]))
+        # A retired journal and its successor carry the succession table as well; every
+        # other shape, including that table without its version or triggers, is refused.
+        version = self.db.execute('PRAGMA user_version').fetchone()[0]
+        if version == journal_succession.VERSION:
+            expected |= journal_succession.OBJECTS
+        elif version != 1:
+            raise Rejected('Unsupported Jira journal schema or constraints')
         actual = {tuple(row) for row in self.db.execute(
-            'SELECT type,name,tbl_name,CASE WHEN length(sql)<=4096 THEN sql END FROM main.sqlite_master LIMIT 7')}
+            'SELECT type,name,tbl_name,CASE WHEN length(sql)<=4096 THEN sql END FROM main.sqlite_master LIMIT ?',
+            (len(expected) + 1,))}
         if (actual != expected or self.db.execute('SELECT 1 FROM sqlite_temp_master LIMIT 1').fetchone()
                 or self.db.execute('PRAGMA application_id').fetchone()[0] != APPLICATION_ID
-                or self.db.execute('PRAGMA user_version').fetchone()[0] != 1
                 or self.db.execute('PRAGMA ignore_check_constraints').fetchone()[0] != 0):
             raise Rejected('Unsupported Jira journal schema or constraints')
 
@@ -154,7 +168,12 @@ class JiraJournal:
         """Logical admission budget, not disk usage or full record validation."""
         self._check_schema()
         row = self.db.execute('SELECT count(*) AS records,coalesce(sum(length(CAST(scope AS BLOB))),0) AS scope_bytes FROM intents').fetchone()
+        # Read the succession state unbound: a verified backup copy legitimately carries
+        # the record its source wrote. `jira-journal-chain` is the bound, checked walk.
+        succession = journal_succession.summary(self.db)
         return {'records': row['records'], 'scope_bytes': row['scope_bytes'],
+                'journal_status': succession['status'], 'successor': succession['successor'],
+                'predecessor': succession['predecessor'],
                 'limits': {'records': MAX_RECORDS, 'scope_bytes': MAX_TOTAL_SCOPE_BYTES, 'record_scope_bytes': MAX_SCOPE_BYTES},
                 'remaining_records': max(0, MAX_RECORDS-row['records']),
                 'remaining_scope_bytes': max(0, MAX_TOTAL_SCOPE_BYTES-row['scope_bytes']), **FLAGS}
@@ -186,6 +205,9 @@ class JiraJournal:
                 if len(existing) != 1 or existing[0]['operation_id'] != operation or self.get(operation)['sha256'] != sha:
                     raise Rejected('Jira task or operation already bound to another scope')
             else:
+                # New admission only: a retired journal keeps reserving and reconciling
+                # what it already holds, and the chain refuses a second attempt slot.
+                journal_succession.check_admission(self, task, operation)
                 usage = self.usage()
                 if usage['remaining_records'] == 0 or len(encoded) > usage['remaining_scope_bytes']:
                     raise Rejected('Jira journal capacity exhausted; retain existing evidence')

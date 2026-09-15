@@ -1,5 +1,14 @@
 # Roadmap progress — September 15, 2026
 
+The [operation journal succession milestone](journal-succession.md) closes the same dead
+end for the GitHub and Jira operation journals, where the hazard is sharper: their records
+hold one-use attempt reservations, so a hand-made replacement journal would hand a task a
+second attempt for work whose first attempt may already have reached the remote. A full
+journal now retires against a verified snapshot, deletes no record and produces the same
+audit digest afterwards; only new admission stops, and the successor refuses any task or
+operation identifier its chain already retains, failing closed when a predecessor cannot
+be read.
+
 The [journal succession milestone](pilot-journal-succession.md) closes the last documented
 dead end in pilot retention: a full journal now retires against a verified snapshot and
 continues in a recorded successor, with the link checked in both directions and the chain
@@ -118,6 +127,9 @@ pilot acceptance now runs in the consolidated offline/full release lane.
    evidence. Implement and review the admitted live-provider path and conformance tests.
 3. Implement a destination-bound GitHub broker with least-privilege credentials and
    uncertain-result reconciliation; then add Jira Data Center with its own review.
+   [Operation journal succession](journal-succession.md) now removes the capacity dead end
+   in both journals without weakening the one-attempt rule, so a live slice inherits a
+   journal that can be continued rather than replaced.
    [Offline PR preparation](github-preview.md) now validates and hashes proposed scope;
    authenticated approval admission, remote verification and dispatch remain.
    [Portable evidence bundles](github-evidence-bundles.md) now support complete offline

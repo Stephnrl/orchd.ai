@@ -39,8 +39,9 @@ Repeating the exact task/operation/scope is idempotent, including after reservat
 when full. A different body, visibility, author, issue snapshot or destination cannot
 replace saved scope. One operation per task is enforced; assigning a new operation ID
 cannot create another comment slot for that task. This bounded contract does not support
-a sequence of comments per task. Revision, cancellation, retirement and replacement
-policies remain unimplemented.
+a sequence of comments per task. A full journal can now be [retired into a recorded
+successor](journal-succession.md) that refuses a second attempt for any task its chain
+retains; revision, cancellation and replacement policies remain unimplemented.
 
 ## Reservation and restart behavior
 

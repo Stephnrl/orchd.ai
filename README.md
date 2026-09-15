@@ -32,6 +32,9 @@ against the exact preview and expected author without permitting automatic repos
 tracking, integrity audits and recovery from saved scope across restarts.
 [Jira recovery bundles](docs/jira-backups.md) add verified snapshots, stale-reservation
 comparison and disposable recovery drills without replacing active journals.
+[Operation journal succession](docs/journal-succession.md) retires a full GitHub or Jira
+journal against such a snapshot and continues in a recorded successor that refuses a second
+attempt for any task its chain already retains, deleting no record.
 [The consolidated Jira package](docs/jira-integration.md) adds Epic/Story/Task preparation,
 relationships, transitions, GitHub associations and review/preflight diagnostics, with
 synthetic examples and a complete offline acceptance scenario. Live activation remains gated.

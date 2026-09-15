@@ -10,6 +10,7 @@ import time
 
 from .contracts import Rejected, canonical, digest
 from .github_journal import GitHubJournal
+from . import journal_succession
 
 MAX_DATABASE_BYTES = 32 * 1024 * 1024
 MAX_MANIFEST_BYTES = 1024 * 1024
@@ -76,8 +77,17 @@ def compare_journal_backup(source, directory, expected_sha256):
     journal = GitHubJournal(source, read_only=True)
     try:
         current = journal.audit()
+        # Bound to this journal: a succession record copied here from another names the
+        # wrong file and is refused rather than compared.
+        live_succession = journal_succession.summary(journal.db, journal.path)
     finally:
         journal.close()
+    copy = GitHubJournal(Path(directory) / 'journal.sqlite', read_only=True)
+    try:
+        # The bundle's record legitimately names the journal it was copied from.
+        saved_succession = journal_succession.summary(copy.db)
+    finally:
+        copy.close()
     saved = manifest['binding']['audit']
     current_rows = {row['operation_id']: row for row in current['binding']['records']}
     saved_rows = {row['operation_id']: row for row in saved['binding']['records']}
@@ -96,11 +106,16 @@ def compare_journal_backup(source, directory, expected_sha256):
                 reasons.append('reservation_mismatch')
         if reasons:
             differences.append({"operation_id": operation, "reasons": reasons})
+    # Retirement changes no record, so a snapshot taken before it still matches row for
+    # row. Comparing succession as well keeps a stale bundle from claiming to describe a
+    # journal that has since closed to new admissions.
+    changed = live_succession != saved_succession
     binding = {"schema_version": "1.0.0", "backup_sha256": manifest['sha256'],
                "backup_audit_sha256": saved['sha256'], "journal_audit_sha256": current['sha256'],
-               "differences": differences}
+               "differences": differences, "succession_changed": changed,
+               "backup_succession": saved_succession, "journal_succession": live_succession}
     return {"kind": "GitHubJournalBackupComparison", "binding": binding, "sha256": digest(binding),
-            "status": "different" if differences else "matches", "restore_allowed": False,
+            "status": "different" if differences or changed else "matches", "restore_allowed": False,
             "retry_allowed": False, "live_authorized": False}
 
 
