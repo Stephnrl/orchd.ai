@@ -41,6 +41,12 @@ repository. Ignored source files are neither copied nor executed. Local evidence
 hashes detect accidental alteration; they are not signed provenance against a
 malicious host administrator.
 
+Paths are compared canonically: a repository given in Windows 8.3 short form
+(hosted CI sets `%TEMP%` to `C:\Users\RUNNER~1\AppData\Local\Temp`) resolves to the
+same checkout Git reports, and the retained scope records that canonical path. Links
+and junctions remain refused before and after resolution, and a journal inside the
+repository is still refused however the two are spelled.
+
 ## Review and run
 
 Create a disposable local repository with a committed `settings.json` containing

@@ -8,6 +8,9 @@ and manual dispatch. It has four independent checks:
 - `Docker (Linux)`
 - `Browser (Linux)`
 
+Hosted Windows runners set `%TEMP%` to an 8.3 short path, so every disposable pilot
+repository is created under one; the pilot compares canonical paths for that reason.
+
 The offline jobs use Python 3.12 and Node 22, install the declared test dependencies,
 validate contracts, run the Python suite, run all seven UI regression scripts, compile
 Python files and check whitespace. `scripts/ci_tests.py` explicitly removes Docker
