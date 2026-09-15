@@ -15,6 +15,7 @@ from .broker import LIMITS, MAX_MESSAGE, MAX_REPLY, ROUTES, VERSION, SecretFile,
 from .broker_process import check_request, journal, perform
 from .contracts import Rejected, canonical, digest
 from .execution import Executor
+from .maintenance import real_path
 from . import pilot_worker
 
 
@@ -37,8 +38,9 @@ def _invalid_number(_):
 
 class BrokerService:
     def __init__(self, root, secret, workspaces, mode, image=None, port=0, pilot_root=None):
-        self.root, self.workspaces = Path(root).absolute(), Path(workspaces).absolute()
-        self.pilot_root = Path(pilot_root).absolute() if pilot_root is not None else None
+        # Every path is canonical, so one spelling of a directory cannot pose as another.
+        self.root, self.workspaces = real_path(root), real_path(workspaces)
+        self.pilot_root = real_path(pilot_root) if pilot_root is not None else None
         for path in (self.root, self.workspaces, *([self.pilot_root] if self.pilot_root else [])):
             for component in (path, *path.parents):
                 if component.is_symlink() or (hasattr(component, "is_junction") and component.is_junction()):
@@ -112,12 +114,15 @@ class BrokerService:
         scope, phase = body["scope"], body["phase"]
         if scope["executor"]["image"] != self.profile["image"] or scope["executor"]["broker"] != self.identity:
             raise Rejected("Pilot scope was not prepared for this broker")
-        if Path(scope["journal_root"]).absolute() != self.pilot_root:
+        # The pilot stores canonical paths; compare canonically so another spelling of
+        # the same directory is neither refused nor able to pose as a different journal.
+        pilot_root = real_path(self.pilot_root)
+        if real_path(scope["journal_root"]) != pilot_root:
             raise Rejected("Pilot scope belongs to another journal")
         if route == "pilot-reconcile":
             return {**reply, "container_absent": pilot_worker.reconcile(scope, phase)}
-        workspace = Path(body["workspace"]).absolute()
-        if workspace != self.pilot_root / scope["id"]:
+        workspace = real_path(body["workspace"])
+        if workspace != real_path(pilot_root / scope["id"]):
             raise Rejected("Unassigned pilot workspace")
         scope_sha256 = digest(scope)
         with file_lock(self.root / ("pilot-" + scope["id"] + ".lock")):
