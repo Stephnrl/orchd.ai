@@ -1,4 +1,10 @@
-# Roadmap progress — September 14, 2026
+# Roadmap progress — September 15, 2026
+
+The [local Git repository pilot](repository-pilot.md) adds a separate CLI path for
+reviewed JSON replacements in a disposable workspace, exact baseline/scope fencing,
+trusted JSON checks and durable no-retry recovery inspection. This goes beyond the
+greeting fixture for a narrow data workload. It does not generalize Engine tasks,
+enable arbitrary repository tests, admit a live provider or qualify Docker hosts.
 
 Engineering estimate: **40–50% of the original 12-phase roadmap**, or **85–90% of
 the bounded offline MVP**. These ranges describe implemented scope, not elapsed effort,
@@ -45,6 +51,10 @@ read-only verification rejects changed source, altered reports, partial lanes an
 expired results. It supplies unsigned local evidence, not production authorization.
 
 ## Next delivery sequence
+
+Prioritize extending the bounded repository pilot into the kernel/broker with an
+explicit workload and qualified test image before live-provider admission. The
+pilot acceptance now runs in the consolidated offline/full release lane.
 
 1. Make deployment gaps explicit with [deployment-check](deployment-readiness.md).
 2. Obtain exact deployed provider version/protocol and independent containment/credential

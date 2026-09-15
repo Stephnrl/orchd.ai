@@ -251,6 +251,16 @@ for those actions, expiring review previews and identity/permission/freshness pr
 A synthetic acceptance scenario exercises the complete offline lifecycle. Live transport,
 credential/approval admission and authoritative evidence/recovery remain explicit deployment gates.
 
+## Local repository data pilot — September 15, 2026
+
+The [Git JSON pilot](repository-pilot.md) provides exact commit intake, explicit
+replacement/check review, one-use scope/revision approval, isolated data workspace
+creation and durable interruption inspection in one CLI milestone. Its disposable
+Git acceptance runs in release verification. The fixture kernel, UI, provider and
+integration authority remain unchanged; this is a bounded data workload with fixed
+checks, not arbitrary code execution. Rust is deferred until a worker requirement
+justifies it.
+
 ## Decisions to resolve before enabling real execution
 
 Confirm corporate source-sharing rules and CLI tool-disable/SSO behavior; select approved
