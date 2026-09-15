@@ -24,7 +24,7 @@ def main():
     parser.add_argument("--destination")
     parser.add_argument("--dry-run", action="store_true", help="For GC and pilot-reclaim, report eligible files without deleting them")
     parser.add_argument("--expected-revision", type=int)
-    parser.add_argument("--reason", help="One-line operator cancellation reason (1–500 characters)")
+    parser.add_argument("--reason", help="One-line audited operator reason for cancel or a live pilot-reclaim (1–500 characters)")
     parser.add_argument("--provider", choices=["github_copilot_cli", "abc_binary_ai_placeholder"])
     parser.add_argument("--executable", help="Absolute provider executable path for read-only inventory")
     parser.add_argument("--expected-sha256", help="Expected executable, operation scope, preview or evidence bundle digest")
@@ -121,6 +121,8 @@ def main():
             parser.error('Pilot operation requires --pilot-id')
         if args.command in ('pilot-run', 'pilot-abandon', 'pilot-reconcile', 'pilot-reclaim') and (not args.expected_sha256 or args.expected_revision is None):
             parser.error('Pilot mutation requires reviewed --expected-sha256 and --expected-revision')
+        if args.command == 'pilot-reclaim' and not args.dry_run and args.reason is None:
+            parser.error('A live pilot-reclaim requires an audited --reason; --dry-run does not')
         pilot = None
         try:
             if args.command != 'pilot-prepare' and not (Path(args.data) / 'pilot.sqlite').is_file():
@@ -132,7 +134,7 @@ def main():
             elif args.command == 'pilot-run': report = pilot.run(args.pilot_id, args.expected_sha256, args.expected_revision)
             elif args.command == 'pilot-reconcile': report = pilot.reconcile(args.pilot_id, args.expected_sha256, args.expected_revision)
             elif args.command == 'pilot-usage': report = pilot_retention.usage(pilot)
-            elif args.command == 'pilot-reclaim': report = pilot_retention.reclaim(pilot, args.pilot_id, args.expected_sha256, args.expected_revision, dry_run=args.dry_run)
+            elif args.command == 'pilot-reclaim': report = pilot_retention.reclaim(pilot, args.pilot_id, args.expected_sha256, args.expected_revision, dry_run=args.dry_run, reason=args.reason)
             else: report = pilot.abandon(args.pilot_id, args.expected_sha256, args.expected_revision)
         except (Rejected, OSError, ValueError, sqlite3.Error):
             parser.error('Pilot rejected; inspect intent, baseline, scope, revision, retained recovery state and reclamation eligibility')

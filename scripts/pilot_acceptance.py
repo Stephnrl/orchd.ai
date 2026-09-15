@@ -76,8 +76,9 @@ def main():
         assert entries[interrupted['id']]['eligible'] == bool(worker_args), entries[interrupted['id']]['reasons']
         preview = cli('pilot-reclaim', '--pilot-id', prepared['id'], '--expected-sha256', prepared['scope_sha256'], '--expected-revision', '2', '--dry-run')
         assert preview['files'] == ['settings.json'] and not preview['recorded'] and (data / prepared['id']).is_dir()
-        reclaimed = cli('pilot-reclaim', '--pilot-id', prepared['id'], '--expected-sha256', prepared['scope_sha256'], '--expected-revision', '2')
-        assert reclaimed['deleted'] and not (data / prepared['id']).exists()
+        reclaimed = cli('pilot-reclaim', '--pilot-id', prepared['id'], '--expected-sha256', prepared['scope_sha256'], '--expected-revision', '2',
+                        '--reason', 'Acceptance walkthrough finished; evidence retained in the journal')
+        assert reclaimed['deleted'] and not (data / prepared['id']).exists() and reclaimed['reason'].startswith('Acceptance walkthrough')
         retained = cli('pilot-inspect', '--pilot-id', prepared['id'])
         assert retained['receipt'] == result['receipt'] and retained['reclamation'] == 'reclaimed' and not retained['matches_receipt']
         after = cli('pilot-usage')

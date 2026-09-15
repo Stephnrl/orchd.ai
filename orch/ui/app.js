@@ -37,7 +37,7 @@ function controls() {
   $("more-tasks").disabled = tasksLoading || taskNext === null;
   $("more-records").disabled = recordsLoading || recordNext === null;
   $("refresh-task").disabled = busy || !token || !selected;
-  $("storage-report").disabled = $("integrity-report").disabled = busy || !token;
+  $("storage-report").disabled = $("pilot-usage-report").disabled = $("integrity-report").disabled = busy || !token;
   $("cleanup-retry").hidden = !cleanupAvailable();
   $("retry-cleanup").disabled = !canRetryCleanup();
   $("recover-task").disabled = !canRecover();
@@ -463,14 +463,19 @@ async function mutate(action) {
   finally { busy = false; controls(); }
 }
 async function maintenanceReport(kind) {
-  if (busy || !token || !["storage", "integrity"].includes(kind)) return;
+  if (busy || !token || !["storage", "pilots", "integrity"].includes(kind)) return;
   busy = true; controls();
   $("maintenance-summary").hidden = $("maintenance-details").hidden = true;
   $("maintenance-summary").textContent = $("maintenance-json").textContent = "";
-  $("maintenance-status").textContent = kind === "storage" ? "Checking storage usage…" : "Checking persisted evidence…";
+  $("maintenance-status").textContent = kind === "storage" ? "Checking storage usage…" : kind === "pilots" ? "Checking repository pilot usage…" : "Checking persisted evidence…";
   try {
-    const report = await api(kind === "storage" ? "/storage" : "/integrity-report");
-    if (kind === "integrity") {
+    const report = await api(kind === "storage" ? "/storage" : kind === "pilots" ? "/pilot-usage" : "/integrity-report");
+    if (kind === "pilots") {
+      if (!Number.isInteger(report.journal_rows) || !Number.isInteger(report.live_pilots) || !Array.isArray(report.pilots)) throw new Error("Unrecognized pilot usage report.");
+      $("maintenance-status").textContent = "Pilot usage report ready. Reclamation is a separate reviewed CLI action; nothing was deleted.";
+      const counts = Object.entries(report.status_counts || {}).map(([status, count]) => `${status} ${count}`).join(" · ") || "none";
+      $("maintenance-summary").textContent = `Checked ${report.generated_at}\nJournal rows: ${report.journal_rows} / ${report.journal_cap}\nLive pilots: ${report.live_pilots} / ${report.live_cap} (headroom ${report.live_headroom})\nWorkspace bytes: ${report.workspace_bytes} · Reclaimable workspaces: ${report.reclaimable}\nStatus counts: ${counts}`;
+    } else if (kind === "integrity") {
       if (!["passed", "failed"].includes(report.status)) throw new Error("Unrecognized audit result. No verdict available.");
       $("maintenance-status").textContent = report.status === "passed" ? "Integrity audit passed." : "Integrity audit failed. Inspect retained evidence before continuing.";
       $("maintenance-summary").textContent = report.status === "passed" ?
@@ -487,6 +492,7 @@ async function maintenanceReport(kind) {
   } finally { busy = false; controls(); }
 }
 $("storage-report").addEventListener("click", () => maintenanceReport("storage"));
+$("pilot-usage-report").addEventListener("click", () => maintenanceReport("pilots"));
 $("integrity-report").addEventListener("click", () => maintenanceReport("integrity"));
 $("connect").addEventListener("submit", async e => {
   e.preventDefault(); token = $("token").value.trim(); $("token").value = "";

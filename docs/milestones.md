@@ -269,6 +269,10 @@ shared evidence/replay/backup and explicit recovery across the pilot/kernel comm
 boundary. It adds authenticated task controls and browser acceptance while rejecting
 fixture-batch adoption and remote-action claims for this workload.
 
+The [operator visibility follow-up](pilot-operator-visibility.md) surfaces pilot usage
+in the authenticated UI/API, pilot state in repository recovery diagnostics and an
+audited reason on live reclamation, without adding any UI mutation.
+
 The [pilot retention milestone](pilot-retention.md) adds `pilot-usage` and reviewed
 `pilot-reclaim` with dry-run, a durable `reclaiming`/`reclaimed` record, tamper-retaining
 eligibility checks, bound-task terminal gating and release-lane acceptance. It releases

@@ -39,6 +39,19 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, "../orch/ui/app.js"), "utf8
   assert.equal(calls[0].options.headers.Authorization, "Bearer operator-session");
   assert.match(element("maintenance-summary").textContent, /headroom: 88 bytes/);
   assert.match(element("maintenance-status").textContent, /not an integrity audit/);
+  report = {generated_at: "snapshot-time", journal_rows: 3, journal_cap: 1024, live_pilots: 2, live_cap: 128, live_headroom: 126,
+    workspace_bytes: 40, reclaimable: 1, status_counts: {passed: 2, prepared: 1}, pilots: [{id: "a".repeat(32), status: "passed", eligible: true, reasons: []}]};
+  await element("pilot-usage-report").handlers.click();
+  assert.equal(calls.at(-1).route, "/pilot-usage");
+  assert.equal(calls.at(-1).options.method, "GET");
+  assert.match(element("maintenance-status").textContent, /nothing was deleted/);
+  assert.match(element("maintenance-summary").textContent, /Live pilots: 2 \/ 128 \(headroom 126\)/);
+  assert.match(element("maintenance-summary").textContent, /passed 2 · prepared 1/);
+  assert.equal(element("maintenance-details").hidden, false);
+  report = {generated_at: "snapshot-time", journal_rows: "3", pilots: []};
+  await element("pilot-usage-report").handlers.click();
+  assert.match(element("maintenance-status").textContent, /Unrecognized pilot usage report/);
+  assert.equal(element("maintenance-summary").hidden, true);
   for (const status of ["passed", "failed"]) {
     report = {status, generated_at: "snapshot-time", tasks: 1, records: 2, artifact_references: 3, reason: "<script>untrusted</script>"};
     await element("integrity-report").handlers.click();
@@ -58,6 +71,7 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, "../orch/ui/app.js"), "utf8
     assert.equal(element("maintenance-summary").hidden, true);
     assert.equal(element("maintenance-json").textContent, "");
     assert.equal(element("integrity-report").disabled, status === 401);
+    assert.equal(element("pilot-usage-report").disabled, status === 401);
   }
   assert.ok(calls.every(call => call.options.method === "GET"));
   console.log("PASS: manual authenticated maintenance reads, busy guards, verdicts and stale-report clearing");

@@ -109,6 +109,18 @@ class Application:
             if method == "GET" and parts == ["storage"]:
                 from .maintenance import storage_usage
                 return 200, storage_usage(self.engine.store)
+            if method == "GET" and parts == ["pilot-usage"]:
+                from .pilot import Pilot
+                from .pilot_retention import usage
+                root = self.engine.store.root / "repository-pilots"
+                if not (root / "pilot.sqlite").is_file():
+                    raise Rejected("Repository pilot journal is missing")
+                pilot = Pilot(root, read_only=True)
+                try:
+                    report = usage(pilot)
+                finally:
+                    pilot.close()
+                return 200, {key: value for key, value in report.items() if key != "journal_root"}  # No host paths over HTTP.
             if method == "GET" and parts == ["integrity-report"]:
                 from .maintenance import integrity_report
                 return 200, integrity_report(self.engine.store)

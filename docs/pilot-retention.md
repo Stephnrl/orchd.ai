@@ -9,8 +9,15 @@ kernel task records remain retained and continue to verify.
 ```text
 python -m orch pilot-usage --data JOURNAL
 python -m orch pilot-reclaim --data JOURNAL --pilot-id ID --expected-sha256 SCOPE_DIGEST --expected-revision REVISION --dry-run
-python -m orch pilot-reclaim --data JOURNAL --pilot-id ID --expected-sha256 SCOPE_DIGEST --expected-revision REVISION
+python -m orch pilot-reclaim --data JOURNAL --pilot-id ID --expected-sha256 SCOPE_DIGEST --expected-revision REVISION --reason "Evidence archived"
 ```
+
+A live reclamation requires one audited `--reason` (1–500 printable characters,
+never secret-shaped), recorded with the durable `reclaiming` intent alongside the
+operator principal, exactly like a cancellation reason. A dry run needs none. Resuming
+an interrupted reclamation keeps the reason recorded with its original intent. The
+[operator visibility follow-up](pilot-operator-visibility.md) also exposes the usage
+report in the local UI and the pilot's state in repository-task recovery diagnostics.
 
 For task-bound pilots the journal is `STORE/repository-pilots`. Neither command
 requires the pilot's Docker daemon or image; reclamation never runs a worker.

@@ -470,6 +470,10 @@ test('operator reviews evidence, refreshes, approves and inspects maintenance', 
   await page.locator('#storage-report').click();
   await expect(page.locator('#maintenance-status')).toContainText('Storage report ready');
   await expect(page.locator('#maintenance-summary')).toContainText('Artifact bytes:');
+  // A fixture-only store has no repository pilot journal; the report is unavailable, not fabricated.
+  await page.locator('#pilot-usage-report').click();
+  await expect(page.locator('#maintenance-status')).toContainText('Report unavailable');
+  await expect(page.locator('#maintenance-summary')).toBeHidden();
   await page.locator('#integrity-report').click();
   await expect(page.locator('#maintenance-status')).toHaveText('Integrity audit passed.');
   await expect(page.locator('#state')).toHaveText('AWAITING ACTION APPROVAL');
@@ -512,6 +516,10 @@ test('repository task uses execution approval and local-result sign-off across r
     await page.locator('#approve').click();
     await expect(page.locator('#state')).toHaveText('LOCAL SNAPSHOT ACCEPTED');
     await expect(page.locator('#run')).toBeDisabled();
+    await page.locator('#pilot-usage-report').click();
+    await expect(page.locator('#maintenance-status')).toContainText('Pilot usage report ready');
+    await expect(page.locator('#maintenance-summary')).toContainText('Live pilots: 1 / 128');
+    await expect(page.locator('#maintenance-summary')).toContainText('Reclaimable workspaces: 1');
     const completed = await readTask(page, operator, task);
     expect(completed.context.external).toBeUndefined();
     await operator.restart();
