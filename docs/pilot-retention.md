@@ -76,7 +76,8 @@ read-only unchanged and gain the table on their next writable open.
 
 Reclamation is not archive, compaction or backup; [verified journal snapshots](pilot-journal-backups.md)
 are a separate read-only command set. Journal rows are never deleted,
-so the absolute journal cap is reached eventually and requires a new journal.
+so the absolute journal cap is reached eventually; [journal succession](pilot-journal-succession.md)
+retires a settled journal and continues in a recorded successor without deleting a row.
 Standard workflow backups continue to exclude the live pilot journal, and a
 reclaimed workspace cannot be restored; task-bound results are served from the
 retained kernel snapshot artifacts, which reclamation does not touch. No automatic

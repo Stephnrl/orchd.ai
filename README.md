@@ -127,6 +127,8 @@ test a small data change in a disposable workspace with durable recovery inspect
 Run `python scripts/pilot_acceptance.py` for its disposable end-to-end walkthrough.
 [Pilot journal snapshots](docs/pilot-journal-backups.md) audit the retained scopes,
 receipts and reclamation records and copy them into a verified bundle that cannot execute.
+[Journal succession](docs/pilot-journal-succession.md) retires a settled journal against
+such a snapshot and continues in a recorded successor, deleting no row.
 [Reviewed pilot retention](docs/pilot-retention.md) reports journal and workspace usage
 and reclaims a terminal pilot's disposable workspace after explicit review, retaining
 every journal row, receipt and kernel snapshot.

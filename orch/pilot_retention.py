@@ -134,7 +134,11 @@ def usage(pilot):
         total_bytes += entry['workspace_bytes']
         pilots.append(entry)
     live = live_count(pilot.db)
+    from .pilot_succession import state
+    succession = state(pilot)
     return {'journal_root': str(pilot.root), 'generated_at': now(), 'journal_rows': len(rows), 'journal_cap': JOURNAL_CAP,
+            'journal_status': succession['status'], 'successor': succession['successor'],
+            'predecessor': succession['predecessor'],
             'live_pilots': live, 'live_cap': LIVE_CAP, 'live_headroom': max(LIVE_CAP - live, 0),
             'status_counts': dict(sorted(counts.items())), 'workspace_bytes': total_bytes, 'reclaimable': reclaimable, 'pilots': pilots}
 

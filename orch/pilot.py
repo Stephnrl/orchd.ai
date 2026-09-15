@@ -201,6 +201,8 @@ class Pilot:
             self.db.execute('CREATE TABLE IF NOT EXISTS pilots (id TEXT PRIMARY KEY, scope TEXT NOT NULL, hash TEXT NOT NULL, revision INTEGER NOT NULL, status TEXT NOT NULL, receipt TEXT)')
             self.db.execute('CREATE TABLE IF NOT EXISTS pilot_workers (id TEXT PRIMARY KEY, journal TEXT NOT NULL, hash TEXT NOT NULL)')
             self.db.execute('CREATE TABLE IF NOT EXISTS pilot_reclamations (id TEXT PRIMARY KEY, status TEXT NOT NULL, record TEXT NOT NULL, hash TEXT NOT NULL)')
+            from . import pilot_succession
+            pilot_succession.ensure_table(self.db)
 
     def close(self):
         self.db.close()
@@ -249,9 +251,12 @@ class Pilot:
             for phase in ('edit', 'test'): pilot_worker.command(scope, phase, self.root / scope['id'])
         encoded = canonical(scope).decode()
         if len(encoded.encode()) > 512*1024: raise Rejected('Scope too large')
+        from . import pilot_succession
         self.db.execute('BEGIN IMMEDIATE')
         try:
-            if self.db.execute('SELECT count(*) FROM pilots').fetchone()[0] >= pilot_retention.JOURNAL_CAP: raise Rejected('Pilot journal cap reached')
+            pilot_succession.require_open(self)
+            if self.db.execute('SELECT count(*) FROM pilots').fetchone()[0] >= pilot_retention.JOURNAL_CAP:
+                raise Rejected('Pilot journal cap reached; retire this journal and prepare in its successor')
             if pilot_retention.live_count(self.db) >= pilot_retention.LIVE_CAP: raise Rejected('Pilot retention cap reached')
             self.db.execute('INSERT INTO pilots VALUES(?,?,?,0,?,NULL)', (scope['id'], encoded, digest(scope), 'prepared'))
             self.db.execute('COMMIT')
