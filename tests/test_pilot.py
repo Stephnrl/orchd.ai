@@ -55,38 +55,45 @@ class PilotTests(unittest.TestCase):
         self.assertEqual(self.pilot.inspect(prepared['id']), result)
         with self.assertRaises(Rejected): self.run_pilot(prepared)
 
-    def short_repository(self):
-        """The 8.3 spelling hosted Windows CI produces, or a skip where none exists."""
-        if os.name != 'nt': self.skipTest('8.3 short names are a Windows path feature')
-        import ctypes
-        buffer = ctypes.create_unicode_buffer(1024)
-        length = ctypes.windll.kernel32.GetShortPathNameW(str(self.repo), buffer, 1024)
-        short = Path(buffer.value) if length else self.repo
-        if short == self.repo: self.skipTest('This volume generates no 8.3 alias for the disposable repository')
-        return short
+    def spellings(self, path):
+        """Other spellings of one directory. `.` and `..` segments exist everywhere;
+        hosted Windows CI additionally gives every temporary path an 8.3 short name."""
+        found = [path.parent / '.' / path.name, path / '..' / path.name]
+        if os.name == 'nt':
+            import ctypes
+            buffer = ctypes.create_unicode_buffer(1024)
+            if ctypes.windll.kernel32.GetShortPathNameW(str(path), buffer, 1024) and Path(buffer.value) != path:
+                found.append(Path(buffer.value))
+        return found
 
-    def test_short_path_repository_is_canonical_and_still_refuses_a_contained_journal(self):
-        short = self.short_repository()
-        prepared = self.pilot.prepare({**self.intent, 'repository': str(short)})
-        # The reviewed scope records the canonical repository, not the spelling supplied.
-        self.assertEqual(prepared['scope']['repository'], str(self.repo.resolve()))
+    def test_every_repository_spelling_resolves_to_the_same_checkout(self):
+        """Git reports one canonical path; a differently spelled argument names the same checkout."""
+        for spelling in self.spellings(self.repo):
+            with self.subTest(spelling=str(spelling)):
+                prepared = self.pilot.prepare({**self.intent, 'repository': str(spelling)})
+                # The reviewed scope records the canonical repository, not the spelling supplied.
+                self.assertEqual(prepared['scope']['repository'], str(self.repo.resolve()))
+                self.assertEqual(self.pilot.abandon(prepared['id'], prepared['scope_sha256'], 0)['status'], 'abandoned')
+        prepared = self.pilot.prepare({**self.intent, 'repository': str(self.spellings(self.repo)[0])})
         self.assertEqual(self.run_pilot(prepared)['status'], 'passed')
         # A journal written through one spelling still verifies when opened through another.
-        import ctypes
-        buffer = ctypes.create_unicode_buffer(1024)
-        ctypes.windll.kernel32.GetShortPathNameW(str(self.pilot.root), buffer, 1024)
-        reader = Pilot(buffer.value, read_only=True)
-        try:
-            self.assertEqual(reader.inspect(prepared['id'])['status'], 'passed')
-        finally:
-            reader.close()
-        # A journal inside the repository stays refused when the two are spelled differently.
-        contained = Pilot(short / 'journal-inside')
-        try:
-            with self.assertRaisesRegex(Rejected, 'must be separate'):
-                contained.prepare(self.intent)
-        finally:
-            contained.close()
+        for spelling in self.spellings(self.pilot.root):
+            with self.subTest(journal=str(spelling)):
+                reader = Pilot(spelling, read_only=True)
+                try:
+                    self.assertEqual(reader.inspect(prepared['id'])['status'], 'passed')
+                finally:
+                    reader.close()
+
+    def test_contained_journal_is_refused_however_the_two_are_spelled(self):
+        for spelling in self.spellings(self.repo):
+            with self.subTest(spelling=str(spelling)):
+                contained = Pilot(spelling / 'journal-inside')
+                try:
+                    with self.assertRaisesRegex(Rejected, 'must be separate'):
+                        contained.prepare(self.intent)
+                finally:
+                    contained.close()
 
     def test_failed_check_is_retained_and_consumed(self):
         self.intent['checks'][0]['equals'] = False
