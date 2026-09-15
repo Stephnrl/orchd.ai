@@ -103,8 +103,11 @@ does not restore execution authority: the scope is bound to the original store p
 and live journal. Create a fresh task to execute in another store.
 
 A crash during creation can leave a pilot whose task transaction never committed.
-It cannot pass kernel admission and remains retained for inspection. Retention
-limits and the lack of automatic archive/deletion remain as documented for pilots.
+It cannot pass kernel admission and remains retained for inspection. Rejection and
+cancellation leave the bound pilot `prepared` in its journal; it cannot run, and
+[reviewed reclamation](pilot-retention.md) abandons and reclaims it once the task is
+terminal. Retention limits and the lack of automatic archive/deletion remain as
+documented for pilots.
 
 ## Verification and remaining scope
 

@@ -13,6 +13,7 @@ from .maintenance import plain
 from .process import capture
 from .broker import file_lock
 from . import pilot_worker
+from . import pilot_retention
 
 LIMIT = 65536
 POLICY = 'git-json-data-v1'
@@ -197,6 +198,7 @@ class Pilot:
             self.db.execute('PRAGMA synchronous=FULL')
             self.db.execute('CREATE TABLE IF NOT EXISTS pilots (id TEXT PRIMARY KEY, scope TEXT NOT NULL, hash TEXT NOT NULL, revision INTEGER NOT NULL, status TEXT NOT NULL, receipt TEXT)')
             self.db.execute('CREATE TABLE IF NOT EXISTS pilot_workers (id TEXT PRIMARY KEY, journal TEXT NOT NULL, hash TEXT NOT NULL)')
+            self.db.execute('CREATE TABLE IF NOT EXISTS pilot_reclamations (id TEXT PRIMARY KEY, status TEXT NOT NULL, record TEXT NOT NULL, hash TEXT NOT NULL)')
 
     def close(self):
         self.db.close()
@@ -224,7 +226,8 @@ class Pilot:
         if len(encoded.encode()) > 512*1024: raise Rejected('Scope too large')
         self.db.execute('BEGIN IMMEDIATE')
         try:
-            if self.db.execute('SELECT count(*) FROM pilots').fetchone()[0] >= 128: raise Rejected('Pilot retention cap reached')
+            if self.db.execute('SELECT count(*) FROM pilots').fetchone()[0] >= pilot_retention.JOURNAL_CAP: raise Rejected('Pilot journal cap reached')
+            if pilot_retention.live_count(self.db) >= pilot_retention.LIVE_CAP: raise Rejected('Pilot retention cap reached')
             self.db.execute('INSERT INTO pilots VALUES(?,?,?,0,?,NULL)', (scope['id'], encoded, digest(scope), 'prepared'))
             self.db.execute('COMMIT')
         except BaseException:
@@ -298,10 +301,12 @@ class Pilot:
                              if (Path(current) / name).relative_to(workspace).as_posix() not in scope['replacements'])
                 if len(extra) > 128: raise Rejected('Unexpected workspace inventory exceeds cap')
         matches = receipt is not None and observed == receipt['files'] and not extra
+        reclaimed = pilot_retention.reclamation(self, identifier)
         return {'id': identifier, 'scope_sha256': row[1], 'revision': row[2], 'status': row[3], 'scope': scope,
                 'diff': ''.join(''.join(difflib.unified_diff(scope['before'][p].splitlines(True), v.splitlines(True), fromfile='a/'+p, tofile='b/'+p)) for p, v in scope['replacements'].items()),
                 'receipt': receipt, 'workers': workers, 'observed_files': observed, 'unexpected_files': extra, 'matches_receipt': matches,
-                'execution_authorized': False, 'recovery': 'retain_and_inspect' if row[3] == 'reserved' else 'none'}
+                'execution_authorized': False, 'recovery': 'retain_and_inspect' if row[3] == 'reserved' else 'none',
+                'reclamation': reclaimed['status'] if reclaimed else None}
 
     def _fence(self, identifier, expected_hash, revision):
         scope, row = self._load(identifier)

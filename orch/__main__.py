@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["repository-task-create", "repository-task-run", "repository-task-approve", "pilot-reconcile", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
+    parser.add_argument("command", choices=["repository-task-create", "repository-task-run", "repository-task-approve", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--request-id", help="Expired pending approval request ID")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--destination")
-    parser.add_argument("--dry-run", action="store_true", help="For GC, report eligible orphan files without deleting them")
+    parser.add_argument("--dry-run", action="store_true", help="For GC and pilot-reclaim, report eligible files without deleting them")
     parser.add_argument("--expected-revision", type=int)
     parser.add_argument("--reason", help="One-line operator cancellation reason (1–500 characters)")
     parser.add_argument("--provider", choices=["github_copilot_cli", "abc_binary_ai_placeholder"])
@@ -84,22 +84,25 @@ def main():
         import sqlite3
         if args.command == 'pilot-prepare' and not args.intent:
             parser.error('pilot-prepare requires --intent')
-        if args.command != 'pilot-prepare' and not args.pilot_id:
+        if args.command not in ('pilot-prepare', 'pilot-usage') and not args.pilot_id:
             parser.error('Pilot operation requires --pilot-id')
-        if args.command in ('pilot-run', 'pilot-abandon', 'pilot-reconcile') and (not args.expected_sha256 or args.expected_revision is None):
+        if args.command in ('pilot-run', 'pilot-abandon', 'pilot-reconcile', 'pilot-reclaim') and (not args.expected_sha256 or args.expected_revision is None):
             parser.error('Pilot mutation requires reviewed --expected-sha256 and --expected-revision')
         pilot = None
         try:
             if args.command != 'pilot-prepare' and not (Path(args.data) / 'pilot.sqlite').is_file():
                 raise Rejected('Existing pilot journal required')
-            pilot = Pilot(args.data, read_only=args.command == 'pilot-inspect', executor=args.pilot_executor, image=args.image)
+            from . import pilot_retention
+            pilot = Pilot(args.data, read_only=args.command in ('pilot-inspect', 'pilot-usage'), executor=args.pilot_executor, image=args.image)
             if args.command == 'pilot-prepare': report = pilot.prepare(load_intent(args.intent))
             elif args.command == 'pilot-inspect': report = pilot.inspect(args.pilot_id)
             elif args.command == 'pilot-run': report = pilot.run(args.pilot_id, args.expected_sha256, args.expected_revision)
             elif args.command == 'pilot-reconcile': report = pilot.reconcile(args.pilot_id, args.expected_sha256, args.expected_revision)
+            elif args.command == 'pilot-usage': report = pilot_retention.usage(pilot)
+            elif args.command == 'pilot-reclaim': report = pilot_retention.reclaim(pilot, args.pilot_id, args.expected_sha256, args.expected_revision, dry_run=args.dry_run)
             else: report = pilot.abandon(args.pilot_id, args.expected_sha256, args.expected_revision)
         except (Rejected, OSError, ValueError, sqlite3.Error):
-            parser.error('Pilot rejected; inspect intent, baseline, scope, revision and retained recovery state')
+            parser.error('Pilot rejected; inspect intent, baseline, scope, revision, retained recovery state and reclamation eligibility')
         finally:
             if pilot is not None: pilot.close()
         print(json.dumps(report, indent=2))
