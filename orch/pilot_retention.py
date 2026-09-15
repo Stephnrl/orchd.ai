@@ -188,6 +188,7 @@ def reclaim(pilot, identifier, expected_hash, revision, dry_run=False):
             for entry in files:
                 path = plain(workspace / entry['path'])
                 if path.is_symlink() or not path.is_file(): raise Rejected('Workspace changed during reclamation')
+                path.chmod(0o600)  # Docker workers freeze files read-only; Windows refuses to unlink them otherwise.
                 path.unlink()
             for directory in sorted(directories, key=lambda d: d.count('/'), reverse=True):
                 plain(workspace / directory).rmdir()

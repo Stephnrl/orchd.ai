@@ -126,6 +126,15 @@ class PilotRetentionTests(unittest.TestCase):
             (workspace / 'link.json').unlink()
         self.assertTrue(reclaim(self.pilot, done['id'], done['scope_sha256'], 2)['deleted'])
 
+    def test_read_only_workspace_files_are_reclaimed(self):
+        # Docker workers leave frozen 0444 files; reclamation must still delete them on every host.
+        done = self.passed()
+        workspace = self.pilot.root / done['id']
+        (workspace / 'config.json').chmod(0o444)
+        self.assertTrue(reclaim(self.pilot, done['id'], done['scope_sha256'], 2)['deleted'])
+        self.assertFalse(workspace.exists())
+        self.assertEqual(self.pilot.inspect(done['id'])['reclamation'], 'reclaimed')
+
     def test_crash_after_intent_is_visible_and_resumable(self):
         done = self.passed()
         workspace = self.pilot.root / done['id']
