@@ -56,6 +56,18 @@ its inspection bound are all refused rather than reported as facts.
 `pilot-usage` also reports `journal_status`, `successor` and `predecessor` for the
 journal it was given.
 
+## Repository tasks follow the chain
+
+The task kernel keeps its pilots in `STORE/repository-pilots`. Retiring that journal
+does not strand it: a new task is prepared in the journal at the end of the chain, and
+an existing task opens the journal its own retained scope names. A scope naming a
+journal that is not a link in that store's chain is refused, which is the same binding
+the kernel enforced before, widened from one directory to the recorded chain.
+
+So an operator can retire the kernel's journal exactly like a standalone one. Earlier
+tasks stay readable, their recovery diagnostics still resolve, and new work continues in
+the successor.
+
 ## Boundaries
 
 Succession is not archive, compaction or deletion. The retained rows still occupy the old

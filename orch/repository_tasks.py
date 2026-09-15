@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .contracts import Rejected, canonical, digest, error, make, now, redact, ref, uid
+from .maintenance import real_path
 from .pilot import Pilot, workspace_files
 from .storage import Store
 
@@ -20,20 +21,36 @@ class RepositoryTasks:
     def __init__(self, engine):
         self.engine, self.store = engine, engine.store
 
-    def _pilot(self, read_only=False):
-        root = self.store.root / 'repository-pilots'
+    def _base_journal(self):
+        return self.store.root / 'repository-pilots'
+
+    def _pilot(self, read_only=False, journal=None):
+        """Open a pilot journal belonging to this store.
+
+        A new pilot goes in the active journal at the end of the succession chain; an
+        existing task names its own journal, which must still be a link in that chain.
+        """
+        from .pilot_succession import active_journal, forward
+        base = self._base_journal()
+        if journal is None:
+            root = active_journal(base)
+        else:
+            root = real_path(journal)
+            if str(root) not in forward(base):
+                raise Rejected('Repository pilot journal is outside this store succession chain')
         if read_only and not (root / 'pilot.sqlite').is_file(): raise Rejected('Repository pilot journal is missing')
         mode = 'local-data' if self.engine.executor.mode == 'trusted-fixture' else 'docker'
         return Pilot(root, read_only=read_only, executor=mode, image=self.engine.executor.image,
                      broker_service=getattr(self.engine, 'broker_service', None))
 
     def _scope(self, state, context):
+        from .pilot_succession import forward
         if context.get('workload') != WORKLOAD: raise Rejected('Wrong task workload')
         plan = self.store.get(state['plan'], state['task_id'], 'RepositoryTaskPlan')
         scope = json.loads(self.store.read_artifact(plan['scope'], state['task_id']))
         if (plan['spec'] != state['spec'] or digest(scope) != plan['scope_sha256'] or scope['id'] != plan['pilot_id']
                 or scope.get('task_binding') != {'store': str(self.store.root), 'task_id': state['task_id']}
-                or scope['journal_root'] != str(self.store.root / 'repository-pilots')):
+                or scope['journal_root'] not in forward(self._base_journal())):
             raise Rejected('Repository task scope mismatch or restored store path')
         return plan, scope
 
@@ -161,7 +178,7 @@ class RepositoryTasks:
                 return self.engine.task(task)
             if state['state'] != 'READY_FOR_IMPLEMENTATION': return self.engine.task(task)
             plan, scope = self._approved(state, context)
-            pilot = self._pilot(read_only=True)
+            pilot = self._pilot(read_only=True, journal=scope['journal_root'])
             try:
                 if pilot.inspect(scope['id'])['status'] != 'prepared': raise Rejected('Pilot was already consumed')
             finally: pilot.close()
@@ -171,7 +188,7 @@ class RepositoryTasks:
                 state['active_operation_id'] = operation
                 self._move(state, context, 'IMPLEMENTING')
                 self.engine._event(state, context, 'repository_execution_reserved', {'pilot_id': scope['id']}, operation=operation)
-            pilot = self._pilot()
+            pilot = self._pilot(journal=scope['journal_root'])
             try:
                 report = pilot.run(scope['id'], plan['scope_sha256'], 0)
                 if not report['matches_receipt']: raise Rejected('Pilot receipt does not match its workspace')
@@ -206,7 +223,7 @@ class RepositoryTasks:
         reasons = ['Repository recovery inspects the retained pilot and reconciles containers; it never retries execution.']
         pilot_report = None
         try:
-            pilot = self._pilot(read_only=True)
+            pilot = self._pilot(read_only=True, journal=scope['journal_root'])
             try:
                 report = pilot.inspect(scope['id'])
                 blockers, _ = eligibility(pilot, scope['id'], report)
@@ -232,10 +249,10 @@ class RepositoryTasks:
             retained_operation = self.store.db.execute('SELECT task_id,stage,status FROM operations WHERE id=?', (operation,)).fetchone()
             if not retained_operation or tuple(retained_operation) != (task, 'repository_pilot', 'started'):
                 raise Rejected('Repository recovery operation mismatch')
-            pilot = self._pilot(read_only=True)
+            pilot = self._pilot(read_only=True, journal=scope['journal_root'])
             try: report = pilot.inspect(scope['id'])
             finally: pilot.close()
-            pilot = self._pilot()
+            pilot = self._pilot(journal=scope['journal_root'])
             try:
                 if report['status'] == 'prepared': report = pilot.abandon(scope['id'], plan['scope_sha256'], report['revision'])
                 elif report['status'] == 'reserved': report = pilot.reconcile(scope['id'], plan['scope_sha256'], report['revision'])
