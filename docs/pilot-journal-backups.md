@@ -27,6 +27,10 @@ phase set, the receipt's binding to that worker journal, and each reclamation re
 digest. Worker or reclamation rows referencing no pilot are refused, as are scopes naming
 more than one journal root.
 
+The audit also covers the journal's succession state and binds each succession record
+to the journal it was written in, so a record borrowed from another journal is refused
+and retiring a journal shows up as drift rather than passing unnoticed.
+
 The audit is deliberately **workspace-independent**. Workspaces are disposable, a receipt
 binds their bytes by hash, and reclamation deletes them, so reading them would make the
 audit depend on when it ran. This is what lets a live journal and a snapshot of it be
@@ -68,7 +72,8 @@ expected files.
 `pilot-compare-journal-backup` verifies the bundle, audits the live journal and reports
 per-pilot differences: `missing_from_backup`, `backup_only_pilot`, `scope_mismatch`,
 `lifecycle_advanced`, `receipt_mismatch`, `worker_journal_mismatch` and
-`reclamation_mismatch`. A difference exits 2. Differences are expected and are not
+`reclamation_mismatch`, plus `succession_changed` when the journal was retired after the
+snapshot was taken. A difference exits 2. Differences are expected and are not
 failures: preparing a pilot, advancing one, or reclaiming a workspace after the snapshot
 all show up here. The command tells an operator what has changed since the snapshot; it
 never reconciles, restores or retries.

@@ -56,6 +56,19 @@ its inspection bound are all refused rather than reported as facts.
 `pilot-usage` also reports `journal_status`, `successor` and `predecessor` for the
 journal it was given.
 
+## The broker does not follow the chain
+
+The [broker service](broker-service.md) is different. Its `--pilot-root` is a policy
+boundary owned by the broker's account, while the successor link is written by whoever
+runs retirement, normally the orchestrator's account. Following that link automatically
+would let the orchestrator redirect the broker's execution to a directory of its
+choosing, so the broker never does.
+
+Instead `broker-serve` refuses to start when its `--pilot-root` names a retired journal
+and tells the operator which successor to use, and a dispatch for a scope from another
+journal says the same. Pointing the broker at the successor is a deliberate act by the
+account that owns it.
+
 ## Repository tasks follow the chain
 
 The task kernel keeps its pilots in `STORE/repository-pilots`. Retiring that journal

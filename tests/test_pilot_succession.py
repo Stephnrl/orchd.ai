@@ -55,8 +55,13 @@ class SuccessionTests(unittest.TestCase):
         self.assertEqual(report["rows_deleted"], 0)
         self.assertEqual(report["retained_rows"], 1)
         self.assertEqual(report["successor"], str(self.successor.resolve()))
-        # Every retained row is untouched and still verifies.
-        self.assertEqual(canonical(audit_journal(self.pilot.root)), canonical(before))
+        # Every retained row is untouched and still verifies; only the succession state moved.
+        after = audit_journal(self.pilot.root)
+        self.assertEqual(after["binding"]["records"], before["binding"]["records"])
+        self.assertEqual(after["binding"]["record_count"], before["binding"]["record_count"])
+        self.assertEqual(before["binding"]["succession"]["status"], "active")
+        self.assertEqual(after["binding"]["succession"]["status"], "retired")
+        self.assertEqual(after["binding"]["succession"]["successor"], str(self.successor.resolve()))
         self.assertEqual(self.pilot.inspect(done["id"])["status"], "passed")
         self.assertTrue(self.pilot.inspect(done["id"])["matches_receipt"])
         # The retired journal refuses only preparation.
@@ -90,8 +95,9 @@ class SuccessionTests(unittest.TestCase):
         for reason in (None, "", "   ", "x" * 501, "line\nbreak", "token=secret-value"):
             with self.subTest(reason=reason), self.assertRaises(Rejected):
                 self.retire(created=created, reason=reason)
-        # A pilot prepared after the snapshot makes it stale, and retirement refuses.
-        self.pilot.prepare(self.intent)
+        # A pilot added after the snapshot makes it stale, even once the journal settles again.
+        added = self.pilot.prepare(self.intent)
+        self.pilot.abandon(added["id"], added["scope_sha256"], 0)
         with self.assertRaisesRegex(Rejected, "matches the journal exactly"):
             self.retire(created=created)
         self.assertEqual(state(self.pilot)["status"], "active")
@@ -216,6 +222,23 @@ class SuccessionTests(unittest.TestCase):
             state(self.pilot)
         self.pilot.db.execute("UPDATE " + TABLE + " SET record=?,hash=? WHERE role='retired'", original)
         self.assertEqual(state(self.pilot)["status"], "retired")
+
+    def test_a_succession_record_naming_another_journal_is_refused(self):
+        """A record is bound to the journal it was written in, so a copied one is refused."""
+        self.settle()
+        self.retire()
+        retired = self.pilot.db.execute("SELECT record,hash FROM " + TABLE + " WHERE role='retired'").fetchone()
+        elsewhere = Pilot(self.root / "borrowed")
+        try:
+            elsewhere.db.execute("INSERT INTO " + TABLE + " VALUES('retired',?,?)", retired)
+            with self.assertRaisesRegex(Rejected, "names another journal"):
+                state(elsewhere)
+            with self.assertRaisesRegex(Rejected, "names another journal"):
+                audit_journal(elsewhere.root)
+        finally:
+            elsewhere.close()
+        # The audit of the journal that owns the record still passes.
+        self.assertEqual(audit_journal(self.pilot.root)["binding"]["succession"]["status"], "retired")
 
     def test_usage_reports_the_journal_status_and_both_neighbours(self):
         self.settle()

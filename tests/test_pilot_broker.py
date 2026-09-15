@@ -182,6 +182,28 @@ class PilotBrokerTests(unittest.TestCase):
         self.harness.thread.join(5)
         self.harness.service.server.server_close = lambda: None
 
+    def test_a_retired_pilot_journal_is_refused_when_the_broker_starts(self):
+        """The broker's pilot root is its own boundary, so it never follows a successor."""
+        from orch.broker_service import BrokerService
+        from orch.pilot_backup import backup_journal
+        from orch.pilot_succession import retire
+        closed = Pilot(self.root / "closed-journal")
+        try:
+            closed_root = closed.root
+        finally:
+            closed.close()
+        created = backup_journal(closed_root, self.root / "closed-snapshot")
+        retire(closed_root, self.root / "closed-snapshot", created["sha256"], self.root / "open-journal",
+               "Broker startup check")
+        with self.assertRaisesRegex(Rejected, "retired; start this broker with its successor"):
+            BrokerService(self.root / "bj", self.harness.secret, self.root / "bw", "docker", IMAGE, 0, closed_root)
+        # Its successor is an ordinary root the broker accepts.
+        service = BrokerService(self.root / "bj", self.harness.secret, self.root / "bw", "docker", IMAGE, 0,
+                                self.root / "open-journal")
+        # This service never served, so close its socket directly; shutdown() waits for a
+        # serve loop that was never started.
+        service.server.server_close()
+
     def test_local_data_pilots_ignore_the_service_and_pilot_routes_need_docker_profile(self):
         local = Pilot(self.root / 'local-journal', broker_service=self.harness.config)
         try:

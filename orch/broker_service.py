@@ -50,6 +50,20 @@ class BrokerService:
                 raise Rejected("Broker journal, workspaces and pilot journal must be separate directories")
         if self.pilot_root is not None and mode != "docker":
             raise Rejected("Pilot routes require the Docker execution profile")
+        if self.pilot_root is not None and (self.pilot_root / "pilot.sqlite").is_file():
+            # The broker's pilot root is its own policy boundary, so a successor link
+            # written by the orchestrator never moves it. Refuse a retired journal here
+            # rather than refusing every dispatch later with nothing to act on.
+            from .pilot import Pilot
+            from .pilot_succession import state
+            journal = Pilot(self.pilot_root, read_only=True)
+            try:
+                succession = state(journal)
+            finally:
+                journal.close()
+            if succession["status"] == "retired":
+                raise Rejected("That pilot journal is retired; start this broker with its successor "
+                               + str(succession["successor"]))
         if type(port) is not int or not 0 <= port <= 65535:
             raise Rejected("Invalid broker port")
         self.secret = SecretFile(secret)
@@ -118,7 +132,8 @@ class BrokerService:
         # the same directory is neither refused nor able to pose as a different journal.
         pilot_root = real_path(self.pilot_root)
         if real_path(scope["journal_root"]) != pilot_root:
-            raise Rejected("Pilot scope belongs to another journal")
+            raise Rejected("Pilot scope belongs to another journal; a retired journal's successor "
+                           "needs a broker started with that root")
         if route == "pilot-reconcile":
             return {**reply, "container_absent": pilot_worker.reconcile(scope, phase)}
         workspace = real_path(body["workspace"])
