@@ -20,8 +20,11 @@ def deployment_check(provider, executable=None, expected_sha256=None, image=None
     if broker is not None:
         try:
             assessment = assess_identity(broker)
+            reasons = {"separate": None,
+                       "secret_attention": "The broker shared secret is mid-rotation or older than the reported maximum age; see broker-check",
+                       "source_mismatch": "The broker service runs different broker source than this orchestrator; see broker-check"}
             identity = {"status": assessment["status"],
-                        "reason": None if assessment["status"] == "separate" else "The broker service runs as the orchestrator account or from different source; see broker-check"}
+                        "reason": reasons.get(assessment["status"], "The broker service runs as the orchestrator account; see broker-check")}
         except (Rejected, OSError):
             identity = {"status": "rejected", "reason": "The broker service is unreachable, unauthenticated or misconfigured"}
     gates = [

@@ -1,5 +1,11 @@
 # Roadmap progress — September 15, 2026
 
+The [broker secret rotation follow-up](broker-service.md) gives the broker's shared
+secret the rotation the operator session already had: a two-secret overlap window, a
+live re-read that needs no restart and drops no operation, replies signed with the
+secret that authenticated them, `broker-rotate-secret` for both stages, and reported
+age and rotation state that gate `deployment-check`. Age is reported, never enforced.
+
 The [operator visibility follow-up](pilot-operator-visibility.md) completes the
 retention milestone's deferred operator surface: `GET /pilot-usage` and a **Check pilot
 usage** button in the store maintenance panel, the retained pilot's state and
@@ -58,7 +64,7 @@ an assumption that more UI features alone will make the system production-ready.
 | 6. Local management UI | Substantially implemented, including restart/replay, evidence, operator controls and reviewed serial batches |
 | 7. GitHub integration | Offline preview, ref comparison, reconciliation classifier and durable intent/reservation journal; platform actions still simulated; no live PR creation |
 | 8. Jira Data Center integration | Consolidated offline comments, Epic/Story/Task preparation, relationships, transitions, GitHub associations, durable journal, review/preflight and recovery; live deployment/admission remains blocked |
-| 9. Credential broker/auth hardening | Local session expiry, rotation/revocation, stale-client clearing and strict HTTP parsing implemented; production provider credentials/SSO remain |
+| 9. Credential broker/auth hardening | Local session expiry, rotation/revocation, stale-client clearing, strict HTTP parsing and broker shared-secret rotation implemented; production provider credentials/SSO remain |
 | 10. OWASP/ACS hardening and adversarial tests | Substantial boundary tests and consolidated source-bound offline release verification; independent deployment review and broader live-system testing remain |
 | 11. Concurrent workers | Deferred; current execution is deliberately bounded |
 | 12. Advanced orchestration | Bounded serial fixture batches implemented; broader scheduling and orchestration remain to be scoped |

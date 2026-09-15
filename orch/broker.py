@@ -8,7 +8,10 @@ import os
 from pathlib import Path
 import platform
 import re
+import secrets
 import sys
+import threading
+import time
 
 from .contracts import Rejected, canonical, digest, now, uid
 from .process import capture
@@ -16,6 +19,7 @@ from jsonschema import Draft202012Validator
 from .contracts import FORMATS
 
 VERSION = "1.0.0"
+SECRET_MAX_AGE_SECONDS = 30 * 86400   # Reported by broker-check; never enforced by refusing service.
 MAX_MESSAGE = 16384        # Largest authenticated request body; matches the subprocess stdin bound.
 MAX_REPLY = 1024 * 1024    # Largest authenticated reply; matches the journal size bound.
 ROUTES = {"identity": ("IdentityRequest", "IdentityReply"), "execute": ("ExecuteRequest", "ExecuteReply"),
@@ -133,8 +137,12 @@ def endpoint(value):
     return "127.0.0.1", int(match.group(1))
 
 
-def load_secret(path):
-    """A 64-hex shared secret in a small, unlinked, non-world-accessible regular file."""
+def read_secrets(path):
+    """One or two 64-hex secrets, current first, from a small unlinked private file.
+
+    A second line is the previous secret, accepted during a rotation overlap so that
+    a process which has not yet re-read the file is not cut off mid-operation.
+    """
     path = Path(path)
     for component in (path, *path.parents):
         if component.is_symlink() or (hasattr(component, "is_junction") and component.is_junction()):
@@ -142,17 +150,68 @@ def load_secret(path):
     if not path.is_file():
         raise Rejected("Broker secret file missing")
     info = path.stat()
-    if info.st_nlink != 1 or info.st_size > 128:
+    if info.st_nlink != 1 or info.st_size > 256:
         raise Rejected("Broker secret must be a small unlinked file")
     if os.name != "nt" and info.st_mode & 0o007:
         raise Rejected("Broker secret must not be world-accessible")
     try:
-        text = path.read_text(encoding="ascii").strip()
+        text = path.read_text(encoding="ascii")
     except (UnicodeError, OSError) as exc:
         raise Rejected("Unreadable broker secret") from exc
-    if not re.fullmatch("[a-f0-9]{64}", text):
-        raise Rejected("Broker secret must be 64 lowercase hex characters")
-    return bytes.fromhex(text)
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not 1 <= len(lines) <= 2 or any(not re.fullmatch("[a-f0-9]{64}", line) for line in lines):
+        raise Rejected("Broker secret must be one or two lines of 64 lowercase hex characters")
+    if len(lines) == 2 and hmac.compare_digest(lines[0], lines[1]):
+        raise Rejected("A rotation overlap requires two different secrets")
+    return [bytes.fromhex(line) for line in lines], info
+
+
+def load_secret(path):
+    """The current secret only; callers that must survive a rotation use SecretFile."""
+    return read_secrets(path)[0][0]
+
+
+class SecretFile:
+    """Reads the shared secret on demand, so rotation needs no restart.
+
+    The file is re-read whenever its identity, size or modification time changes.
+    A read that fails refuses the request rather than reusing a secret that the
+    operator may have just withdrawn.
+    """
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self._lock = threading.Lock()
+        self._stamp, self._keys, self._mtime = None, (), 0.0
+        self.refresh()
+
+    def refresh(self):
+        with self._lock:
+            try:
+                info = self.path.stat()
+            except OSError as exc:
+                raise Rejected("Broker secret file missing") from exc
+            stamp = (info.st_mtime_ns, info.st_size, info.st_ino)
+            if stamp != self._stamp:
+                keys, info = read_secrets(self.path)
+                self._keys, self._stamp, self._mtime = tuple(keys), stamp, info.st_mtime
+            return self._keys
+
+    @property
+    def current(self):
+        """The secret to sign with. Replies are verified with the same one."""
+        return self.refresh()[0]
+
+    @property
+    def accepted(self):
+        """Every secret a message may be signed with, current first."""
+        return self.refresh()
+
+    def state(self, *, now_seconds=None):
+        keys = self.refresh()
+        age = max(0, int((now_seconds if now_seconds is not None else time.time()) - self._mtime))
+        return {"accepted": len(keys), "rotating": len(keys) > 1,
+                "age_seconds": age, "stale": age > SECRET_MAX_AGE_SECONDS}
 
 
 def sign(key, domain, route, body):
@@ -164,6 +223,47 @@ def verify(key, domain, route, body, tag):
             and hmac.compare_digest(sign(key, domain, route, body), tag))
 
 
+def authenticate(keys, domain, route, body, tag):
+    """The accepted secret this message was signed with, or None. Every key is tried."""
+    matched = None
+    for key in keys:
+        if verify(key, domain, route, body, tag):
+            matched = key
+    return matched
+
+
+def rotate_secret(path, *, complete=False):
+    """Begin or finish a rotation by rewriting the secret file atomically and privately.
+
+    Beginning writes a fresh current secret above the previous one, so both are
+    accepted while every process re-reads the file. Completing drops the previous
+    secret. Neither stage prints a secret or restarts anything.
+    """
+    keys, _ = read_secrets(path)
+    path = Path(path)
+    if complete and len(keys) == 1:
+        raise Rejected("No rotation is in progress; begin one before completing it")
+    if not complete and len(keys) == 2:
+        raise Rejected("A rotation is already in progress; complete it before beginning another")
+    lines = [keys[0].hex()] if complete else [secrets.token_hex(32), keys[0].hex()]
+    temp = path.with_name(path.name + "." + uid())
+    descriptor = os.open(temp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    try:
+        with os.fdopen(descriptor, "w", encoding="ascii") as stream:
+            stream.write("\n".join(lines) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp, path)
+    except BaseException:
+        temp.unlink(missing_ok=True)
+        raise
+    return {"schema_version": VERSION, "kind": "BrokerSecretRotation", "path": str(path),
+            "stage": "completed" if complete else "overlap", "accepted": len(lines),
+            "rotating": not complete, "rotated_at": now(),
+            "next_step": "Remove the previous secret with --complete once every process has re-read the file"
+                         if not complete else "Rotation is complete; only the current secret is accepted"}
+
+
 class ServiceClient:
     """Orchestrator side of the loopback broker service. It never reads the broker journal."""
 
@@ -171,7 +271,7 @@ class ServiceClient:
         if not isinstance(config, dict) or set(config) != {"endpoint", "secret"}:
             raise Rejected("Broker service needs exactly an endpoint and a secret file")
         self.host, self.port = endpoint(config["endpoint"])
-        self.key = load_secret(config["secret"])
+        self.secret = SecretFile(config["secret"])
 
     def call(self, route, body):
         if route not in ROUTES:
@@ -181,7 +281,10 @@ class ServiceClient:
         raw = canonical(body)
         if len(raw) > LIMITS.get(route, MAX_MESSAGE):
             raise Rejected("Broker request too large")
-        headers = {"Content-Type": "application/json", "X-Orch-Broker-Auth": sign(self.key, "request", route, raw)}
+        # Sign with the current secret and verify the reply with the same one, so a
+        # rotation between request and reply cannot look like a forged answer.
+        key = self.secret.current
+        headers = {"Content-Type": "application/json", "X-Orch-Broker-Auth": sign(key, "request", route, raw)}
         connection = http.client.HTTPConnection(self.host, self.port, timeout=45)
         try:
             connection.request("POST", "/" + route, raw, headers)
@@ -197,7 +300,7 @@ class ServiceClient:
             raise Rejected("Broker service unavailable") from exc
         finally:
             connection.close()
-        if not verify(self.key, "reply", route, data, tag):
+        if not verify(key, "reply", route, data, tag):
             raise Rejected("Broker reply authentication failed")
         if status != 200:
             raise Rejected("Broker service refused the request")
@@ -220,11 +323,14 @@ def assess_identity(config):
         raise Rejected("Broker identity reply nonce mismatch")
     local = identity()
     apart, same_source = separate(reply["identity"], local), reply["source_digest"] == source_digest()
+    secret = reply["secret"]
+    settled = not secret["rotating"] and not secret["stale"]
+    status = ("source_mismatch" if not same_source else "shared" if not apart
+              else "separate" if settled else "secret_attention")
     return {"schema_version": VERSION, "kind": "BrokerIdentityAssessment", "checked_at": now(),
             "broker": reply["identity"], "orchestrator": local, "profile": reply["profile"],
-            "separate_identity": apart, "source_digest_match": same_source,
-            "status": "separate" if apart and same_source else "source_mismatch" if not same_source else "shared",
-            "live_authorized": False}
+            "separate_identity": apart, "source_digest_match": same_source, "secret": secret,
+            "secret_max_age_seconds": SECRET_MAX_AGE_SECONDS, "status": status, "live_authorized": False}
 
 
 class BrokerClient:
