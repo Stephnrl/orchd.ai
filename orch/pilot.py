@@ -9,7 +9,7 @@ import re
 import sqlite3
 
 from .contracts import Rejected, canonical, digest, now, uid
-from .maintenance import plain
+from .maintenance import plain, real_path
 from .process import capture
 from .broker import file_lock
 from . import pilot_worker
@@ -61,7 +61,7 @@ def git(root, *args):
 
 
 def baseline(repository, commit, paths):
-    root = plain(Path(repository).absolute())
+    root = real_path(repository)
     if not root.is_dir() or not plain(root / '.git').is_dir():
         raise Rejected('Pilot requires an ordinary local Git checkout')
     if not isinstance(commit, str) or not re.fullmatch('[a-f0-9]{40}', commit):
@@ -187,7 +187,7 @@ class Pilot:
         if executor not in ('local-data', 'docker') or (executor == 'local-data' and image is not None):
             raise Rejected('Invalid pilot executor configuration')
         self.executor, self.image = executor, image
-        self.root = plain(Path(root).absolute())
+        self.root = real_path(root)
         if not read_only: self.root.mkdir(parents=True, exist_ok=True)
         for name in ('pilot.sqlite', 'pilot.sqlite-journal', 'pilot.sqlite-wal', 'pilot.sqlite-shm'):
             path = plain(self.root / name)
@@ -205,8 +205,9 @@ class Pilot:
 
     def prepare(self, intent, task_binding=None):
         validate_intent(intent)
-        repository = str(plain(Path(intent['repository']).absolute()))
-        if self.root.is_relative_to(Path(repository)) or Path(repository).is_relative_to(self.root):
+        repository = str(real_path(intent['repository']))
+        journal = self.root  # Already canonical; the repository above now is too.
+        if journal.is_relative_to(Path(repository)) or Path(repository).is_relative_to(journal):
             raise Rejected('Pilot journal and source repository must be separate')
         before = baseline(repository, intent['base_commit'], intent['replacements'])
         if any(before[k] == v for k, v in intent['replacements'].items()): raise Rejected('Every replacement must change bytes')
@@ -246,7 +247,9 @@ class Pilot:
                 raise Rejected('Invalid retained baseline')
         except (KeyError, TypeError, AttributeError) as exc:
             raise Rejected('Invalid retained pilot scope') from exc
-        if digest(scope) != row[1] or scope['id'] != identifier or scope['journal_root'] != str(self.root):
+        # A journal may be opened through another spelling of the same directory, so
+        # compare canonically; a scope retained under an older spelling still verifies.
+        if digest(scope) != row[1] or scope['id'] != identifier or real_path(scope['journal_root']) != self.root:
             raise Rejected('Pilot scope integrity mismatch')
         revisions = {'prepared': {0}, 'reserved': range(1, 1002), 'passed': {2}, 'failed': {2}, 'abandoned': {1}, 'interrupted': range(2, 1002)}
         if row[3] not in revisions or row[2] not in revisions[row[3]]:

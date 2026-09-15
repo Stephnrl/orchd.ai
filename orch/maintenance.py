@@ -21,6 +21,15 @@ def plain(path):
     return path
 
 
+def real_path(path):
+    """Canonical absolute path, with links refused before and after resolution.
+
+    Windows can spell the same directory in 8.3 short form; Git and SQLite report the
+    long one. Comparing canonical paths keeps those spellings from looking different.
+    """
+    return plain(plain(Path(path).absolute()).resolve())
+
+
 def copy_bytes(source, target):
     plain(source)
     with source.open("rb") as incoming, target.open("xb") as outgoing:

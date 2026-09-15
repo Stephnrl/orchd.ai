@@ -55,6 +55,39 @@ class PilotTests(unittest.TestCase):
         self.assertEqual(self.pilot.inspect(prepared['id']), result)
         with self.assertRaises(Rejected): self.run_pilot(prepared)
 
+    def short_repository(self):
+        """The 8.3 spelling hosted Windows CI produces, or a skip where none exists."""
+        if os.name != 'nt': self.skipTest('8.3 short names are a Windows path feature')
+        import ctypes
+        buffer = ctypes.create_unicode_buffer(1024)
+        length = ctypes.windll.kernel32.GetShortPathNameW(str(self.repo), buffer, 1024)
+        short = Path(buffer.value) if length else self.repo
+        if short == self.repo: self.skipTest('This volume generates no 8.3 alias for the disposable repository')
+        return short
+
+    def test_short_path_repository_is_canonical_and_still_refuses_a_contained_journal(self):
+        short = self.short_repository()
+        prepared = self.pilot.prepare({**self.intent, 'repository': str(short)})
+        # The reviewed scope records the canonical repository, not the spelling supplied.
+        self.assertEqual(prepared['scope']['repository'], str(self.repo.resolve()))
+        self.assertEqual(self.run_pilot(prepared)['status'], 'passed')
+        # A journal written through one spelling still verifies when opened through another.
+        import ctypes
+        buffer = ctypes.create_unicode_buffer(1024)
+        ctypes.windll.kernel32.GetShortPathNameW(str(self.pilot.root), buffer, 1024)
+        reader = Pilot(buffer.value, read_only=True)
+        try:
+            self.assertEqual(reader.inspect(prepared['id'])['status'], 'passed')
+        finally:
+            reader.close()
+        # A journal inside the repository stays refused when the two are spelled differently.
+        contained = Pilot(short / 'journal-inside')
+        try:
+            with self.assertRaisesRegex(Rejected, 'must be separate'):
+                contained.prepare(self.intent)
+        finally:
+            contained.close()
+
     def test_failed_check_is_retained_and_consumed(self):
         self.intent['checks'][0]['equals'] = False
         prepared = self.pilot.prepare(self.intent)

@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 
 from .contracts import Rejected, canonical, digest, now
-from .maintenance import plain
+from .maintenance import plain, real_path
 from .process import capture
 from .readiness import doctor
 
@@ -96,9 +96,9 @@ def identity(scope, phase):
 
 
 def command(scope, phase, workspace):
-    workspace = plain(Path(workspace).absolute())
+    workspace = real_path(workspace)
     if any(c in str(workspace) for c in (',', '\n', '\r')): raise Rejected('Unsupported Docker mount path')
-    if workspace != Path(scope['journal_root']) / scope['id']: raise Rejected('Worker workspace mismatch')
+    if workspace != real_path(Path(scope['journal_root']) / scope['id']): raise Rejected('Worker workspace mismatch')
     image_id = scope['executor']['image_id']
     if not re.fullmatch('sha256:[a-f0-9]{64}', image_id): raise Rejected('Invalid local image identity')
     owned = identity(scope, phase)
