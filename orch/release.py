@@ -53,8 +53,9 @@ def stages(lane, manifest):
     if lane not in LANES: raise Rejected('Unknown release lane')
     result = []
     if lane in ('offline', 'full'):
-        result = ['contracts', 'python', 'jira_acceptance', 'batch_acceptance', 'pilot_acceptance', 'repository_task_acceptance',
-                  'broker_service_acceptance', 'security_acceptance', 'javascript_syntax']
+        result = ['contracts', 'python', 'jira_acceptance', 'journal_succession_acceptance', 'batch_acceptance',
+                  'pilot_acceptance', 'repository_task_acceptance', 'broker_service_acceptance',
+                  'security_acceptance', 'javascript_syntax']
         ui = sorted(name for name in manifest if re.fullmatch(r'tests/test_ui_[a-z0-9_]+\.cjs', name))
         if not ui: raise Rejected('UI acceptance inventory is empty')
         result += ui
@@ -82,6 +83,13 @@ def browser_count(document):
     return count
 
 
+# Per-stage deadlines bound a hung stage; they are not a performance budget. The offline
+# suite legitimately runs for about ten minutes on the slowest hosted runner, and grows
+# with each milestone, so the two long stages get their own bound instead of forcing the
+# cheap ones to share a loose one.
+DEADLINES = {'python': 1200, 'browser': 900}
+
+
 def _execute(stage, root, python, node, env):
     count, skipped = None, []
     with tempfile.TemporaryDirectory(prefix='orchd-release-') as directory:
@@ -90,6 +98,7 @@ def _execute(stage, root, python, node, env):
             'contracts': [python, 'scripts/validate_contracts.py'],
             'python': [python, 'scripts/ci_tests.py', '--result', str(receipt)],
             'jira_acceptance': [python, 'scripts/jira_acceptance.py'],
+            'journal_succession_acceptance': [python, 'scripts/journal_succession_acceptance.py'],
             'batch_acceptance': [python, 'scripts/batch_acceptance.py'],
             'pilot_acceptance': [python, 'scripts/pilot_acceptance.py'],
             'repository_task_acceptance': [python, 'scripts/repository_task_acceptance.py'],
@@ -102,7 +111,7 @@ def _execute(stage, root, python, node, env):
         if not argv[0]:
             return {'id': stage, 'status': 'failed', 'reason': 'executable_missing', 'tests_run': None, 'skipped': []}
         try:
-            output = capture(argv, cwd=root, env=env, timeout=600, limit=4 * 1024 * 1024)
+            output = capture(argv, cwd=root, env=env, timeout=DEADLINES.get(stage, 600), limit=4 * 1024 * 1024)
             if output['code'] != 0 or output['failure']:
                 reason = output['failure'] or 'nonzero_exit'
             else:

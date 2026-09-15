@@ -112,6 +112,16 @@ normalization and a final prepared-scope check before producing preflight snapsh
 operations, exact paginated PR lookup, validated continuation links and a fresh
 reservation check before read-only reconciliation. Incomplete captures cannot authorize retry.
 
+[Operation journal succession](journal-succession.md) ends the capacity dead end in both
+integration journals: a full journal retires against a verified snapshot, keeps every
+record, state and reservation exactly as they were, and continues in a recorded successor.
+Only new admission stops; reservation, recovery plans, reconciliation, inspection, audits
+and snapshots all continue in the retired journal, because an attempt slot can only be
+consumed where its evidence lives. The successor refuses any task or operation identifier
+its chain already retains and fails closed when a predecessor cannot be read, which is the
+property a hand-made replacement journal cannot have. Backup comparison reports succession
+changes, so a snapshot taken before retirement no longer claims to describe the journal.
+
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
 offline CLI conformance boundary and [Copilot protocol codec](copilot-protocol.md);

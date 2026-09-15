@@ -92,7 +92,8 @@ python -m orch github-journal-usage --journal .runtime/github-journal.sqlite
 ```
 
 Usage opens an existing journal read-only and reports record count, retained scope bytes,
-remaining capacity and limits without returning scope contents. Missing databases are not
+remaining capacity and limits without returning scope contents, plus the journal's
+succession status and either neighbour. Missing databases are not
 created. These are logical storage measurements, not record-integrity verification or
 physical disk usage.
 
@@ -110,8 +111,11 @@ scope validation and the per-record byte limit.
 
 These fixed application limits do not cap SQLite indexes, page overhead, sidecars or total
 filesystem usage, and are not enforced against direct SQL, older code or an administrator.
-Do not delete records or start a replacement journal to regain dispatch capacity: that can
-lose consumed-attempt evidence. Supported archival and retirement remain future work.
+Do not delete records or start a replacement journal by hand to regain dispatch capacity:
+that loses consumed-attempt evidence and lets the same task take a second attempt slot.
+[Retire the journal](journal-succession.md) instead: the successor records the link, and
+refuses any task or operation identifier its chain already retains. Archival and compaction
+remain future work; succession shrinks nothing.
 
 ## Whole-journal audit
 

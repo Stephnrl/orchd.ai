@@ -1,12 +1,13 @@
 """Durable offline GitHub intent/reservation journal, separate from workflow storage."""
 import json
 from datetime import datetime
-from pathlib import Path
 import re
 import sqlite3
 
 from .contracts import Rejected, canonical, digest, now
 from .github_preview import prepare_pull_request
+from .maintenance import real_path
+from . import journal_succession
 
 MAX_RECORDS = 1000
 MAX_TOTAL_SCOPE_BYTES = 16 * 1024 * 1024
@@ -44,18 +45,20 @@ def validated_intent(scope):
 
 class GitHubJournal:
     """One immutable operation per task. Reservation is never dispatch authority."""
+    FAMILY = "GitHub"
+
     def __init__(self, path, read_only=False):
         if str(path) == ":memory:":
             raise Rejected("GitHub journal requires persistent storage")
-        path = Path(path)
-        if path.is_symlink():
-            raise Rejected("Journal must not be a symlink")
+        # Canonical, link-free and spelled one way: succession records name journals by
+        # path, and Windows can spell the same file in 8.3 short form.
+        path = self.path = real_path(path)
         self.read_only = read_only
         if read_only:
-            self.db = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True, isolation_level=None, timeout=5)
+            self.db = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, isolation_level=None, timeout=5)
             self.db.row_factory = sqlite3.Row
             try:
-                if (self.db.execute("PRAGMA user_version").fetchone()[0] != 1
+                if (self.db.execute("PRAGMA user_version").fetchone()[0] not in (1, journal_succession.VERSION)
                         or self.db.execute("PRAGMA application_id").fetchone()[0] != 1330792264):
                     raise Rejected("Not a supported GitHub journal")
             except BaseException:
@@ -75,7 +78,7 @@ class GitHubJournal:
                     self.db.execute(statement)
                 self.db.execute("PRAGMA application_id=1330792264")
                 self.db.execute("PRAGMA user_version=1")
-            elif version != 1 or identity != 1330792264:
+            elif version not in (1, journal_succession.VERSION) or identity != 1330792264:
                 raise Rejected("Not a supported GitHub journal")
             self.db.execute("COMMIT")
         except BaseException:
@@ -93,10 +96,18 @@ class GitHubJournal:
                     ('index', 'sqlite_autoindex_intents_2', 'intents', None)}
         expected.update(('trigger', name, 'intents', sql) for name, sql in zip(
             ('immutable_scope', 'no_delete', 'one_reservation'), SCHEMA_SQL[1:]))
-        actual = {tuple(row) for row in self.db.execute("SELECT type,name,tbl_name,CASE WHEN length(sql)<=4096 THEN sql END FROM main.sqlite_master LIMIT 7")}
+        # A retired journal and its successor carry the succession table as well; every
+        # other shape, including that table without its version or triggers, is refused.
+        version = self.db.execute('PRAGMA user_version').fetchone()[0]
+        if version == journal_succession.VERSION:
+            expected |= journal_succession.OBJECTS
+        elif version != 1:
+            raise Rejected("Unsupported GitHub journal schema or constraint configuration")
+        actual = {tuple(row) for row in self.db.execute(
+            "SELECT type,name,tbl_name,CASE WHEN length(sql)<=4096 THEN sql END FROM main.sqlite_master LIMIT ?",
+            (len(expected) + 1,))}
         if (actual != expected or self.db.execute('SELECT 1 FROM sqlite_temp_master LIMIT 1').fetchone()
                 or self.db.execute('PRAGMA application_id').fetchone()[0] != 1330792264
-                or self.db.execute('PRAGMA user_version').fetchone()[0] != 1
                 or self.db.execute('PRAGMA ignore_check_constraints').fetchone()[0] != 0):
             raise Rejected("Unsupported GitHub journal schema or constraint configuration")
 
@@ -133,7 +144,12 @@ class GitHubJournal:
     def usage(self):
         """Logical admission usage only; not a disk-size or record-integrity check."""
         row = self.db.execute("SELECT count(*) AS records, coalesce(sum(length(CAST(scope AS BLOB))), 0) AS scope_bytes FROM intents").fetchone()
+        # Read the succession state unbound: a verified backup copy legitimately carries
+        # the record its source wrote. `github-journal-chain` is the bound, checked walk.
+        succession = journal_succession.summary(self.db)
         return {"records": row['records'], "scope_bytes": row['scope_bytes'],
+                "journal_status": succession['status'], "successor": succession['successor'],
+                "predecessor": succession['predecessor'],
                 "limits": {"records": MAX_RECORDS, "scope_bytes": MAX_TOTAL_SCOPE_BYTES, "record_scope_bytes": MAX_SCOPE_BYTES},
                 "remaining_records": max(0, MAX_RECORDS - row['records']),
                 "remaining_scope_bytes": max(0, MAX_TOTAL_SCOPE_BYTES - row['scope_bytes']),
@@ -197,6 +213,9 @@ class GitHubJournal:
                 if len(existing) != 1 or existing[0]['operation_id'] != operation or self.get(operation)['sha256'] != sha:
                     raise Rejected("Task or operation is already bound to another scope")
             else:
+                # New admission only: a retired journal keeps reserving and reconciling
+                # what it already holds, and the chain refuses a second attempt slot.
+                journal_succession.check_admission(self, intent['task_id'], operation)
                 # The check shares the insertion's writer transaction across processes.
                 usage = self.usage()
                 if usage['remaining_records'] == 0 or len(encoded) > usage['remaining_scope_bytes']:
