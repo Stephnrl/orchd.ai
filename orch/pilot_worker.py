@@ -77,15 +77,18 @@ def environment():
     return {k: os.environ[k] for k in ('PATH', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP') if k in os.environ}
 
 
-def profile(mode, image):
+def profile(mode, image, broker=None):
+    """Runtime identity an approval binds to. `broker` is the service account when a broker service owns Docker."""
     if mode == 'local-data' and image is None:
         return {'mode': mode, 'image': None}
     if mode != 'docker' or not isinstance(image, str) or not re.fullmatch(r'[A-Za-z0-9./:_-]+@sha256:[a-f0-9]{64}', image):
         raise Rejected('Pilot Docker worker requires an explicit digest-pinned image')
     report = doctor(image)
     if report['status'] != 'ready': raise Rejected('Pilot Docker daemon or preloaded image unavailable')
-    return {'mode': mode, 'image': image, 'image_id': report['image_id'],
-            'host': report['host'], 'docker': report['docker'], 'recipe_sha256': hashlib.sha256(WORKER.encode()).hexdigest()}
+    result = {'mode': mode, 'image': image, 'image_id': report['image_id'],
+              'host': report['host'], 'docker': report['docker'], 'recipe_sha256': hashlib.sha256(WORKER.encode()).hexdigest()}
+    if broker is not None: result['broker'] = broker
+    return result
 
 
 def identity(scope, phase):
@@ -137,7 +140,7 @@ def reconcile(scope, phase):
         return False
 
 
-def execute(scope, phase, workspace):
+def execute(scope, phase, workspace, broker=None):
     argv = command(scope, phase, workspace)
     hashes = {p: hashlib.sha256(v.encode()).hexdigest() for p, v in scope['replacements'].items()}
     payload = {'replacements': scope['replacements']} if phase == 'edit' else {'hashes': hashes, 'checks': scope['checks']}
@@ -146,7 +149,7 @@ def execute(scope, phase, workspace):
         result = capture(argv, env=environment(), input_bytes=canonical(payload), timeout=30, limit=65536)
     except OSError:
         result = {'code': None, 'failure': 'executor_unavailable', 'stdout': '', 'stderr': '', 'truncated': False}
-    try: same_runtime = profile('docker', scope['executor']['image']) == scope['executor']
+    try: same_runtime = profile('docker', scope['executor']['image'], broker) == scope['executor']
     except Rejected: same_runtime = False
     absent = reconcile(scope, phase) if same_runtime else False
     observation = {'identity': identity(scope, phase), 'phase': phase, 'started_at': started, 'ended_at': now(),

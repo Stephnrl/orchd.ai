@@ -24,7 +24,8 @@ class RepositoryTasks:
         root = self.store.root / 'repository-pilots'
         if read_only and not (root / 'pilot.sqlite').is_file(): raise Rejected('Repository pilot journal is missing')
         mode = 'local-data' if self.engine.executor.mode == 'trusted-fixture' else 'docker'
-        return Pilot(root, read_only=read_only, executor=mode, image=self.engine.executor.image)
+        return Pilot(root, read_only=read_only, executor=mode, image=self.engine.executor.image,
+                     broker_service=getattr(self.engine, 'broker_service', None))
 
     def _scope(self, state, context):
         if context.get('workload') != WORKLOAD: raise Rejected('Wrong task workload')

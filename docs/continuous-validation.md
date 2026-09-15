@@ -51,7 +51,9 @@ directories are ignored by Git. The setup follows Playwright's official
 [CI](https://playwright.dev/docs/ci) guidance.
 
 The separate Linux job preloads the same digest-pinned Python image used by local
-Docker validation, then runs `python -m orch verify-runtime`. All five gates must pass
+Docker validation, then runs `python -m orch verify-runtime`, the pilot worker and
+repository-task acceptance scripts, and the pilot walkthrough dispatched through a real
+[broker service](broker-service.md) process. All five gates must pass
 without skips, and the host/image/source checks must remain consistent. The JSON
 report is printed in the job log. It is temporary host-bound evidence, expires after
 24 hours and always reports `provider_authorized: false`. A CI result does not qualify

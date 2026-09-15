@@ -11,10 +11,11 @@ import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-from .broker import MAX_MESSAGE, ROUTES, VERSION, atomic_json, file_lock, identity, load_secret, safe_id, sign, source_digest, validate_wire, verify
+from .broker import LIMITS, MAX_MESSAGE, MAX_REPLY, ROUTES, VERSION, atomic_json, file_lock, identity, load_secret, safe_id, sign, source_digest, validate_wire, verify
 from .broker_process import check_request, journal, perform
-from .contracts import Rejected, canonical
+from .contracts import Rejected, canonical, digest
 from .execution import Executor
+from . import pilot_worker
 
 
 class Missing(Rejected):
@@ -35,14 +36,18 @@ def _invalid_number(_):
 
 
 class BrokerService:
-    def __init__(self, root, secret, workspaces, mode, image=None, port=0):
+    def __init__(self, root, secret, workspaces, mode, image=None, port=0, pilot_root=None):
         self.root, self.workspaces = Path(root).absolute(), Path(workspaces).absolute()
-        for path in (self.root, self.workspaces):
+        self.pilot_root = Path(pilot_root).absolute() if pilot_root is not None else None
+        for path in (self.root, self.workspaces, *([self.pilot_root] if self.pilot_root else [])):
             for component in (path, *path.parents):
                 if component.is_symlink() or (hasattr(component, "is_junction") and component.is_junction()):
                     raise Rejected("Broker service paths must not contain links")
-        if self.root == self.workspaces or self.root in self.workspaces.parents or self.workspaces in self.root.parents:
-            raise Rejected("Broker journal and workspaces must be separate directories")
+        for other in (self.workspaces, *([self.pilot_root] if self.pilot_root else [])):
+            if self.root == other or self.root in other.parents or other in self.root.parents:
+                raise Rejected("Broker journal, workspaces and pilot journal must be separate directories")
+        if self.pilot_root is not None and mode != "docker":
+            raise Rejected("Pilot routes require the Docker execution profile")
         if type(port) is not int or not 0 <= port <= 65535:
             raise Rejected("Invalid broker port")
         self.key = load_secret(secret)
@@ -81,6 +86,8 @@ class BrokerService:
                 if envelope is None:
                     raise Missing("No retained broker result")
             return {"schema_version": VERSION, "kind": route, "envelope": envelope, "identity": self.identity}
+        if route.startswith("pilot-"):
+            return self._pilot(route, body)
         operation = safe_id(body["operation_id"])
         if route == "retire":
             with file_lock(self.root / (operation + ".lock")):
@@ -92,6 +99,39 @@ class BrokerService:
                     "generation": body["generation"], "container_absent": absent}
         return {"schema_version": VERSION, "kind": "reconcile", "nonce": body["nonce"], "operation_id": operation,
                 "container_absent": self.executor.reconcile(operation)}
+
+    def _pilot(self, route, body):
+        """Docker pilot workers under the broker account. The scope must belong to the configured pilot journal."""
+        if self.pilot_root is None or self.profile["mode"] != "docker":
+            raise Rejected("Pilot routes are not enabled on this broker")
+        reply = {"schema_version": VERSION, "kind": route, "nonce": body["nonce"], "identity": self.identity}
+        if route == "pilot-profile":
+            if body["image"] != self.profile["image"]:
+                raise Rejected("Pilot image does not match the broker profile")
+            return {**reply, "profile": pilot_worker.profile("docker", self.profile["image"], self.identity)}
+        scope, phase = body["scope"], body["phase"]
+        if scope["executor"]["image"] != self.profile["image"] or scope["executor"]["broker"] != self.identity:
+            raise Rejected("Pilot scope was not prepared for this broker")
+        if Path(scope["journal_root"]).absolute() != self.pilot_root:
+            raise Rejected("Pilot scope belongs to another journal")
+        if route == "pilot-reconcile":
+            return {**reply, "container_absent": pilot_worker.reconcile(scope, phase)}
+        workspace = Path(body["workspace"]).absolute()
+        if workspace != self.pilot_root / scope["id"]:
+            raise Rejected("Unassigned pilot workspace")
+        scope_sha256 = digest(scope)
+        with file_lock(self.root / ("pilot-" + scope["id"] + ".lock")):
+            path = self.root / ("pilot-" + scope["id"] + "-" + phase + ".json")
+            if path.exists():
+                if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_REPLY:
+                    raise Rejected("Pilot worker journal unavailable")
+                retained = json.loads(path.read_text())
+                if retained.get("scope_sha256") != scope_sha256:
+                    raise Rejected("Pilot worker journal belongs to another scope")
+                return {**reply, "observation": retained["observation"], "output": retained["output"]}
+            observation, output = pilot_worker.execute(scope, phase, workspace, self.identity)
+            atomic_json(path, {"scope_sha256": scope_sha256, "phase": phase, "observation": observation, "output": output})
+        return {**reply, "observation": observation, "output": output}
 
     def _handler(service):
         class Handler(BaseHTTPRequestHandler):
@@ -128,7 +168,7 @@ class BrokerService:
                     self.send_error(400)
                     return
                 length = self.headers.get("Content-Length")
-                if not re.fullmatch("[0-9]{1,6}", length) or not 1 <= int(length) <= MAX_MESSAGE:
+                if not re.fullmatch("[0-9]{1,7}", length) or not 1 <= int(length) <= LIMITS.get(route, MAX_MESSAGE):
                     self.send_error(413)
                     return
                 raw = self.rfile.read(int(length))
