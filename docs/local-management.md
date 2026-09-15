@@ -1,5 +1,10 @@
 # Local management UI
 
+The [Task batches panel](workflow-batches.md) assembles up to 16 runnable tasks into
+reviewed serial scope, dispatches them to approval pauses, and inspects retained progress.
+Execution and abandonment require separate acknowledgements and server-checked bindings.
+Session changes clear drafts and inspections from the tab.
+
 The [Evidence review panel](evidence-review-ui.md) supports explicit review/policy
 selection, record inspection, claims assessment and selection downloads for bundle export.
 

@@ -51,6 +51,29 @@ class Application:
             parsed = urlsplit(path)
             query = parse_qs(parsed.query, keep_blank_values=True, max_num_fields=10)
             parts = parsed.path.strip("/").split("/")
+            if parts[0] == 'batches':
+                from .batches import Batches
+                batches = Batches(self.engine)
+                if method == 'GET' and parts == ['batches']:
+                    if payload or set(query) - {'after'} or ('after' in query and len(query['after']) != 1):
+                        raise Rejected('Invalid batch list fields')
+                    return 200, batches.list(query['after'][0] if 'after' in query else None)
+                if query: raise Rejected('Unexpected batch query')
+                if method == 'POST' and parts == ['batches']:
+                    return 201, batches.create(payload)
+                if method == 'GET' and len(parts) == 2:
+                    if payload: raise Rejected('Batch inspection accepts no payload')
+                    return 200, batches.inspect(parts[1])
+                if method == 'POST' and len(parts) == 3 and parts[2] in ('run', 'abandon'):
+                    required = {'scope_sha256', 'expected_revision'}
+                    if parts[2] == 'abandon': required |= {'task_id', 'expected_snapshot_sha256'}
+                    if not isinstance(payload, dict) or set(payload) != required:
+                        raise Rejected('Explicit batch scope required')
+                    if parts[2] == 'run':
+                        return 200, batches.run(parts[1], payload['scope_sha256'], payload['expected_revision'])
+                    return 200, batches.abandon(parts[1], payload['scope_sha256'], payload['expected_revision'],
+                                                payload['task_id'], payload['expected_snapshot_sha256'])
+                return 405, {'error': 'Unsupported batch route or method'}
             if method == "GET" and parts == ["tasks"]:
                 after, limit = page(query)
                 rows = self.engine.store.db.execute("SELECT rowid,id,state FROM tasks WHERE rowid>? ORDER BY rowid LIMIT ?", (after, limit + 1)).fetchall()
@@ -204,7 +227,7 @@ def serve(engine, port=8080):
                     or self.headers.get("Sec-Fetch-Site") == "cross-site"):
                 self.send_error(403)
                 return
-            assets = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"), "/style.css": ("style.css", "text/css; charset=utf-8")}
+            assets = {"/batches.js": ("batches.js", "text/javascript; charset=utf-8"), "/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"), "/style.css": ("style.css", "text/css; charset=utf-8")}
             if self.command == "GET" and self.path in assets:
                 name, mime = assets[self.path]
                 self.respond(200, (Path(__file__).with_name("ui") / name).read_bytes(), mime)

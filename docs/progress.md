@@ -16,7 +16,7 @@ an assumption that more UI features alone will make the system production-ready.
 | 3. Real AI adapters | Partial: fixture CLI transport and offline Copilot codec; live launch disabled; corporate protocol unknown |
 | 4. Isolated Docker worker | Implemented for bounded fixture edits/tests, with five host-specific isolation gates |
 | 5. Guardian/tool broker and policies | Implemented for the fixture workflow; broader tools and external brokers remain |
-| 6. Local management UI | Substantially implemented, including restart/replay, evidence and operator controls |
+| 6. Local management UI | Substantially implemented, including restart/replay, evidence, operator controls and reviewed serial batches |
 | 7. GitHub integration | Offline preview, ref comparison, reconciliation classifier and durable intent/reservation journal; platform actions still simulated; no live PR creation |
 | 8. Jira Data Center integration | Consolidated offline comments, Epic/Story/Task preparation, relationships, transitions, GitHub associations, durable journal, review/preflight and recovery; live deployment/admission remains blocked |
 | 9. Credential broker/auth hardening | Local session expiry, rotation/revocation, stale-client clearing and strict HTTP parsing implemented; production provider credentials/SSO remain |
@@ -88,6 +88,9 @@ expired results. It supplies unsigned local evidence, not production authorizati
    review. They run existing fixture tasks serially and preserve every approval pause;
    this does not admit concurrent workers or live integrations. Their two-task walkthrough
    is part of the consolidated release package.
+   The local UI supports draft assembly, explicit batch review/run, paginated inspection
+   and snapshot-bound abandonment through authenticated endpoints, with stale-response
+   and session-clearing checks. Individual task approvals remain separate.
 
 Missing corporate documentation does not prevent offline contract and broker development,
 but it does prevent a claim that the corporate provider is ready for use.

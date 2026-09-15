@@ -10,6 +10,8 @@ an executable report of the gates still blocking live providers.
 acceptance package and checks retained evidence against its source, lane and expiry.
 [Serial workflow batches](docs/workflow-batches.md) advance reviewed fixture task lists
 to their next approval boundaries with durable checkpoints and explicit interruption review.
+The local Task batches panel provides scope preparation, reviewed execution and recovery
+inspection through the same authenticated API and serial runner.
 The [offline GitHub request preview](docs/github-preview.md) begins external broker
 preparation with explicit destination checks and a digest of the proposed scope.
 [Portable evidence bundles](docs/github-evidence-bundles.md) package an explicitly
