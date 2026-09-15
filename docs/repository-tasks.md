@@ -98,7 +98,9 @@ Task plans, approvals, result snapshots and history use the existing append-only
 records/events and content-addressed artifacts. Standard workflow backup now
 includes that evidence, and replay/integrity checks cover it. The live pilot journal
 and disposable workspaces remain under `repository-pilots` and are **not** included
-in that backup; that journal has its own [audit and verified snapshots](pilot-journal-backups.md). Restoring the common database elsewhere preserves inspection but
+in that backup; that journal has its own [audit and verified snapshots](pilot-journal-backups.md)
+and can be [retired into a successor](pilot-journal-succession.md), which new tasks follow
+while existing ones keep using the journal their retained scope names. Restoring the common database elsewhere preserves inspection but
 does not restore execution authority: the scope is bound to the original store path
 and live journal. Create a fresh task to execute in another store.
 

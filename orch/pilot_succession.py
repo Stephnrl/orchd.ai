@@ -123,6 +123,48 @@ def retire(root, snapshot, expected_sha256, successor, reason, principal="local-
             "rows_deleted": 0, "restore_allowed": False, "live_authorized": False}
 
 
+def forward(root, limit=64):
+    """Every journal from `root` to the active one, oldest first, verifying each link.
+
+    A journal that does not exist yet is its own active journal, so a store can name
+    its pilot journal before the first pilot is prepared in it.
+    """
+    roots, cursor = [], real_path(root)
+    while True:
+        if str(cursor) in roots:
+            raise Rejected("Pilot journal succession forms a cycle")
+        if len(roots) >= limit:
+            raise Rejected("Pilot journal succession exceeds its inspection bound")
+        roots.append(str(cursor))
+        if not (cursor / "pilot.sqlite").is_file():
+            if len(roots) > 1:
+                raise Rejected("A successor journal named in the chain is missing")
+            return roots
+        pilot = Pilot(cursor, read_only=True)
+        try:
+            current = state(pilot)
+        finally:
+            pilot.close()
+        if current["successor"] is None:
+            return roots
+        successor = real_path(current["successor"])
+        if not (successor / "pilot.sqlite").is_file():
+            raise Rejected("A successor journal named in the chain is missing")
+        heir = Pilot(successor, read_only=True)
+        try:
+            back = state(heir)
+        finally:
+            heir.close()
+        if back["predecessor"] != str(cursor):
+            raise Rejected("A successor does not name this journal as its predecessor")
+        cursor = successor
+
+
+def active_journal(root):
+    """The journal at the end of the chain: the one a new pilot belongs in."""
+    return Path(forward(root)[-1])
+
+
 def chain(root, limit=64):
     """Walk from a journal to its oldest predecessor, read-only, verifying each link."""
     entries, seen, cursor = [], set(), real_path(root)

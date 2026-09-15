@@ -12,7 +12,7 @@ from orch.contracts import Rejected, canonical, digest
 from orch.pilot import Pilot
 from orch.pilot_backup import audit_journal, backup_journal
 from orch.pilot_retention import reclaim, usage
-from orch.pilot_succession import TABLE, chain, record, retire, state
+from orch.pilot_succession import TABLE, active_journal, chain, forward, record, retire, state
 
 ROOT = Path(__file__).resolve().parents[1]
 REASON = "Journal full; continuing in its successor"
@@ -253,6 +253,128 @@ class SuccessionTests(unittest.TestCase):
         self.assertEqual(walked["journal_count"], 2)
         self.assertEqual(walked["journals"][0]["predecessor"], str(self.pilot.root))
         self.assertEqual(cli("pilot-inspect", "--pilot-id", done["id"])["status"], "passed")
+
+
+class ForwardChainTests(unittest.TestCase):
+    git = fixtures.PilotTests.git
+    setUp, tearDown = SuccessionTests.setUp, SuccessionTests.tearDown
+    settle, snap, retire = SuccessionTests.settle, SuccessionTests.snap, SuccessionTests.retire
+
+    def test_a_journal_that_does_not_exist_yet_is_its_own_active_journal(self):
+        absent = self.root / "not-yet"
+        self.assertEqual(forward(absent), [str(absent.resolve())])
+        self.assertEqual(active_journal(absent), absent.resolve())
+
+    def test_the_active_journal_is_the_end_of_the_chain(self):
+        self.settle()
+        self.assertEqual(active_journal(self.pilot.root), self.pilot.root)
+        self.retire()
+        self.assertEqual(active_journal(self.pilot.root), self.successor.resolve())
+        self.assertEqual(forward(self.pilot.root), [str(self.pilot.root), str(self.successor.resolve())])
+        # The successor is active until it too is retired.
+        heir = Pilot(self.successor)
+        try:
+            prepared = heir.prepare(self.intent)
+            heir.run(prepared["id"], prepared["scope_sha256"], 0)
+        finally:
+            heir.close()
+        third = self.snap(root=self.successor)
+        retire(self.successor, third["destination"], third["sha256"], self.root / "journal-003", REASON)
+        self.assertEqual(active_journal(self.pilot.root), (self.root / "journal-003").resolve())
+        self.assertEqual(len(forward(self.pilot.root)), 3)
+
+    def test_a_broken_forward_link_is_refused_rather_than_skipped(self):
+        self.settle()
+        self.retire()
+        forged = {**record(self.pilot, "retired"), "successor": str(self.root / "absent")}
+        self.pilot.db.execute("UPDATE " + TABLE + " SET record=?,hash=? WHERE role='retired'",
+                              (canonical(forged).decode(), digest(forged)))
+        with self.assertRaisesRegex(Rejected, "successor journal named in the chain is missing"):
+            forward(self.pilot.root)
+        unrelated = Pilot(self.root / "unrelated")
+        try:
+            unrelated.prepare(self.intent)
+        finally:
+            unrelated.close()
+        forged = {**record(self.pilot, "retired"), "successor": str((self.root / "unrelated").resolve())}
+        self.pilot.db.execute("UPDATE " + TABLE + " SET record=?,hash=? WHERE role='retired'",
+                              (canonical(forged).decode(), digest(forged)))
+        with self.assertRaisesRegex(Rejected, "does not name this journal as its predecessor"):
+            forward(self.pilot.root)
+
+
+class KernelSuccessionTests(unittest.TestCase):
+    """The repository task kernel keeps working across a retired journal."""
+    git = fixtures.PilotTests.git
+
+    def setUp(self):
+        fixtures.PilotTests.setUp(self)
+        self.pilot.close()
+        from orch.engine import Engine
+        from orch.execution import Executor
+        self.engine = Engine(self.root / "store", Executor("trusted-fixture"))
+        self.counter = 0
+
+    def tearDown(self):
+        self.engine.close()
+        self.tmp.cleanup()
+
+    def base(self):
+        return self.engine.store.root / "repository-pilots"
+
+    def finish(self, task):
+        for expected in ("AWAITING_ACTION_APPROVAL", "COMPLETED"):
+            state = self.engine.task(task)["state"]
+            self.engine.approve(task, state["pending_approval"]["id"], "approve", state["revision"])
+            self.assertEqual(self.engine.run(task)["state"]["state"], expected)
+
+    def retire_kernel_journal(self, successor):
+        self.counter += 1
+        destination = self.root / ("kernel-snapshot-%02d" % self.counter)
+        created = backup_journal(self.base(), destination)
+        return retire(self.base(), destination, created["sha256"], successor, REASON)
+
+    def test_tasks_continue_in_the_successor_and_earlier_ones_stay_readable(self):
+        from orch.maintenance import audit
+        from orch.repository_tasks import RepositoryTasks
+        first = self.engine.create_repository_task(self.intent, "Before retirement")
+        self.finish(first)
+        self.assertEqual(self.retire_kernel_journal(self.root / "pilots-002")["status"], "retired")
+        # A new task is prepared in the successor, not refused.
+        second = self.engine.create_repository_task(self.intent, "After retirement")
+        self.finish(second)
+        self.assertEqual(active_journal(self.base()), (self.root / "pilots-002").resolve())
+        plans = {}
+        for task in (first, second):
+            state, _ = self.engine.store.task(task)
+            plan = self.engine.store.get(state["plan"], task, "RepositoryTaskPlan")
+            plans[task] = json.loads(self.engine.store.read_artifact(plan["scope"], task))["journal_root"]
+        self.assertEqual(plans[first], str(self.base()))
+        self.assertEqual(plans[second], str((self.root / "pilots-002").resolve()))
+        # Both remain inspectable through their own journals.
+        kernel = RepositoryTasks(self.engine)
+        self.assertEqual(kernel.diagnostics(first)["pilot"]["status"], "passed")
+        self.assertEqual(kernel.diagnostics(second)["pilot"]["status"], "passed")
+        self.assertEqual(self.engine.task(first)["state"]["state"], "COMPLETED")
+        audit(self.engine.store)
+
+    def test_a_journal_outside_the_store_chain_is_refused(self):
+        from orch.repository_tasks import RepositoryTasks
+        task = self.engine.create_repository_task(self.intent, "Bound task")
+        self.finish(task)
+        kernel = RepositoryTasks(self.engine)
+        elsewhere = Pilot(self.root / "outside")
+        try:
+            elsewhere.prepare(self.intent)
+        finally:
+            elsewhere.close()
+        with self.assertRaisesRegex(Rejected, "outside this store succession chain"):
+            kernel._pilot(read_only=True, journal=self.root / "outside")
+        opened = kernel._pilot(read_only=True, journal=self.base())
+        try:
+            self.assertTrue(opened.root)
+        finally:
+            opened.close()
 
 
 if __name__ == "__main__":
