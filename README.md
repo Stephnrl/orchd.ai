@@ -108,3 +108,9 @@ python scripts/validate_contracts.py
 The executable slice ends with a **simulated** PR. Actual GitHub/Jira brokers,
 production actions, scheduling, retrieval, memory, and concurrent workers are deferred.
 Opening the design PR itself is repository collaboration, not an implemented platform feature.
+
+## Local repository pilot
+
+Use the [bounded Git JSON pilot](docs/repository-pilot.md) to prepare, review and
+test a small data change in a disposable workspace with durable recovery inspection.
+Run `python scripts/pilot_acceptance.py` for its disposable end-to-end walkthrough.
