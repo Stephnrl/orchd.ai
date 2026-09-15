@@ -3,7 +3,9 @@
 This milestone admits an operator-supplied, ordinary local Git checkout for a
 small JSON data change. It captures a real commit baseline, prepares an exact
 diff, requires explicit scope/revision approval, writes a disposable workspace,
-runs trusted JSON assertions and retains a durable result. The source checkout
+runs trusted JSON assertions and retains a durable result. An optional
+[restricted Docker worker profile](pilot-container-workers.md) now runs edit and
+test in separate containers with retained dispatch and cleanup evidence. The source checkout
 is never modified. No repository programs, package managers, hooks, model
 providers or integration writes run.
 
@@ -85,7 +87,9 @@ Restart and inspect: `observed_files` shows retained hashes and `recovery` says
 retry. Keep that workspace for investigation; prepare and review a new unique
 scope if another attempt is appropriate. Completed receipts bind the scope and
 actual file hashes; changed or unexpected files make `matches_receipt` false.
-No workspace cleanup, archive, resume or automatic retention deletion is enabled.
+Docker reservations additionally support explicit, ownership-checked container
+reconciliation, ending in `interrupted` once absence is confirmed. This never
+retries work. No workspace cleanup, archive, resume or automatic retention deletion is enabled.
 The journal caps retained preparations at 128. Standard workflow backup commands
 do not include this separate pilot database or its workspaces.
 
@@ -97,8 +101,9 @@ interruption and rejection of a repeated attempt. The offline/full release lane
 includes this acceptance. Unit tests cover Git filters, stale baseline/index,
 approval/source/expiry fences, byte budgets, path constraints and tampering.
 
+The optional Docker profile has separate opt-in host/image qualification checks.
 Next, integrate an explicitly selected workload with the kernel and broker,
-qualify its trusted test image, and add an independently reviewed proposal-only
+qualify the deployment's trusted test image, and add an independently reviewed proposal-only
 provider. Custom executable tests require a separate containment milestone.
 
 ## Rivet references and language decision

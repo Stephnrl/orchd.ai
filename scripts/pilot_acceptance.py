@@ -1,4 +1,5 @@
 """Exercise CLI review, approval, restart and interrupted-run inspection in disposable Git."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,11 @@ from orch.contracts import Rejected
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--image', help='Opt in to real Docker workers using this preloaded digest-pinned image')
+    args = parser.parse_args()
+    worker_args = ['--pilot-executor', 'docker', '--image', args.image] if args.image else []
+    worker_config = {'executor': 'docker', 'image': args.image} if args.image else {}
     with tempfile.TemporaryDirectory(prefix='orchd-pilot-') as directory:
         root = Path(directory)
         repo, data = root / 'repository', root / 'journal'
@@ -24,7 +30,7 @@ def main():
             return subprocess.check_output(['git', '-c', 'core.autocrlf=false', '-c', 'core.hooksPath='+os.devnull,
                                             '-C', str(repo), *args], env=env, stderr=subprocess.DEVNULL).decode().strip()
         def cli(*args):
-            return json.loads(subprocess.check_output([sys.executable, '-m', 'orch', *args, '--data', str(data)], cwd=ROOT))
+            return json.loads(subprocess.check_output([sys.executable, '-m', 'orch', *args, '--data', str(data), *worker_args], cwd=ROOT))
         git('init')
         (repo / 'settings.json').write_bytes(b'{"service":{"retries":1}}\n')
         git('add', '.')
@@ -41,7 +47,7 @@ def main():
         result = cli('pilot-run', '--pilot-id', prepared['id'], '--expected-sha256', prepared['scope_sha256'], '--expected-revision', '0')
         assert result['status'] == 'passed' and result['matches_receipt']
         assert cli('pilot-inspect', '--pilot-id', prepared['id']) == result
-        pilot = Pilot(data)
+        pilot = Pilot(data, **worker_config)
         try:
             interrupted = pilot.prepare(intent)
             with patch('orch.pilot.evaluate', side_effect=RuntimeError('Injected process interruption')):
@@ -51,15 +57,21 @@ def main():
         finally: pilot.close()
         recovery = cli('pilot-inspect', '--pilot-id', interrupted['id'])
         assert recovery['status'] == 'reserved' and recovery['recovery'] == 'retain_and_inspect'
-        pilot = Pilot(data)
+        pilot = Pilot(data, **worker_config)
         try:
             try: pilot.run(interrupted['id'], interrupted['scope_sha256'], 0)
             except Rejected: pass
             else: raise AssertionError('Interrupted reservation was reused')
         finally: pilot.close()
+        if worker_args:
+            recovered = cli('pilot-reconcile', '--pilot-id', interrupted['id'], '--expected-sha256', interrupted['scope_sha256'], '--expected-revision', '1')
+            assert recovered['status'] == 'interrupted' and recovered['receipt'] is None
+            assert all(recovered['workers']['cleanup'][-1]['absent'].values())
+            assert all(entry['observation']['container_absent'] for entry in result['workers']['phases'].values())
+            assert result['workers']['phases']['edit']['identity']['name'] != result['workers']['phases']['test']['identity']['name']
         assert (repo / 'settings.json').read_bytes() == b'{"service":{"retries":1}}\n'
         assert git('status', '--porcelain') == ''
-    print('PASS: disposable Git pilot CLI review, exact approval, trusted checks, restart and no-retry recovery')
+    print('PASS: disposable Git pilot CLI review, exact approval, trusted checks, restart and no-retry recovery (' + ('Docker' if args.image else 'local data') + ')')
 
 
 if __name__ == '__main__':

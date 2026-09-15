@@ -263,6 +263,13 @@ justifies it.
 
 ## Decisions to resolve before enabling real execution
 
+The [pilot container-worker milestone](pilot-container-workers.md) extends the
+Git JSON pilot with two restricted containers, runtime-bound approval, per-phase
+durable dispatch and ownership-checked cleanup after interruption. It adds real
+Docker acceptance for the pilot while preserving the existing five fixture gates.
+Custom executable recipes, generalized kernel tasks and separate broker identity
+are subsequent boundaries; fixed Python recipes remain sufficient here.
+
 Confirm corporate source-sharing rules and CLI tool-disable/SSO behavior; select approved
 image digests and dependency sources; set artifact retention/quotas; choose operator
 identity provisioning; validate Docker Desktop isolation against corporate policy.
