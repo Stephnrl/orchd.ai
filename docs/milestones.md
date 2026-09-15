@@ -269,6 +269,10 @@ shared evidence/replay/backup and explicit recovery across the pilot/kernel comm
 boundary. It adds authenticated task controls and browser acceptance while rejecting
 fixture-batch adoption and remote-action claims for this workload.
 
+The [security acceptance milestone](security-acceptance.md) binds each mandatory
+criterion to the tests that exercise it, runs them as a release-lane stage and reports
+coverage, Docker-gated evidence, other stages and deferred limits per criterion.
+
 The broker secret rotation follow-up in [the broker service](broker-service.md) adds a
 two-secret overlap window, live re-read without restart, replies signed with the
 authenticating secret, `broker-rotate-secret`, and reported freshness that keeps the

@@ -98,7 +98,8 @@ Read in order:
 1. [Architecture and repository layout](docs/architecture.md)
 2. [Persisted workflow and recovery](docs/workflow.md)
 3. [Contract rules and interfaces](docs/contracts.md)
-4. [Threat model and security acceptance criteria](docs/security.md)
+4. [Threat model and security acceptance criteria](docs/security.md), checked against the
+   tests that exercise them by [security acceptance](docs/security-acceptance.md)
 5. [MVP milestones and testing strategy](docs/milestones.md)
 
 Machine-readable contracts live in `contracts/v1/contracts.schema.json`; proposed
