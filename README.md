@@ -125,6 +125,8 @@ means human acceptance of a validated local snapshot.
 Use the [bounded Git JSON pilot](docs/repository-pilot.md) to prepare, review and
 test a small data change in a disposable workspace with durable recovery inspection.
 Run `python scripts/pilot_acceptance.py` for its disposable end-to-end walkthrough.
+[Pilot journal snapshots](docs/pilot-journal-backups.md) audit the retained scopes,
+receipts and reclamation records and copy them into a verified bundle that cannot execute.
 [Reviewed pilot retention](docs/pilot-retention.md) reports journal and workspace usage
 and reclaims a terminal pilot's disposable workspace after explicit review, retaining
 every journal row, receipt and kernel snapshot.
