@@ -73,6 +73,9 @@ failures: preparing a pilot, advancing one, or reclaiming a workspace after the 
 all show up here. The command tells an operator what has changed since the snapshot; it
 never reconciles, restores or retries.
 
+A verified snapshot is also what [journal succession](pilot-journal-succession.md)
+requires before retiring a full journal.
+
 ## Boundaries
 
 There is no restore command. Recreating a journal elsewhere would not recreate execution

@@ -269,6 +269,10 @@ shared evidence/replay/backup and explicit recovery across the pilot/kernel comm
 boundary. It adds authenticated task controls and browser acceptance while rejecting
 fixture-batch adoption and remote-action claims for this workload.
 
+The [journal succession milestone](pilot-journal-succession.md) adds
+`pilot-journal-retire` and `pilot-journal-chain`, closing a settled journal against a
+verified snapshot and continuing in a recorded successor without deleting a row.
+
 The [pilot journal snapshot milestone](pilot-journal-backups.md) adds
 `pilot-journal-audit`, `pilot-journal-backup`, `pilot-verify-journal-backup` and
 `pilot-compare-journal-backup`, mirroring the existing journal backup pattern for the

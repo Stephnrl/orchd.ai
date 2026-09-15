@@ -133,6 +133,34 @@ def walkthrough(root, repo, data, worker_args, worker_config, args):
     comparison = json.loads(drifted.stdout)
     assert comparison['status'] == 'different' and not comparison['restore_allowed']
     assert comparison['binding']['differences'] == [{'id': fresh['id'], 'reasons': ['missing_from_backup']}]
+    # Journal succession: retire a settled journal and continue in its successor.
+    # Retirement refuses while any pilot could still run, so settle the interrupted one first.
+    cli('pilot-abandon', '--pilot-id', fresh['id'], '--expected-sha256', fresh['scope_sha256'], '--expected-revision', '0')
+    settling = cli('pilot-inspect', '--pilot-id', interrupted['id'])
+    if settling['status'] == 'reserved':
+        settling = cli('pilot-reconcile', '--pilot-id', interrupted['id'], '--expected-sha256', settling['scope_sha256'],
+                       '--expected-revision', str(settling['revision']))
+    assert settling['status'] == 'interrupted'
+    final = cli('pilot-journal-backup', '--destination', str(root / 'journal-backup-final'))
+    successor_root = root / 'journal-successor'
+    retired = cli('pilot-journal-retire', '--destination', str(root / 'journal-backup-final'),
+                  '--expected-sha256', final['sha256'], '--successor', str(successor_root),
+                  '--reason', 'Acceptance walkthrough finished; continuing in the successor')
+    assert retired['status'] == 'retired' and retired['rows_deleted'] == 0 and not retired['restore_allowed']
+    usage_after = cli('pilot-usage')
+    assert usage_after['journal_status'] == 'retired' and usage_after['journal_rows'] == final['record_count']
+    refused = subprocess.run([sys.executable, '-m', 'orch', 'pilot-prepare', '--intent', str(intent_file),
+                              '--data', str(data), *worker_args], cwd=ROOT, capture_output=True, text=True)
+    assert refused.returncode == 2, 'a retired journal must refuse a new pilot'
+    def successor_cli(*argv):
+        return json.loads(subprocess.check_output([sys.executable, '-m', 'orch', *argv, '--data', str(successor_root), *worker_args], cwd=ROOT))
+    assert successor_cli('pilot-prepare', '--intent', str(intent_file))['status'] == 'prepared'
+    walked = successor_cli('pilot-journal-chain')
+    assert walked['journal_count'] == 2 and walked['rows_deleted'] == 0
+    assert walked['journals'][0]['predecessor'] == str(data.resolve()) and walked['journals'][1]['status'] == 'retired'
+    # Retirement deletes nothing: every earlier pilot is still inspectable in place.
+    assert cli('pilot-inspect', '--pilot-id', prepared['id'])['reclamation'] == 'reclaimed'
+    assert cli('pilot-inspect', '--pilot-id', interrupted['id'])['id'] == interrupted['id']
     assert (repo / 'settings.json').read_bytes() == b'{"service":{"retries":1}}\n'
     assert git('status', '--porcelain') == ''
     if args.broker:

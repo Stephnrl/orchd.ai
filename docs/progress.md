@@ -1,5 +1,11 @@
 # Roadmap progress — September 15, 2026
 
+The [journal succession milestone](pilot-journal-succession.md) closes the last documented
+dead end in pilot retention: a full journal now retires against a verified snapshot and
+continues in a recorded successor, with the link checked in both directions and the chain
+walkable read-only. It deletes no row, changes no pilot and keeps the retired journal
+inspectable, reconcilable and reclaimable; only preparation stops.
+
 The [pilot journal snapshot milestone](pilot-journal-backups.md) gives the pilot journal
 the audit and verified backup the GitHub and Jira journals already had: a
 workspace-independent integrity audit, a two-file bundle bound by manifest digest,
