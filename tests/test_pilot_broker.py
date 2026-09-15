@@ -81,6 +81,25 @@ class PilotBrokerTests(unittest.TestCase):
         self.assertEqual(self.pilot.inspect(prepared['id']), result)
         with self.assertRaises(Rejected): self.run_pilot(prepared)
 
+    def test_another_spelling_of_the_pilot_journal_is_the_same_journal(self):
+        """Hosted Windows CI hands every temporary path an 8.3 short name, and `.` or `..`
+        segments do the same everywhere; the broker must not read those as another journal."""
+        for spelling in (self.journal.parent / '.' / self.journal.name, self.journal / '..' / self.journal.name):
+            with self.subTest(spelling=str(spelling)):
+                self.harness.service.pilot_root = spelling
+                prepared = self.pilot.prepare(self.intent)
+                with patch.object(worker, 'execute', side_effect=self.fake_execute):
+                    self.assertEqual(self.run_pilot(prepared)['status'], 'passed')
+        self.harness.service.pilot_root = self.journal.absolute()
+        # A genuinely different journal is still refused through every spelling.
+        other = self.root / 'other-journal'
+        other.mkdir()
+        self.harness.service.pilot_root = other
+        prepared = self.pilot.prepare(self.intent)
+        with patch.object(worker, 'execute', side_effect=self.fake_execute) as execute:
+            with self.assertRaises(Rejected): self.run_pilot(prepared)
+            execute.assert_not_called()
+
     def test_service_scope_cannot_run_directly_and_direct_scope_cannot_use_service(self):
         prepared = self.pilot.prepare(self.intent)
         direct = Pilot(self.journal, executor='docker', image=IMAGE)
