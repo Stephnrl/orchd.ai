@@ -100,9 +100,46 @@ class RepositoryTaskTests(unittest.TestCase):
         self.assertEqual(self.engine.task(task)['state']['state'], 'IMPLEMENTING')
         self.assertEqual(self.engine.run(task)['state']['state'], 'BLOCKED')
         state = self.engine.task(task)['state']
+        diagnostics = self.engine.recovery_diagnostics(task)
+        self.assertEqual(diagnostics['recovery_status'], 'preconditions_met')
+        self.assertFalse(diagnostics['runtime_checked'])
+        pilot = diagnostics['pilot']
+        self.assertEqual((pilot['status'], pilot['revision'], pilot['reclamation'], pilot['recovery']), ('prepared', 0, None, 'none'))
+        self.assertFalse(pilot['reclaimable'])
+        self.assertIn('Bound kernel task is not terminal', pilot['reclamation_blockers'])
+        self.assertEqual(pilot['unresolved_dispatches'], [])
         self.assertEqual(self.engine.recover(task, state['revision'])['state']['state'], 'FAILED')
         self.assertEqual(self.engine.run(task)['state']['state'], 'FAILED')
+        after = self.engine.recovery_diagnostics(task)
+        self.assertEqual(after['recovery_status'], 'not_applicable')
+        self.assertEqual(after['pilot']['status'], 'abandoned')
+        self.assertTrue(after['pilot']['reclaimable'])
         audit(self.engine.store)
+
+    def test_diagnostics_and_pilot_usage_api_are_read_only_and_survive_missing_journal(self):
+        task = self.create()
+        app = Application(self.engine)
+        code, report = app.dispatch('GET', '/pilot-usage', {}, app.session)
+        self.assertEqual(code, 200)
+        self.assertNotIn('journal_root', report)
+        self.assertEqual((report['journal_rows'], report['live_pilots'], report['reclaimable']), (1, 1, 0))
+        self.assertEqual(app.dispatch('GET', '/pilot-usage', {}, 'wrong')[0], 401)
+        self.assertEqual(app.dispatch('GET', '/pilot-usage?after=1', {}, app.session)[0], 409)
+        self.assertEqual(app.dispatch('POST', '/pilot-usage', {}, app.session)[0], 404)
+        code, diagnostics = app.dispatch('GET', f'/tasks/{task}/recovery-diagnostics', {}, app.session)
+        self.assertEqual(code, 200)
+        self.assertEqual(diagnostics['pilot']['status'], 'prepared')
+        journal = self.engine.store.root / 'repository-pilots'
+        (journal / 'pilot.sqlite').rename(journal / 'pilot.sqlite.moved')
+        try:
+            self.assertEqual(app.dispatch('GET', '/pilot-usage', {}, app.session)[0], 409)
+            code, diagnostics = app.dispatch('GET', f'/tasks/{task}/recovery-diagnostics', {}, app.session)
+            self.assertEqual(code, 200)
+            self.assertIsNone(diagnostics['pilot'])
+            self.assertTrue(any('unavailable for inspection' in reason for reason in diagnostics['reasons']))
+        finally:
+            (journal / 'pilot.sqlite.moved').rename(journal / 'pilot.sqlite')
+        self.assertEqual(app.dispatch('GET', '/pilot-usage', {}, app.session)[0], 200)
 
     def test_partial_local_data_run_reconciles_only_after_writer_lock_released(self):
         task = self.create()

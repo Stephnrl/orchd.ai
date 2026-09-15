@@ -196,11 +196,29 @@ class RepositoryTasks:
             return self.engine.task(task)
 
     def diagnostics(self, task):
+        """Persisted task preconditions plus the retained pilot's state. No container, daemon or broker is probed."""
+        import sqlite3
+        from .pilot_retention import eligibility
         state, context = self.store.task(task)
-        self._scope(state, context)
+        _, scope = self._scope(state, context)
         applicable = state['state'] == 'BLOCKED' and bool(state['active_operation_id'])
+        reasons = ['Repository recovery inspects the retained pilot and reconciles containers; it never retries execution.']
+        pilot_report = None
+        try:
+            pilot = self._pilot(read_only=True)
+            try:
+                report = pilot.inspect(scope['id'])
+                blockers, _ = eligibility(pilot, scope['id'], report)
+            finally: pilot.close()
+            workers = report.get('workers') or {'phases': {}}
+            pilot_report = {'id': scope['id'], 'status': report['status'], 'revision': report['revision'], 'recovery': report['recovery'],
+                            'reclamation': report['reclamation'], 'matches_receipt': report['matches_receipt'],
+                            'unresolved_dispatches': sorted(p for p, e in workers['phases'].items() if e['status'] == 'dispatched'),
+                            'reclaimable': not blockers, 'reclamation_blockers': blockers}
+        except (Rejected, OSError, sqlite3.Error, KeyError, TypeError, ValueError) as exc:
+            reasons.append('Retained pilot is unavailable for inspection: ' + (str(exc) if isinstance(exc, Rejected) else type(exc).__name__))
         return {'task_id': task, 'revision': state['revision'], 'recovery_status': 'preconditions_met' if applicable else 'not_applicable',
-                'reasons': ['Repository recovery inspects the retained pilot and reconciles containers; it never retries execution.'],
+                'reasons': reasons, 'pilot': pilot_report,
                 'runtime_checked': False, 'next_step': 'Recover using this task revision; missing journals or changed runtime will block cleanup.'}
 
     def recover(self, task, expected_revision, principal='local-operator'):

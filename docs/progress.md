@@ -1,5 +1,11 @@
 # Roadmap progress — September 15, 2026
 
+The [operator visibility follow-up](pilot-operator-visibility.md) completes the
+retention milestone's deferred operator surface: `GET /pilot-usage` and a **Check pilot
+usage** button in the store maintenance panel, the retained pilot's state and
+reclamation eligibility inside repository-task recovery diagnostics, and a required,
+audited `--reason` on live `pilot-reclaim`. Reclamation stays a reviewed CLI action.
+
 The [broker service milestone](broker-service.md) adds `broker-serve`, a loopback HTTP
 broker the operator can start under a separate OS account, an HMAC-authenticated
 five-route transport for fixture edits/tests, broker-owned journals and Docker

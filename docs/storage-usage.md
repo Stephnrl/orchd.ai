@@ -8,6 +8,9 @@ maintenance panel. It displays artifact quota headroom, orphan/GC counts and mis
 or mismatched references, with the report timestamp and expandable JSON details.
 Reports are requested manually. A new request clears the previous report; busy or
 failed requests show no stale result. Storage reporting is not an integrity verdict.
+The same panel offers **Check pilot usage**, the read-only
+[pilot retention report](pilot-retention.md) for the store's repository pilot journal
+over authenticated `GET /pilot-usage`; see [operator visibility](pilot-operator-visibility.md).
 
 ```sh
 python -m orch storage-usage --data .runtime/managed

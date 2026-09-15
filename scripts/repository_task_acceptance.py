@@ -80,7 +80,8 @@ def main():
         assert report['journal_rows'] == 2 and report['reclaimable'] == 2, report
         for entry in report['pilots']:
             assert pilot_cli('pilot-reclaim', '--pilot-id', entry['id'], '--expected-sha256', pilot_cli('pilot-inspect', '--pilot-id', entry['id'])['scope_sha256'],
-                             '--expected-revision', str(pilot_cli('pilot-inspect', '--pilot-id', entry['id'])['revision']))['deleted']
+                             '--expected-revision', str(pilot_cli('pilot-inspect', '--pilot-id', entry['id'])['revision']),
+                             '--reason', 'Acceptance task finished; kernel snapshots retained')['deleted']
         assert pilot_cli('pilot-usage')['live_pilots'] == 0
         engine = Engine(store, executor)
         try:

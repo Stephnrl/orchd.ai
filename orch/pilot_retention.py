@@ -139,9 +139,20 @@ def usage(pilot):
             'status_counts': dict(sorted(counts.items())), 'workspace_bytes': total_bytes, 'reclaimable': reclaimable, 'pilots': pilots}
 
 
-def reclaim(pilot, identifier, expected_hash, revision, dry_run=False):
+def review_reason(reason):
+    """One audited line, like a cancellation reason: bounded, printable and never secret-shaped."""
+    from .contracts import redact
+    if not isinstance(reason, str): raise Rejected('Reclamation reason required')
+    reason = reason.strip()
+    if not 1 <= len(reason) <= 500 or any(ord(c) < 32 or ord(c) == 127 for c in reason) or redact(reason) != reason:
+        raise Rejected('Invalid reclamation reason')
+    return reason
+
+
+def reclaim(pilot, identifier, expected_hash, revision, dry_run=False, reason=None, principal='local-operator'):
     """Delete only the disposable workspace after explicit review. Never retries work or deletes evidence."""
     from .broker import file_lock
+    if not dry_run or reason is not None: reason = review_reason(reason)
     lock = plain(pilot.root / '.pilot-worker.lock')
     if lock.exists() and lock.stat().st_nlink != 1: raise Rejected('Worker lock hardlink')
     with file_lock(lock):
@@ -167,9 +178,11 @@ def reclaim(pilot, identifier, expected_hash, revision, dry_run=False):
             else:
                 record = {'pilot_id': identifier, 'scope_sha256': expected_hash, 'pilot_status': status, 'pilot_revision': current_revision,
                           'status': 'reclaiming', 'inventory': files, 'directories': directories, 'bytes': sum(f['bytes'] for f in files),
-                          'task': task, 'started_at': now(), 'completed_at': None}
+                          'task': task, 'started_at': now(), 'completed_at': None, 'reason': reason, 'principal': principal}
+            # A resumed reclamation keeps the reason recorded with its durable intent.
             plan = {'id': identifier, 'scope_sha256': expected_hash, 'dry_run': dry_run, 'recorded': False, 'deleted': False, 'abandons': abandons,
-                    'files': [f['path'] for f in files], 'bytes': sum(f['bytes'] for f in files), 'reclamation': record['status']}
+                    'files': [f['path'] for f in files], 'bytes': sum(f['bytes'] for f in files), 'reclamation': record['status'],
+                    'reason': record.get('reason')}
             if dry_run:
                 pilot.db.execute('ROLLBACK')
                 return plan

@@ -25,6 +25,13 @@ create retirement markers, advance generations, record events, or invoke recover
 `runtime_checked` is always false. A busy dispatcher returns 409 rather than an
 uncoordinated report. The report is advisory and can become stale immediately.
 
+For repository JSON tasks the report also carries a `pilot` section read from the
+retained pilot journal: status, revision, recovery hint, reclamation state, whether the
+workspace still matches its receipt, any unresolved worker dispatch phases, and the
+exact reasons the workspace is or is not reclaimable. It is `null`, with an explaining
+reason, when the journal is missing or fails integrity checks. Reading it inspects the
+pilot journal and workspace hashes only; no container, daemon or broker is contacted.
+
 Recovery remains an explicit action using the existing API or CLI:
 
 The local UI now also provides **Attempt recovery**. Review the evidence and select

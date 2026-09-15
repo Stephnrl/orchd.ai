@@ -124,5 +124,8 @@ Run `python scripts/pilot_acceptance.py` for its disposable end-to-end walkthrou
 [Reviewed pilot retention](docs/pilot-retention.md) reports journal and workspace usage
 and reclaims a terminal pilot's disposable workspace after explicit review, retaining
 every journal row, receipt and kernel snapshot.
+[Operator visibility](docs/pilot-operator-visibility.md) adds the pilot usage report to
+the local UI, the pilot's state to repository-task recovery diagnostics, and an audited
+reason to every live reclamation.
 The optional [Docker worker profile](docs/pilot-container-workers.md) uses separate
 restricted edit/test containers with runtime-bound approvals and explicit recovery.
