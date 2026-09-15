@@ -5,6 +5,52 @@ in that order to their next approval pause or terminal state. Each task keeps it
 normal specification, policy, evidence and human approval requirements. Batches do
 not approve tasks, create tasks, enable live providers, or run concurrent workers.
 
+## Local UI
+
+Select a runnable task and choose **Add to batch**. The **Task batches** panel opens
+with an ordered draft; add up to 16 tasks or remove entries before creating scope.
+The draft holds the revisions you inspected. If a task changes, creation is rejected;
+refresh that task and add it again to update its draft revision.
+
+**Create reviewed scope** persists the list without running it. Inspect its entries
+and scope details, check the separate execution acknowledgement, then choose
+**Run reviewed batch**. Every task still stops for its individual approvals. Review
+checkboxes clear whenever inspection is replaced or refreshed. Loading a saved batch
+after restart never dispatches it.
+
+Use **Load batches** and **Load more batches** to find retained work. **Inspect task**
+opens the normal task/evidence view. Resolve interrupted work, refresh batch inspection,
+choose the entry, acknowledge the tracking-only consequence and choose **Abandon selected
+entry**. The server checks scope, journal revision and current task snapshot and refuses
+active work. UI eligibility is an aid; server scope and recovery checks are decisive.
+
+Failed or uncertain requests clear actionable inspection state. Load and inspect the
+retained batch before retrying; a lost response does not establish that no work ran.
+Session expiry, rotation and revocation clear drafts and displayed batch data from the
+tab. They do not delete journals or cancel already admitted batch work. Scope creation,
+execution and abandonment are separate actions; a draft never grants task approval.
+
+## Authenticated API
+
+All routes use the existing loopback Host/Origin restrictions and operator bearer
+session. POST requests use JSON with only the exact documented fields.
+
+| Route | Request |
+| --- | --- |
+| `GET /batches` | Optional single `after` cursor; fixed 50-item page |
+| `POST /batches` | `tasks` list as shown below |
+| `GET /batches/BATCH_ID` | No body or query; journal plus current task observations |
+| `POST /batches/BATCH_ID/run` | `scope_sha256`, `expected_revision` |
+| `POST /batches/BATCH_ID/abandon` | `scope_sha256`, `expected_revision`, `task_id`, `expected_snapshot_sha256` |
+
+Creation returns 201; reads and returned execution/abandonment journals return 200.
+An execution response can contain a retained `running` reservation requiring review;
+HTTP 200 means a journal was returned, not that every task completed. Invalid/stale
+requests return 409; missing/expired sessions return 401. There is no batch approval
+endpoint. These routes expose the same bounded serial runner as the CLI.
+
+## CLI
+
 Save a request file using real task IDs and their current task revisions:
 
 ```json

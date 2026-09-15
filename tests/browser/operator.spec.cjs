@@ -387,6 +387,59 @@ test('event history reports an outage and retries without duplicate events', asy
   expect(await readTask(page, operator, task)).toEqual(snapshot);
 });
 
+test('batch UI prepares two tasks, requires review and stops at individual approvals', async ({page,operator}) => {
+  await connect(page,operator.token);
+  const ids=[];
+  for(const title of ['Batch <script>literal</script>','Second batch fixture']) {
+    await page.locator('#title').fill(title);await page.locator('#create button').click();
+    await expect(page.locator('#task-title')).toHaveText(title);
+    ids.push(await page.locator('#task-id').textContent());
+    await page.locator('#batch-add').click();
+  }
+  await expect(page.locator('#batch-draft li')).toHaveCount(2);
+  await expect(page.locator('#batch-draft')).toContainText('Batch <script>literal</script>');
+  await page.locator('#batch-create').click();
+  await expect(page.locator('#batch-detail')).toBeVisible();
+  await expect(page.locator('#batch-entries li')).toHaveCount(2);
+  for(const task of ids) expect((await readTask(page,operator,task)).state.state).toBe('SPEC_READY');
+  await expect(page.locator('#batch-run')).toBeDisabled();
+  await page.locator('#batch-reviewed').check();await expect(page.locator('#batch-run')).toBeEnabled();
+  await page.locator('#batch-refresh').click();await expect(page.locator('#batch-reviewed')).not.toBeChecked();
+  await expect(page.locator('#batch-status')).toContainText('Inspection loaded');
+  await page.locator('#batch-reviewed').check();await page.locator('#batch-run').click();
+  await expect(page.locator('#batch-entries')).toContainText('AWAITING_PLAN_APPROVAL');
+  await expect(page.locator('#batch-reviewed')).not.toBeChecked();await expect(page.locator('#batch-run')).toBeDisabled();
+  for(const task of ids) expect((await readTask(page,operator,task)).state.state).toBe('AWAITING_PLAN_APPROVAL');
+  await operator.restart();await connect(page,operator.token);
+  await page.locator('#batch-panel summary').first().click();await page.locator('#batch-list-refresh').click();
+  await page.locator('#batch-list button').first().click();await expect(page.locator('#batch-entries li')).toHaveCount(2);
+  await expect(page.locator('#batch-run')).toBeDisabled();
+});
+
+test('batch UI inspects stale reservation and abandons tracking without advancing the task', async ({page,operator}) => {
+  await connect(page,operator.token);await page.locator('#create button').click();
+  await expect(page.locator('#batch-add')).toBeEnabled();const task=await page.locator('#task-id').textContent();
+  await page.locator('#batch-add').click();await page.locator('#batch-create').click();
+  await expect(page.locator('#batch-status')).toContainText('Inspection loaded');
+  const response=await page.request.post(`${operator.url}/tasks/${task}/advance`,{headers:{Authorization:'Bearer '+operator.token},data:{}});
+  expect(response.status()).toBe(200);const before=await readTask(page,operator,task);
+  await page.locator('#batch-reviewed').check();await page.locator('#batch-run').click();
+  await expect(page.locator('#batch-entries')).toContainText('running');await expect(page.locator('#batch-run')).toBeDisabled();
+  await page.locator('#batch-entries button').first().click();
+  await page.locator('#batch-abandon-task').selectOption(task);await expect(page.locator('#batch-abandon')).toBeDisabled();
+  await page.locator('#batch-abandon-reviewed').check();await page.locator('#batch-abandon').click();
+  await expect(page.locator('#batch-entries')).toContainText('abandoned');
+  expect(await readTask(page,operator,task)).toEqual(before);
+});
+
+test('session revocation clears batch drafts and inspected scope', async ({page,operator}) => {
+  await connect(page,operator.token);await page.locator('#create button').click();await expect(page.locator('#batch-add')).toBeEnabled();
+  await page.locator('#batch-add').click();await page.locator('#batch-create').click();await expect(page.locator('#batch-json')).not.toBeEmpty();
+  await page.locator('#batch-add').click();await expect(page.locator('#batch-draft li')).toHaveCount(1);
+  await page.locator('#session-revoke').click();await expect(page.locator('#workspace')).toBeHidden();
+  await expect(page.locator('#batch-json')).toBeEmpty();await expect(page.locator('#batch-draft li')).toHaveCount(0);
+});
+
 test('operator reviews evidence, refreshes, approves and inspects maintenance', async ({ page, operator }) => {
   await connect(page, operator.token);
   await page.locator('#title').fill('Browser regression fixture');

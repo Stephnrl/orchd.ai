@@ -29,6 +29,7 @@ function canRetryCleanup() {
   return !busy && cleanupAvailable() && $("cleanup-reviewed").checked;
 }
 function controls() {
+  if (typeof batchControls === 'function') batchControls();
   for (const id of ["session-check", "session-rotate", "session-revoke"]) $(id).disabled = busy || !token;
   bundleReviewControls();
   claimControls();
@@ -51,6 +52,7 @@ function controls() {
   $("cancel-task").disabled = busy || !snapshot || !!snapshot.state.active_operation_id || !!snapshot.state.active_invocation_id || !!snapshot.state.container_id;
 }
 function clearSessionView() {
+  if (typeof resetBatches === 'function') resetBatches();
   epoch++; stateRequest++; evidenceRequest++; taskListRequest++; recordListRequest++;
   selected = snapshot = approval = recovery = evidenceDownload = null;
   cursor = 0; taskNext = recordNext = null; tasksLoading = recordsLoading = false;
