@@ -1,5 +1,11 @@
 # Roadmap progress — September 15, 2026
 
+The [security acceptance milestone](security-acceptance.md) makes the ten mandatory
+criteria executable: each one names the tests that exercise it, the release lane runs
+them, and the report states per criterion what local evidence establishes, what the
+opt-in Docker gates add, which other stages cover the rest and what stays deferred to a
+deployment host or an independent review. A renamed or deleted test now fails the lane.
+
 The [broker secret rotation follow-up](broker-service.md) gives the broker's shared
 secret the rotation the operator session already had: a two-secret overlap window, a
 live re-read that needs no restart and drops no operation, replies signed with the
@@ -65,7 +71,7 @@ an assumption that more UI features alone will make the system production-ready.
 | 7. GitHub integration | Offline preview, ref comparison, reconciliation classifier and durable intent/reservation journal; platform actions still simulated; no live PR creation |
 | 8. Jira Data Center integration | Consolidated offline comments, Epic/Story/Task preparation, relationships, transitions, GitHub associations, durable journal, review/preflight and recovery; live deployment/admission remains blocked |
 | 9. Credential broker/auth hardening | Local session expiry, rotation/revocation, stale-client clearing, strict HTTP parsing and broker shared-secret rotation implemented; production provider credentials/SSO remain |
-| 10. OWASP/ACS hardening and adversarial tests | Substantial boundary tests and consolidated source-bound offline release verification; independent deployment review and broader live-system testing remain |
+| 10. OWASP/ACS hardening and adversarial tests | Substantial boundary tests, consolidated source-bound offline release verification and an executable criterion-to-test mapping; independent deployment review and broader live-system testing remain |
 | 11. Concurrent workers | Deferred; current execution is deliberately bounded |
 | 12. Advanced orchestration | Bounded serial fixture batches implemented; broader scheduling and orchestration remain to be scoped |
 

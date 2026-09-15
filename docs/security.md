@@ -74,6 +74,12 @@ compliance claim or runtime dependency is made in this baseline.
 - SEC-10: Dependency/image digests and scan results are recorded before execution;
   network-disabled tests run from a trusted recipe against the reviewed snapshot.
 
+[Security acceptance](security-acceptance.md) binds each criterion above to the exact
+tests that exercise it, runs them, and reports what that evidence does and does not
+establish. It runs in the offline and full release lanes, so a renamed or deleted test
+is a failure rather than a silent loss of coverage. It is local evidence about this
+source, not an independent review.
+
 Residual risk: containers share a kernel; provider output can still be incorrect; secret
 recognition is imperfect; a local privileged user can rewrite the audit database. Stronger
 VM isolation, off-host audit signing and corporate identity integration are later decisions.

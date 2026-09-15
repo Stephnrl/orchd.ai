@@ -54,7 +54,7 @@ def stages(lane, manifest):
     result = []
     if lane in ('offline', 'full'):
         result = ['contracts', 'python', 'jira_acceptance', 'batch_acceptance', 'pilot_acceptance', 'repository_task_acceptance',
-                  'broker_service_acceptance', 'javascript_syntax']
+                  'broker_service_acceptance', 'security_acceptance', 'javascript_syntax']
         ui = sorted(name for name in manifest if re.fullmatch(r'tests/test_ui_[a-z0-9_]+\.cjs', name))
         if not ui: raise Rejected('UI acceptance inventory is empty')
         result += ui
@@ -94,6 +94,7 @@ def _execute(stage, root, python, node, env):
             'pilot_acceptance': [python, 'scripts/pilot_acceptance.py'],
             'repository_task_acceptance': [python, 'scripts/repository_task_acceptance.py'],
             'broker_service_acceptance': [python, 'scripts/broker_service_acceptance.py'],
+            'security_acceptance': [python, 'scripts/security_acceptance.py'],
             'javascript_syntax': [node, '--check', 'orch/ui/app.js'],
             'browser': [node, 'node_modules/@playwright/test/cli.js', 'test', '--reporter=json', '--forbid-only'],
         }
