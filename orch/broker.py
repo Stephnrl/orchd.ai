@@ -20,7 +20,12 @@ MAX_MESSAGE = 16384        # Largest authenticated request body; matches the sub
 MAX_REPLY = 1024 * 1024    # Largest authenticated reply; matches the journal size bound.
 ROUTES = {"identity": ("IdentityRequest", "IdentityReply"), "execute": ("ExecuteRequest", "ExecuteReply"),
           "result": ("ExecuteRequest", "ExecuteReply"), "retire": ("RetireRequest", "RetireReply"),
-          "reconcile": ("ReconcileRequest", "ReconcileReply")}
+          "reconcile": ("ReconcileRequest", "ReconcileReply"),
+          "pilot-profile": ("PilotProfileRequest", "PilotProfileReply"),
+          "pilot-execute": ("PilotExecuteRequest", "PilotExecuteReply"),
+          "pilot-reconcile": ("PilotReconcileRequest", "PilotReconcileReply")}
+# Pilot scopes carry the retained baseline bytes, so those routes accept larger bodies.
+LIMITS = {"pilot-execute": MAX_REPLY, "pilot-reconcile": MAX_REPLY}
 WIRE_SCHEMA = json.loads((Path(__file__).resolve().parents[1] / "contracts/broker-v1.schema.json").read_text())
 
 
@@ -174,7 +179,7 @@ class ServiceClient:
         request_kind, reply_kind = ROUTES[route]
         validate_wire(body, request_kind)
         raw = canonical(body)
-        if len(raw) > MAX_MESSAGE:
+        if len(raw) > LIMITS.get(route, MAX_MESSAGE):
             raise Rejected("Broker request too large")
         headers = {"Content-Type": "application/json", "X-Orch-Broker-Auth": sign(self.key, "request", route, raw)}
         connection = http.client.HTTPConnection(self.host, self.port, timeout=45)

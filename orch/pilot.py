@@ -11,7 +11,7 @@ import sqlite3
 from .contracts import Rejected, canonical, digest, now, uid
 from .maintenance import plain, real_path
 from .process import capture
-from .broker import file_lock
+from .broker import ServiceClient, VERSION as WIRE_VERSION, file_lock, identity
 from . import pilot_worker
 from . import pilot_retention
 
@@ -183,10 +183,12 @@ def workspace_files(scope, workspace):
 
 class Pilot:
     """Separate CLI-only journal; does not manufacture fixture TaskState authority."""
-    def __init__(self, root, read_only=False, executor='local-data', image=None):
+    def __init__(self, root, read_only=False, executor='local-data', image=None, broker_service=None):
         if executor not in ('local-data', 'docker') or (executor == 'local-data' and image is not None):
             raise Rejected('Invalid pilot executor configuration')
         self.executor, self.image = executor, image
+        # Local data mode launches nothing, so a configured broker service is unused there.
+        self.service = ServiceClient(broker_service) if broker_service is not None and executor == 'docker' else None
         self.root = real_path(root)
         if not read_only: self.root.mkdir(parents=True, exist_ok=True)
         for name in ('pilot.sqlite', 'pilot.sqlite-journal', 'pilot.sqlite-wal', 'pilot.sqlite-shm'):
@@ -203,6 +205,28 @@ class Pilot:
     def close(self):
         self.db.close()
 
+    def _call(self, route, **fields):
+        nonce = uid()
+        reply = self.service.call(route, {'schema_version': WIRE_VERSION, 'kind': route, 'nonce': nonce, **fields})
+        if reply['nonce'] != nonce: raise Rejected('Broker pilot reply nonce mismatch')
+        return reply
+
+    def _profile(self):
+        """The runtime an approval binds to; with a broker service it includes the broker account."""
+        if self.service is None: return pilot_worker.profile(self.executor, self.image)
+        return self._call('pilot-profile', image=self.image)['profile']
+
+    def _execute(self, scope, phase, workspace):
+        if self.service is None:
+            observation, output = pilot_worker.execute(scope, phase, workspace)
+            return {**observation, 'transport': 'direct', 'broker': identity()}, output
+        reply = self._call('pilot-execute', scope=scope, phase=phase, workspace=str(workspace))
+        return {**reply['observation'], 'transport': 'service', 'broker': reply['identity']}, reply['output']
+
+    def _reconcile(self, scope, phase):
+        if self.service is None: return pilot_worker.reconcile(scope, phase)
+        return self._call('pilot-reconcile', scope=scope, phase=phase)['container_absent']
+
     def prepare(self, intent, task_binding=None):
         validate_intent(intent)
         repository = str(real_path(intent['repository']))
@@ -213,7 +237,7 @@ class Pilot:
         if any(before[k] == v for k, v in intent['replacements'].items()): raise Rejected('Every replacement must change bytes')
         scope = {**intent, 'repository': repository, 'before': before, 'policy': POLICY, 'source_sha256': source_hash(),
                  'journal_root': str(self.root), 'id': uid(), 'created_at': now(),
-                 'executor': pilot_worker.profile(self.executor, self.image),
+                 'executor': self._profile(),
                  'expires_at': (datetime.now(timezone.utc)+timedelta(minutes=30)).isoformat()}
         if task_binding is not None:
             if (not isinstance(task_binding, dict) or set(task_binding) != {'store', 'task_id'}
@@ -343,7 +367,7 @@ class Pilot:
                 require_task_admission(scope)
             if scope['source_sha256'] != source_hash() or datetime.now(timezone.utc) >= datetime.fromisoformat(scope['expires_at']):
                 raise Rejected('Pilot source or approval expired')
-            if scope.get('executor') != pilot_worker.profile(self.executor, self.image):
+            if scope.get('executor') != self._profile():
                 raise Rejected('Pilot executor, image or daemon changed')
             if baseline(scope['repository'], scope['base_commit'], scope['replacements']) != scope['before']:
                 raise Rejected('Baseline changed')
@@ -391,14 +415,14 @@ class Pilot:
         return self.inspect(identifier)
 
     def _dispatch(self, scope, phase, workspace, expected):
-        if pilot_worker.profile(self.executor, self.image) != scope['executor']:
+        if self._profile() != scope['executor']:
             raise Rejected('Worker runtime changed before dispatch')
         journal = self._workers(scope)
         entry = journal['phases'][phase]
         if entry['status'] != 'planned': raise Rejected('Worker dispatch already consumed')
         entry['status'] = 'dispatched'
         self._save_workers(scope, journal)  # Autocommit, before the Docker call.
-        observation, output = pilot_worker.execute(scope, phase, workspace)
+        observation, output = self._execute(scope, phase, workspace)
         entry.update(status='observed', observation=observation)
         self._save_workers(scope, journal)
         if (observation['code'] != 0 or observation['failure'] or observation['truncated']
@@ -416,7 +440,7 @@ class Pilot:
                 if type(revision) is not int or row[1] != expected_hash or row[2] != revision or row[3] != 'reserved' or revision >= 1000:
                     raise Rejected('Stale or inapplicable worker reconciliation')
                 retained = {k: v for k, v in scope.get('executor', {}).items() if k != 'recipe_sha256'}
-                current = {k: v for k, v in pilot_worker.profile(self.executor, self.image).items() if k != 'recipe_sha256'}
+                current = {k: v for k, v in self._profile().items() if k != 'recipe_sha256'}
                 if retained != current:
                     raise Rejected('Worker reconciliation requires the same Docker host and image')
                 if self.executor == 'local-data':
@@ -426,7 +450,7 @@ class Pilot:
                 else:
                     journal = self._workers(scope)
                     if not journal: raise Rejected('Missing worker reservation')
-                    absent = {phase: pilot_worker.reconcile(scope, phase) for phase in ('edit', 'test')}
+                    absent = {phase: self._reconcile(scope, phase) for phase in ('edit', 'test')}
                     journal['cleanup'].append({'at': now(), 'absent': absent})
                     self._save_workers(scope, journal)
                     status = 'interrupted' if all(absent.values()) else 'reserved'

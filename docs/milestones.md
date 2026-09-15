@@ -289,8 +289,10 @@ The [broker service milestone](broker-service.md) adds the separate-identity bou
 for the fixture broker: `broker-serve` under its own OS account, HMAC-authenticated
 loopback routes for execute/result/retire/reconcile/identity, a broker-owned journal,
 `broker_identities` evidence, `broker-check` and a `broker_identity` deployment gate,
-with threaded, subprocess and release-lane acceptance. Pilot Docker workers and the
-host-side account provisioning are not included.
+with threaded, subprocess and release-lane acceptance. The follow-up routes the pilot's
+Docker workers through the same service (`pilot-profile`, `pilot-execute`,
+`pilot-reconcile`, `--pilot-root`) with real-Docker acceptance in the CI Docker lane.
+Host-side account provisioning is not included.
 
 Confirm corporate source-sharing rules and CLI tool-disable/SSO behavior; select approved
 image digests and dependency sources; set artifact retention/quotas; choose operator

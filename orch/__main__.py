@@ -56,6 +56,7 @@ def main():
     parser.add_argument("--broker-secret", help="Private file holding the 64-hex shared secret of the broker service")
     parser.add_argument("--broker-root", help="Broker-owned journal directory for broker-serve")
     parser.add_argument("--workspaces", help="Orchestrator workspace parent directory that broker-serve may execute in")
+    parser.add_argument("--pilot-root", help="Pilot journal directory whose Docker workers broker-serve may run; requires --image")
     parser.add_argument("--title", default="Repository JSON validation")
     parser.add_argument("--decision", choices=["approve", "reject"])
     args = parser.parse_args()
@@ -71,7 +72,7 @@ def main():
         from .contracts import Rejected
         try:
             service = BrokerService(args.broker_root, args.broker_secret, args.workspaces,
-                                    "trusted-fixture" if args.trusted_fixture else "docker", args.image, args.port)
+                                    "trusted-fixture" if args.trusted_fixture else "docker", args.image, args.port, args.pilot_root)
         except (Rejected, OSError):
             parser.error("Broker service rejected its configuration; check the journal, secret, workspace and profile")
         print(f"Broker service: http://127.0.0.1:{service.port}", flush=True)
@@ -128,7 +129,8 @@ def main():
             if args.command != 'pilot-prepare' and not (Path(args.data) / 'pilot.sqlite').is_file():
                 raise Rejected('Existing pilot journal required')
             from . import pilot_retention
-            pilot = Pilot(args.data, read_only=args.command in ('pilot-inspect', 'pilot-usage'), executor=args.pilot_executor, image=args.image)
+            pilot = Pilot(args.data, read_only=args.command in ('pilot-inspect', 'pilot-usage'), executor=args.pilot_executor, image=args.image,
+                          broker_service=broker_service)
             if args.command == 'pilot-prepare': report = pilot.prepare(load_intent(args.intent))
             elif args.command == 'pilot-inspect': report = pilot.inspect(args.pilot_id)
             elif args.command == 'pilot-run': report = pilot.run(args.pilot_id, args.expected_sha256, args.expected_revision)
