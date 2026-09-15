@@ -83,3 +83,11 @@ idle/absolute expiry, immediate rotation and revocation, in-memory token handlin
 stale-client UI clearing and strict authenticated HTTP framing/JSON parsing. These
 controls are covered by clock-boundary, concurrency, raw HTTP and browser tests.
 They do not establish production identity or credential-broker readiness.
+
+The [broker service](broker-service.md) implements the architecture's "separate OS
+identity; narrowly authenticated local API" for the fixture broker: HMAC-authenticated
+loopback routes verified before parsing, a broker-owned journal and execution profile,
+and per-execution identity evidence. It is covered by unauthenticated, tampered,
+oversized, cross-origin, profile-mismatch and crash-injection tests. Whether the two
+accounts are actually separate is host provisioning that `broker-check` reports; it is
+not established by this repository's own acceptance runs.

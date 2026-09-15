@@ -105,9 +105,10 @@ Preflight availability alone is not host qualification.
 
 Standalone pilots retain their own journal. The [repository task workload](repository-tasks.md)
 now binds newly prepared pilots to kernel approvals and common task evidence;
-they remain outside fixture batches, provider adapters and external integrations. The worker supervisor
-runs under the local operator's identity and can access Docker; a separate OS broker
-identity and independent security review remain deployment gates. A compromised
+they remain outside fixture batches, provider adapters and external integrations. The pilot worker supervisor
+still runs under the local operator's identity and can access Docker; the
+[broker service](broker-service.md) provides a separate-identity transport for the
+fixture broker only, and independent security review remains a deployment gate. A compromised
 host administrator or trusted image is outside the claim of this bounded proof.
 
 Keep the fixed recipes and control plane in Python. A Rust supervisor becomes worth

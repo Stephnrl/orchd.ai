@@ -24,7 +24,9 @@ class DeploymentTests(unittest.TestCase):
             report = json.loads(output.getvalue())
             self.assertEqual(report["status"], "blocked")
             self.assertFalse(report["provider_authorized"])
-            self.assertEqual(len(report["blocking_gates"]), 6)
+            self.assertEqual(len(report["blocking_gates"]), 7)
+            self.assertIn("broker_identity", report["blocking_gates"])
+            self.assertEqual(report["broker_identity"]["status"], "not_supplied")
             self.assertEqual(report["worker_runtime"]["status"], "not_supplied")
 
     def test_matching_binary_and_current_worker_evidence_never_authorize(self):
@@ -38,7 +40,8 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(report["worker_runtime"]["status"], "current")
             self.assertNotIn("worker_runtime", report["blocking_gates"])
             self.assertNotIn("executable_digest", report["blocking_gates"])
-            self.assertEqual(len(report["blocking_gates"]), 4)
+            self.assertEqual(len(report["blocking_gates"]), 5)
+            self.assertIn("broker_identity", report["blocking_gates"])
             self.assertFalse(report["provider_authorized"])
             self.assertFalse(report["provider"]["provider_authorized"])
             self.assertEqual(report["status"], "blocked")

@@ -1,10 +1,11 @@
 """Deployment gap assessment; this report cannot authorize a live provider."""
+from .broker import assess_identity
 from .contracts import Rejected, now
 from .copilot import provider_check
 from .readiness import require_current_report
 
 
-def deployment_check(provider, executable=None, expected_sha256=None, image=None, runtime_report=None):
+def deployment_check(provider, executable=None, expected_sha256=None, image=None, runtime_report=None, broker=None):
     if runtime_report and not image:
         raise Rejected("A runtime report requires its digest-pinned image")
     inventory = provider_check(provider, executable, expected_sha256)
@@ -15,11 +16,21 @@ def deployment_check(provider, executable=None, expected_sha256=None, image=None
             runtime = {"status": "current", "reason": None}
         except (Rejected, OSError):
             runtime = {"status": "rejected", "reason": "Runtime evidence is invalid, expired, or does not match the current source/host/image"}
+    identity = {"status": "not_supplied", "reason": "Supply the broker service endpoint and its secret file to assess the broker OS identity"}
+    if broker is not None:
+        try:
+            assessment = assess_identity(broker)
+            identity = {"status": assessment["status"],
+                        "reason": None if assessment["status"] == "separate" else "The broker service runs as the orchestrator account or from different source; see broker-check"}
+        except (Rejected, OSError):
+            identity = {"status": "rejected", "reason": "The broker service is unreachable, unauthenticated or misconfigured"}
     gates = [
         {"id": "executable_digest", "status": "passed" if inventory["executable_status"] == "digest_match" else "blocked",
          "next_step": "Compare the explicit executable with an independently approved digest; a match alone does not establish origin or safe behavior"},
         {"id": "worker_runtime", "status": "passed" if runtime["status"] == "current" else "blocked",
          "next_step": "Run verify-runtime on the deployment host, then supply its current report and the same image"},
+        {"id": "broker_identity", "status": "passed" if identity["status"] == "separate" else "blocked",
+         "next_step": "Run broker-serve under a separate OS account with a private shared secret, then supply --broker-endpoint and --broker-secret"},
         {"id": "native_protocol", "status": "blocked",
          "next_step": "Verify the offline Copilot codec against the exact deployed CLI version" if inventory["protocol"] else "Document and implement the corporate CLI native protocol"},
         {"id": "provider_containment", "status": "blocked",
@@ -31,5 +42,5 @@ def deployment_check(provider, executable=None, expected_sha256=None, image=None
     ]
     return {"schema_version": "1.0.0", "kind": "DeploymentReadiness", "generated_at": now(),
             "status": "blocked", "provider_authorized": False, "provider": inventory,
-            "worker_runtime": runtime, "gates": gates,
+            "worker_runtime": runtime, "broker_identity": identity, "gates": gates,
             "blocking_gates": [gate["id"] for gate in gates if gate["status"] == "blocked"]}

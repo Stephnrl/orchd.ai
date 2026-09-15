@@ -281,6 +281,13 @@ Docker acceptance for the pilot while preserving the existing five fixture gates
 Custom executable recipes, generalized kernel tasks and separate broker identity
 are subsequent boundaries; fixed Python recipes remain sufficient here.
 
+The [broker service milestone](broker-service.md) adds the separate-identity boundary
+for the fixture broker: `broker-serve` under its own OS account, HMAC-authenticated
+loopback routes for execute/result/retire/reconcile/identity, a broker-owned journal,
+`broker_identities` evidence, `broker-check` and a `broker_identity` deployment gate,
+with threaded, subprocess and release-lane acceptance. Pilot Docker workers and the
+host-side account provisioning are not included.
+
 Confirm corporate source-sharing rules and CLI tool-disable/SSO behavior; select approved
 image digests and dependency sources; set artifact retention/quotas; choose operator
 identity provisioning; validate Docker Desktop isolation against corporate policy.

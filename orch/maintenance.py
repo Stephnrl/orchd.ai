@@ -10,7 +10,7 @@ import tempfile
 import time
 
 from .contracts import Rejected, canonical, digest, validate, now
-from .broker import validate_wire
+from .broker import separate, validate_wire
 from .storage import Store, AUDIT_RESERVE_BYTES
 
 
@@ -57,6 +57,17 @@ def audit_provenance(store):
         for key in ("schema_version", "operation_id", "task_id", "generation", "nonce", "source_digest"):
             if envelope[key] != request[key]:
                 raise Rejected("Execution provenance binding mismatch")
+    # Legacy databases gain this table on their next writable open; read-only copies may lack it.
+    if store.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='broker_identities'").fetchone():
+        for row in store.db.execute("SELECT * FROM broker_identities"):
+            record = json.loads(row["record"])
+            validate_wire(record, "ExecutionIdentity")
+            provenance = store.db.execute("SELECT 1 FROM execution_provenance WHERE operation_id=? AND generation=?",
+                                          (row["operation_id"], row["generation"])).fetchone()
+            if not provenance or digest(record) != row["sha256"]:
+                raise Rejected("Broker identity record has no provenance or a digest mismatch")
+            if record["separate_identity"] != separate(record["broker"], record["orchestrator"]):
+                raise Rejected("Broker identity claim does not follow from its accounts")
 
 
 def audit(store):

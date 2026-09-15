@@ -1,5 +1,12 @@
 # Roadmap progress — September 15, 2026
 
+The [broker service milestone](broker-service.md) adds `broker-serve`, a loopback HTTP
+broker the operator can start under a separate OS account, an HMAC-authenticated
+five-route transport for fixture edits/tests, broker-owned journals and Docker
+reconciliation, per-execution identity evidence and a `broker_identity` deployment
+gate. The subprocess transport stays the default; the pilot's Docker workers and the
+actual second-account provisioning remain deployment work.
+
 The [pilot retention milestone](pilot-retention.md) adds a read-only usage report and
 explicitly reviewed, two-phase workspace reclamation for terminal pilots, including
 those left `prepared` by kernel rejection or cancellation. Journal rows, receipts and
@@ -39,7 +46,7 @@ an assumption that more UI features alone will make the system production-ready.
 | 2. Kernel and mocks | Implemented durable fixture workflow, approvals, replay and recovery |
 | 3. Real AI adapters | Partial: fixture CLI transport and offline Copilot codec; live launch disabled; corporate protocol unknown |
 | 4. Isolated Docker worker | Implemented for bounded fixture edits/tests, with five host-specific isolation gates |
-| 5. Guardian/tool broker and policies | Implemented for the fixture workflow; broader tools and external brokers remain |
+| 5. Guardian/tool broker and policies | Implemented for the fixture workflow, with an optional separate-identity broker service transport; broader tools and external brokers remain |
 | 6. Local management UI | Substantially implemented, including restart/replay, evidence, operator controls and reviewed serial batches |
 | 7. GitHub integration | Offline preview, ref comparison, reconciliation classifier and durable intent/reservation journal; platform actions still simulated; no live PR creation |
 | 8. Jira Data Center integration | Consolidated offline comments, Epic/Story/Task preparation, relationships, transitions, GitHub associations, durable journal, review/preflight and recovery; live deployment/admission remains blocked |
@@ -105,6 +112,9 @@ pilot acceptance now runs in the consolidated offline/full release lane.
    independent containment, authenticated approval, verified workflow evidence and authoritative
    reconciliation/restore policy blocked. Completing the offline package does not close Phase 8.
 4. Complete deployment/auth hardening and adversarial release checks before concurrency.
+   The [broker service](broker-service.md) now supports a separate broker OS account with
+   authenticated loopback routes and identity evidence; proving separation on a deployment
+   host and moving pilot Docker workers behind it remain open.
    [Release verification](release-verification.md) now consolidates offline acceptance
    and source/lane/expiry checking, while retaining all external deployment gates.
    [Local operator sessions](operator-sessions.md) now have idle/absolute expiry,

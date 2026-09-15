@@ -30,8 +30,9 @@ worker-produced envelopes or workflow receipts from arbitrary clients.
 
 This is **provenance within a trusted local OS identity**, not a cryptographic signature
 or separate-user security sandbox. A host administrator or same-user attacker can edit
-the database/journal/code. Separate broker service identities, authenticated transport
-and signed/off-host evidence are still required before hostile multi-user deployments.
+the database/journal/code. The later [broker service](broker-service.md) adds a
+separate broker account and an authenticated loopback transport with a broker-owned
+journal; signed/off-host evidence is still required before hostile multi-user deployments.
 Source digests detect changed broker code/schema during recovery; they do not attest
 the entire Python dependency supply chain.
 
