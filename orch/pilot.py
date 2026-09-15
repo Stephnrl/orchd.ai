@@ -11,6 +11,8 @@ import sqlite3
 from .contracts import Rejected, canonical, digest, now, uid
 from .maintenance import plain
 from .process import capture
+from .broker import file_lock
+from . import pilot_worker
 
 LIMIT = 65536
 POLICY = 'git-json-data-v1'
@@ -18,7 +20,7 @@ POLICY = 'git-json-data-v1'
 
 def source_hash():
     return digest({name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
-                   for name in ('pilot.py', 'process.py', 'contracts.py', 'maintenance.py')})
+                   for name in ('pilot.py', 'pilot_worker.py', 'process.py', 'contracts.py', 'maintenance.py', 'broker.py', 'readiness.py', 'execution.py')})
 
 
 def path_name(value):
@@ -148,9 +150,42 @@ def evaluate(files, checks):
     return results
 
 
+def workspace_files(scope, workspace):
+    """Treat worker output as untrusted; never read devices, links or unbounded files."""
+    expected = set(scope['replacements'])
+    directories = {str(parent).replace('\\', '/') for p in expected for parent in Path(p).parents if str(parent) != '.'}
+    seen, count = set(), 0
+    def unreadable(_): raise Rejected('Unreadable worker workspace')
+    for current, subdirs, names in os.walk(plain(workspace), followlinks=False, onerror=unreadable):
+        count += len(subdirs) + len(names)
+        if count > 256: raise Rejected('Worker workspace inventory exceeded')
+        for name in subdirs + names:
+            path = plain(Path(current) / name)
+            relative = path.relative_to(workspace).as_posix()
+            if name in subdirs:
+                if relative not in directories: raise Rejected('Unexpected worker directory')
+            else:
+                if relative not in expected: raise Rejected('Unexpected worker file')
+                seen.add(relative)
+    if seen != expected: raise Rejected('Incomplete worker snapshot')
+    files = {}
+    for name in sorted(expected):
+        path = plain(workspace / name)
+        if not path.is_file() or path.stat().st_nlink != 1 or path.stat().st_size > LIMIT:
+            raise Rejected('Unsafe worker output file')
+        with path.open('rb') as stream: raw = stream.read(LIMIT+1)
+        if len(raw) > LIMIT: raise Rejected('Worker output exceeds budget')
+        try: files[name] = raw.decode('utf-8')
+        except UnicodeError as exc: raise Rejected('Invalid worker UTF-8') from exc
+    return files
+
+
 class Pilot:
     """Separate CLI-only journal; does not manufacture fixture TaskState authority."""
-    def __init__(self, root, read_only=False):
+    def __init__(self, root, read_only=False, executor='local-data', image=None):
+        if executor not in ('local-data', 'docker') or (executor == 'local-data' and image is not None):
+            raise Rejected('Invalid pilot executor configuration')
+        self.executor, self.image = executor, image
         self.root = plain(Path(root).absolute())
         if not read_only: self.root.mkdir(parents=True, exist_ok=True)
         for name in ('pilot.sqlite', 'pilot.sqlite-journal', 'pilot.sqlite-wal', 'pilot.sqlite-shm'):
@@ -161,6 +196,7 @@ class Pilot:
         if not read_only:
             self.db.execute('PRAGMA synchronous=FULL')
             self.db.execute('CREATE TABLE IF NOT EXISTS pilots (id TEXT PRIMARY KEY, scope TEXT NOT NULL, hash TEXT NOT NULL, revision INTEGER NOT NULL, status TEXT NOT NULL, receipt TEXT)')
+            self.db.execute('CREATE TABLE IF NOT EXISTS pilot_workers (id TEXT PRIMARY KEY, journal TEXT NOT NULL, hash TEXT NOT NULL)')
 
     def close(self):
         self.db.close()
@@ -174,7 +210,10 @@ class Pilot:
         if any(before[k] == v for k, v in intent['replacements'].items()): raise Rejected('Every replacement must change bytes')
         scope = {**intent, 'repository': repository, 'before': before, 'policy': POLICY, 'source_sha256': source_hash(),
                  'journal_root': str(self.root), 'id': uid(), 'created_at': now(),
+                 'executor': pilot_worker.profile(self.executor, self.image),
                  'expires_at': (datetime.now(timezone.utc)+timedelta(minutes=30)).isoformat()}
+        if self.executor == 'docker':
+            for phase in ('edit', 'test'): pilot_worker.command(scope, phase, self.root / scope['id'])
         encoded = canonical(scope).decode()
         if len(encoded.encode()) > 512*1024: raise Rejected('Scope too large')
         self.db.execute('BEGIN IMMEDIATE')
@@ -192,15 +231,41 @@ class Pilot:
         row = self.db.execute('SELECT scope,hash,revision,status,receipt FROM pilots WHERE id=?', (identifier,)).fetchone()
         if not row: raise Rejected('Unknown pilot')
         scope = json.loads(row[0])
+        try:
+            validate_intent({k: scope[k] for k in ('repository', 'base_commit', 'replacements', 'checks')})
+            if set(scope['before']) != set(scope['replacements']) or any(not isinstance(v, str) or len(v.encode()) > LIMIT for v in scope['before'].values()):
+                raise Rejected('Invalid retained baseline')
+        except (KeyError, TypeError, AttributeError) as exc:
+            raise Rejected('Invalid retained pilot scope') from exc
         if digest(scope) != row[1] or scope['id'] != identifier or scope['journal_root'] != str(self.root):
             raise Rejected('Pilot scope integrity mismatch')
-        if row[3] not in {'prepared', 'reserved', 'passed', 'failed', 'abandoned'} or row[2] != {'prepared': 0, 'reserved': 1, 'passed': 2, 'failed': 2, 'abandoned': 1}[row[3]]:
+        revisions = {'prepared': {0}, 'reserved': range(1, 1002), 'passed': {2}, 'failed': {2}, 'abandoned': {1}, 'interrupted': range(2, 1002)}
+        if row[3] not in revisions or row[2] not in revisions[row[3]]:
             raise Rejected('Pilot lifecycle integrity mismatch')
         if (row[4] is not None) != (row[3] in ('passed', 'failed')): raise Rejected('Pilot receipt missing or premature')
         return scope, row
 
+    def _workers(self, scope):
+        if scope.get('executor', {}).get('mode') != 'docker': return None
+        row = self.db.execute('SELECT journal,hash FROM pilot_workers WHERE id=?', (scope['id'],)).fetchone()
+        if not row: return None
+        journal = json.loads(row[0])
+        if digest(journal) != row[1] or journal['scope_sha256'] != digest(scope): raise Rejected('Worker journal integrity mismatch')
+        if set(journal['phases']) != {'edit', 'test'}: raise Rejected('Incomplete worker journal')
+        for phase, entry in journal['phases'].items():
+            if entry['identity'] != pilot_worker.identity(scope, phase) or entry['status'] not in ('planned', 'dispatched', 'observed'):
+                raise Rejected('Invalid worker journal identity')
+        return journal
+
+    def _save_workers(self, scope, journal):
+        self.db.execute('INSERT OR REPLACE INTO pilot_workers VALUES(?,?,?)',
+                        (scope['id'], canonical(journal).decode(), digest(journal)))
+
     def inspect(self, identifier):
         scope, row = self._load(identifier)
+        workers = self._workers(scope)
+        if scope.get('executor', {}).get('mode') == 'docker' and ((workers is None) != (row[3] in ('prepared', 'abandoned'))):
+            raise Rejected('Worker journal missing or premature')
         workspace = plain(self.root / identifier)
         observed = {}
         if workspace.exists():
@@ -214,6 +279,7 @@ class Pilot:
                         or receipt['files'] != {p: hashlib.sha256(v.encode()).hexdigest() for p, v in scope['replacements'].items()}):
             raise Rejected('Pilot receipt integrity mismatch')
         if receipt and (row[3] == 'passed') != all(c['passed'] for c in receipt['checks']): raise Rejected('Pilot outcome mismatch')
+        if receipt and workers and receipt.get('worker_journal_sha256') != digest(workers): raise Rejected('Worker receipt binding mismatch')
         extra = []
         entries = 0
         if workspace.exists():
@@ -228,7 +294,7 @@ class Pilot:
         matches = receipt is not None and observed == receipt['files'] and not extra
         return {'id': identifier, 'scope_sha256': row[1], 'revision': row[2], 'status': row[3], 'scope': scope,
                 'diff': ''.join(''.join(difflib.unified_diff(scope['before'][p].splitlines(True), v.splitlines(True), fromfile='a/'+p, tofile='b/'+p)) for p, v in scope['replacements'].items()),
-                'receipt': receipt, 'observed_files': observed, 'unexpected_files': extra, 'matches_receipt': matches,
+                'receipt': receipt, 'workers': workers, 'observed_files': observed, 'unexpected_files': extra, 'matches_receipt': matches,
                 'execution_authorized': False, 'recovery': 'retain_and_inspect' if row[3] == 'reserved' else 'none'}
 
     def _fence(self, identifier, expected_hash, revision):
@@ -249,14 +315,26 @@ class Pilot:
         return self.inspect(identifier)
 
     def run(self, identifier, expected_hash, revision):
+        lock = plain(self.root / '.pilot-worker.lock')
+        if lock.exists() and lock.stat().st_nlink != 1: raise Rejected('Worker lock hardlink')
+        with file_lock(lock):
+            return self._run(identifier, expected_hash, revision)
+
+    def _run(self, identifier, expected_hash, revision):
         self.db.execute('BEGIN IMMEDIATE')
         try:
             scope = self._fence(identifier, expected_hash, revision)
             if scope['source_sha256'] != source_hash() or datetime.now(timezone.utc) >= datetime.fromisoformat(scope['expires_at']):
                 raise Rejected('Pilot source or approval expired')
+            if scope.get('executor') != pilot_worker.profile(self.executor, self.image):
+                raise Rejected('Pilot executor, image or daemon changed')
             if baseline(scope['repository'], scope['base_commit'], scope['replacements']) != scope['before']:
                 raise Rejected('Baseline changed')
             self.db.execute("UPDATE pilots SET status='reserved',revision=revision+1 WHERE id=?", (identifier,))
+            if self.executor == 'docker':
+                self._save_workers(scope, {'scope_sha256': expected_hash,
+                    'phases': {p: {'identity': pilot_worker.identity(scope, p), 'status': 'planned', 'observation': None} for p in ('edit', 'test')},
+                    'cleanup': []})
             self.db.execute('COMMIT')
         except BaseException:
             self.db.execute('ROLLBACK')
@@ -265,19 +343,74 @@ class Pilot:
         # even if a crash happens before the directory is created.
         workspace = plain(self.root / identifier)
         workspace.mkdir()
+        workspace.chmod(0o755)
         for name, value in scope['replacements'].items():
             path = plain(workspace / name)
             path.parent.mkdir(parents=True, exist_ok=True)
+            for parent in path.parents:
+                if parent == self.root: break
+                parent.chmod(0o755)
             with path.open('xb') as stream:
-                stream.write(value.encode())
+                if self.executor == 'local-data': stream.write(value.encode())
                 stream.flush()
                 os.fsync(stream.fileno())
-        files = {name: plain(workspace / name).read_bytes().decode('utf-8') for name in scope['replacements']}
+            if self.executor == 'docker': path.chmod(0o666)
+        hashes = {p: hashlib.sha256(v.encode()).hexdigest() for p, v in scope['replacements'].items()}
+        if self.executor == 'docker': self._dispatch(scope, 'edit', workspace, {'files': hashes})
+        files = workspace_files(scope, workspace)
         if files != scope['replacements']: raise Rejected('Workspace bytes changed')
         checks = evaluate(files, scope['checks'])
+        if self.executor == 'docker':
+            for name in files: plain(workspace / name).chmod(0o444)
+            self._dispatch(scope, 'test', workspace, {'files': hashes, 'passed': [c['passed'] for c in checks]})
+            # Re-read actual bytes after the test process and before evidence commit.
+            if workspace_files(scope, workspace) != files: raise Rejected('Test snapshot changed')
         receipt = {'policy': POLICY, 'scope_sha256': expected_hash, 'completed_at': now(), 'checks': checks,
                    'files': {p: hashlib.sha256(v.encode()).hexdigest() for p, v in files.items()}}
+        if self.executor == 'docker': receipt['worker_journal_sha256'] = digest(self._workers(scope))
         status = 'passed' if all(c['passed'] for c in checks) else 'failed'
         self.db.execute('UPDATE pilots SET status=?,revision=revision+1,receipt=? WHERE id=? AND status=?',
                         (status, canonical({'receipt': receipt, 'sha256': digest(receipt)}).decode(), identifier, 'reserved'))
+        return self.inspect(identifier)
+
+    def _dispatch(self, scope, phase, workspace, expected):
+        if pilot_worker.profile(self.executor, self.image) != scope['executor']:
+            raise Rejected('Worker runtime changed before dispatch')
+        journal = self._workers(scope)
+        entry = journal['phases'][phase]
+        if entry['status'] != 'planned': raise Rejected('Worker dispatch already consumed')
+        entry['status'] = 'dispatched'
+        self._save_workers(scope, journal)  # Autocommit, before the Docker call.
+        observation, output = pilot_worker.execute(scope, phase, workspace)
+        entry.update(status='observed', observation=observation)
+        self._save_workers(scope, journal)
+        if (observation['code'] != 0 or observation['failure'] or observation['truncated']
+                or not observation['container_absent'] or canonical(output) != canonical(expected)):
+            raise Rejected('Worker failed or returned uncertain evidence; inspect and reconcile')
+
+    def reconcile(self, identifier, expected_hash, revision):
+        """Explicit cleanup consumes no new execution authority and never retries work."""
+        lock = plain(self.root / '.pilot-worker.lock')
+        if lock.exists() and lock.stat().st_nlink != 1: raise Rejected('Worker lock hardlink')
+        with file_lock(lock):
+            self.db.execute('BEGIN IMMEDIATE')
+            try:
+                scope, row = self._load(identifier)
+                if type(revision) is not int or row[1] != expected_hash or row[2] != revision or row[3] != 'reserved' or revision >= 1000:
+                    raise Rejected('Stale or inapplicable worker reconciliation')
+                retained = {k: v for k, v in scope.get('executor', {}).items() if k != 'recipe_sha256'}
+                current = {k: v for k, v in pilot_worker.profile(self.executor, self.image).items() if k != 'recipe_sha256'}
+                if self.executor != 'docker' or retained != current:
+                    raise Rejected('Worker reconciliation requires the same Docker host and image')
+                journal = self._workers(scope)
+                if not journal: raise Rejected('Missing worker reservation')
+                absent = {phase: pilot_worker.reconcile(scope, phase) for phase in ('edit', 'test')}
+                journal['cleanup'].append({'at': now(), 'absent': absent})
+                self._save_workers(scope, journal)
+                self.db.execute('UPDATE pilots SET status=?,revision=revision+1 WHERE id=?',
+                                ('interrupted' if all(absent.values()) else 'reserved', identifier))
+                self.db.execute('COMMIT')
+            except BaseException:
+                self.db.execute('ROLLBACK')
+                raise
         return self.inspect(identifier)

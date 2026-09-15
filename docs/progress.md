@@ -1,5 +1,11 @@
 # Roadmap progress — September 15, 2026
 
+The [pilot container-worker milestone](pilot-container-workers.md) adds separate
+restricted Docker edit/test processes, image/daemon-bound approval, retained
+dispatch phases and explicit interruption cleanup. The Docker CI lane includes
+real pilot isolation/recovery acceptance. This remains a CLI-only JSON workload;
+kernel integration, separate broker identity and live-provider admission remain.
+
 The [local Git repository pilot](repository-pilot.md) adds a separate CLI path for
 reviewed JSON replacements in a disposable workspace, exact baseline/scope fencing,
 trusted JSON checks and durable no-retry recovery inspection. This goes beyond the

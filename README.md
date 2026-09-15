@@ -114,3 +114,5 @@ Opening the design PR itself is repository collaboration, not an implemented pla
 Use the [bounded Git JSON pilot](docs/repository-pilot.md) to prepare, review and
 test a small data change in a disposable workspace with durable recovery inspection.
 Run `python scripts/pilot_acceptance.py` for its disposable end-to-end walkthrough.
+The optional [Docker worker profile](docs/pilot-container-workers.md) uses separate
+restricted edit/test containers with runtime-bound approvals and explicit recovery.

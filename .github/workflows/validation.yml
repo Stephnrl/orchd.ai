@@ -86,3 +86,5 @@ jobs:
         run: docker pull "$ORCH_DOCKER_TEST_IMAGE"
       - name: Verify all five Docker gates with host-bound evidence
         run: python -m orch verify-runtime --image "$ORCH_DOCKER_TEST_IMAGE" --destination .runtime/ci-runtime.json
+      - name: Verify pilot container workers and interrupted-container recovery
+        run: python scripts/pilot_worker_acceptance.py --image "$ORCH_DOCKER_TEST_IMAGE" --destination .runtime/ci-pilot-workers.json
