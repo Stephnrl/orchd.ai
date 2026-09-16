@@ -26,6 +26,9 @@ agent ──asks──> orchd ──human approves──> broker ──sends─�
  (identity)                (fenced intent)   (credential)
 ```
 
+For the ordered path from a token to a created issue on a host that can reach these
+services, see [the live integration runbook](live-integration-runbook.md).
+
 ## The credential file
 
 Two lines, mode `600`, readable only by the broker account:

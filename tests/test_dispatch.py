@@ -1,6 +1,9 @@
 """The one outbound path, exercised over a real socket against a server that checks it.\n\nThese tests do not mock the send. A local origin receives the request, asserts what arrived\n— including that the Authorization header the broker added is there and that the body is the\napproved one — and the refusals are measured by what the server never received at all.\n"""
+from contextlib import redirect_stderr, redirect_stdout
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import io
 import json
+import sys
 import os
 from pathlib import Path
 import socket
@@ -11,6 +14,7 @@ from unittest.mock import patch
 
 import secrets as randomness
 
+from orch.__main__ import main
 from orch import dispatch
 from orch.broker import ServiceClient
 from orch.broker_service import BrokerService
@@ -40,7 +44,9 @@ class Origin:
             def do_GET(self):
                 outer.seen.append({"path": self.path, "method": self.command,
                                    "authorization": self.headers.get("Authorization"),
-                                   "accept": self.headers.get("Accept"), "body": ""})
+                                   "accept": self.headers.get("Accept"),
+                                   "user_agent": self.headers.get("User-Agent"),
+                                   "encoding": self.headers.get("Accept-Encoding"), "body": ""})
                 body = {"unconfigured": True}
                 for prefix, value in outer.reads.items():
                     if self.path.startswith(prefix):
@@ -62,6 +68,8 @@ class Origin:
                 outer.seen.append({"path": self.path, "method": self.command,
                                    "authorization": self.headers.get("Authorization"),
                                    "accept": self.headers.get("Accept"),
+                                   "user_agent": self.headers.get("User-Agent"),
+                                   "encoding": self.headers.get("Accept-Encoding"),
                                    "body": self.rfile.read(length).decode()})
                 status, payload = outer.reply
                 raw = json.dumps(payload).encode()
@@ -209,6 +217,14 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(seen["accept"], "application/vnd.github+json")
         self.assertEqual(seen["body"], canonical(request["body"]).decode())
         self.assertEqual(seen["path"], "/repos/a/b/issues")
+
+    def test_every_request_identifies_itself_and_refuses_compression(self):
+        # GitHub answers a request with no User-Agent with a 403 and an HTML body, which no
+        # loopback origin would ever produce; a real call found this and a test keeps it found.
+        # Identity encoding keeps a response from arriving compressed and unparseable.
+        self.send()
+        self.assertEqual(self.origin.seen[0]["user_agent"], "orchd")
+        self.assertEqual(self.origin.seen[0]["encoding"], "identity")
 
     def test_the_token_never_appears_in_the_receipt(self):
         receipt = self.send()
@@ -382,6 +398,11 @@ class FetchTests(unittest.TestCase):
         self.assertEqual({seen["authorization"] for seen in self.origin.seen}, {"Bearer " + TOKEN})
         self.assertEqual({seen["method"] for seen in self.origin.seen}, {"GET"})
 
+    def test_every_read_identifies_itself_and_refuses_compression(self):
+        dispatch.fetch("a" * 64, self.reads(), self.credential)
+        self.assertEqual({seen["user_agent"] for seen in self.origin.seen}, {"orchd"})
+        self.assertEqual({seen["encoding"] for seen in self.origin.seen}, {"identity"})
+
     def test_a_fetch_reads_and_does_not_write(self):
         with self.assertRaisesRegex(Rejected, "reads; it does not POST"):
             dispatch.fetch("a" * 64, self.reads(bad={"method": "POST", "url": self.origin.origin + "/x"}),
@@ -425,12 +446,7 @@ class FetchTests(unittest.TestCase):
 
 
 class WholeLoopTests(unittest.TestCase):
-    """Plan, fetch, preview, dispatch: the sequence a project manager's issue would take.
-
-    Every step here is the real one. The reads and the write both cross a socket, the codec
-    checks the capture against the plan it asked for, and the write that goes out is the one
-    the preview produced and nothing else.
-    """
+    """Plan, fetch, preview, dispatch: the sequence a project manager's issue would take.\n\nEvery step here is the real one. The reads and the write both cross a socket, the codec\nchecks the capture against the plan it asked for, and the write that goes out is the one\nthe preview produced and nothing else.\n"""
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -444,12 +460,7 @@ class WholeLoopTests(unittest.TestCase):
         self.credential = dispatch.read_credential(path)
 
     def codec(self):
-        """The real codec, aimed at the local origin.
-
-        `github_issues` hardcodes api.github.com on purpose — no host override, no inferred
-        destination — so the test substitutes where it points rather than giving the codec a
-        way to be pointed elsewhere in production.
-        """
+        """The real codec, aimed at the local origin.\n\n`github_issues` hardcodes api.github.com on purpose — no host override, no inferred\ndestination — so the test substitutes where it points rather than giving the codec a\nway to be pointed elsewhere in production.\n"""
         from orch import github_issues as codec
         patcher = patch.object(codec, "API", self.origin.origin)
         patcher.start()
@@ -505,6 +516,85 @@ class WholeLoopTests(unittest.TestCase):
         with self.assertRaisesRegex(Rejected, "binding mismatch"):
             codec.preview_issue(intent, profile, capture)
         self.assertEqual([seen for seen in self.origin.seen if seen["method"] == "POST"], [])
+
+
+class BrokerCommandTests(unittest.TestCase):
+    """The two outbound commands as the runbook tells an operator to use them."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.origin = Origin()
+        self.addCleanup(self.origin.close)
+        self.secret = self.root / "secret"
+        self.secret.write_text(randomness.token_hex(32) + "\n", encoding="ascii")
+        os.chmod(self.secret, 0o600)
+        credential = self.root / "credential"
+        credential.write_text("origin=" + self.origin.origin + "\ntoken=" + TOKEN + "\n", encoding="ascii")
+        os.chmod(credential, 0o600)
+        workspaces = self.root / "work"
+        workspaces.mkdir()
+        self.service = BrokerService(self.root / "journal", self.secret, workspaces, "trusted-fixture",
+                                     None, 0, None, str(credential))
+        thread = threading.Thread(target=self.service.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(lambda: (self.service.shutdown(), thread.join(5)))
+
+    def write(self, name, value):
+        path = self.root / name
+        path.write_text(json.dumps(value), encoding="utf-8")
+        return str(path)
+
+    def cli(self, *argv, expect=0):
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(sys, "argv", ["orch", *argv, "--broker-endpoint",
+                                        "127.0.0.1:" + str(self.service.port),
+                                        "--broker-secret", str(self.secret)]),                 redirect_stdout(out), redirect_stderr(err):
+            try:
+                code = 0
+                main()
+            except SystemExit as exit:
+                code = exit.code
+        self.assertEqual(code, expect, err.getvalue())
+        return json.loads(out.getvalue()) if out.getvalue() else err.getvalue()
+
+    def preview(self, **changes):
+        request = {"method": "POST", "url": self.origin.origin + "/repos/a/b/issues",
+                   "headers": {"Accept": "application/vnd.github+json"},
+                   "body": {"title": "Add rate limiting"}}
+        request.update(changes)
+        return {"kind": "GitHubIssuePreview",
+                "binding": {"operation_id": "a" * 32, "request": request}, "sha256": "x"}
+
+    def test_broker_fetch_performs_a_plan_from_a_file(self):
+        self.origin.reads = {"/repos/a/b": {"id": 1}}
+        plan = {"sha256": "a" * 64, "binding": {"requests": {
+            "repository": {"method": "GET", "url": self.origin.origin + "/repos/a/b"}}}}
+        capture = self.cli("broker-fetch", "--plan", self.write("plan.json", plan))
+        self.assertEqual(capture["plan_sha256"], "a" * 64)
+        self.assertEqual(capture["responses"]["repository"]["body"], {"id": 1})
+
+    def test_broker_dispatch_sends_the_request_the_preview_describes(self):
+        receipt = self.cli("broker-dispatch", "--preview", self.write("preview.json", self.preview()))
+        self.assertEqual(receipt["outcome"], "succeeded")
+        self.assertEqual(self.origin.seen[0]["authorization"], "Bearer " + TOKEN)
+        self.assertNotIn(TOKEN, json.dumps(receipt))
+
+    def test_an_unsuccessful_dispatch_exits_non_zero_so_a_script_stops(self):
+        # An uncertain outcome especially: the effect may exist, and a script that carried on
+        # would either retry it or report a success nobody observed.
+        self.origin.reply = (422, {"message": "Validation failed"})
+        receipt = self.cli("broker-dispatch", "--preview", self.write("preview.json", self.preview()),
+                           expect=2)
+        self.assertEqual(receipt["outcome"], "failed")
+
+    def test_both_commands_insist_on_their_inputs(self):
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(sys, "argv", ["orch", "broker-dispatch"]),                 redirect_stdout(out), redirect_stderr(err):
+            with self.assertRaises(SystemExit):
+                main()
+        self.assertIn("--preview", err.getvalue())
 
 
 if __name__ == "__main__":

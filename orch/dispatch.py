@@ -44,6 +44,10 @@ MAX_RESPONSE = 65536
 MAX_TOKEN = 512
 MAX_READS = 8
 MAX_CAPTURE = 65536
+# Transport headers the broker sets on everything it sends. GitHub refuses a request with no
+# User-Agent outright — 403 with an HTML body, which no loopback test would ever produce —
+# and identity encoding keeps a response from arriving compressed and unparseable.
+TRANSPORT = {"User-Agent": "orchd", "Accept-Encoding": "identity"}
 TIMEOUT = 30
 METHODS = ("POST", "PATCH", "PUT")
 # The broker adds authentication. A request that carries its own is either confused about
@@ -200,7 +204,7 @@ def fetch(plan_sha256, requests, credential):
     responses, total = {}, 0
     for name, read in requests.items():
         parts = urlsplit(read["url"])
-        headers = dict(read.get("headers", {}))
+        headers = {**read.get("headers", {}), **TRANSPORT}
         headers["Authorization"] = "Bearer " + credential["token"]
         connection = _connect(credential["origin"])
         try:
@@ -258,7 +262,7 @@ def perform(operation, request, expected_sha256, credential):
     except Rejected as exc:
         raise Rejected("Dispatch refused before sending: " + str(exc)) from exc
     body = canonical(request["body"]) if "body" in request else None
-    headers = dict(request["headers"])
+    headers = {**request["headers"], **TRANSPORT}
     headers["Authorization"] = "Bearer " + credential["token"]
     if body is not None:
         headers["Content-Length"] = str(len(body))
