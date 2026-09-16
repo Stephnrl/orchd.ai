@@ -6,7 +6,7 @@ container. A junior container could therefore claim as a lead planner, or skip t
 altogether and write the evidence store directly. The role gate was a convention between
 cooperating processes, which is not what a gate is for.
 
-This service makes it enforced. **The agent an request comes from is the secret that signed
+This service makes it enforced. **The agent a request comes from is the secret that signed
 it**, never a field in the body, and the roles that agent may claim come from this service's
 configuration rather than from the caller. The service holds the store; an agent holds a
 secret and a socket.
@@ -31,6 +31,10 @@ agents/
   junior-devops/ role   -> "junior"
                  secret -> ...
 ```
+
+Each secret must be a small, unlinked, **private** file: on POSIX the service refuses one
+that is world-accessible, and says which agent it belongs to rather than failing later at a
+request. Create them with `chmod 600`.
 
 Roles are read once at startup because they are policy: changing what an agent may claim is
 a deliberate act that restarts the service. Secrets are re-read live, so

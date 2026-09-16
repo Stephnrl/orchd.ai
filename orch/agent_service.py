@@ -82,7 +82,13 @@ def registry(directory):
             raise Rejected("Agent " + name + " must list one to %d known roles" % MAX_ROLES)
         if len(agents) >= MAX_AGENTS:
             raise Rejected("This service serves at most %d agents" % MAX_AGENTS)
-        agents[name] = {"roles": tuple(roles), "secret": SecretFile(secret_file)}
+        try:
+            secret = SecretFile(secret_file)
+        except Rejected as exc:
+            # A secret this service cannot use is a startup error naming the agent, not a
+            # puzzle at the first request. On POSIX it must not be world-accessible.
+            raise Rejected("Agent " + name + " has an unusable secret file: " + str(exc)) from exc
+        agents[name] = {"roles": tuple(roles), "secret": secret}
     if not agents:
         raise Rejected("The agent registry is empty")
     return agents

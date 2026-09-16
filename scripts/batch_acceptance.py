@@ -130,7 +130,9 @@ def through_the_api(engine, store, root):
         folder = agents / name
         folder.mkdir(parents=True)
         (folder / 'role').write_text(role + "\n", encoding='ascii')
-        (folder / 'secret').write_text(randomness.token_hex(32) + "\n", encoding='ascii')
+        secret = folder / 'secret'
+        secret.write_text(randomness.token_hex(32) + "\n", encoding='ascii')
+        os.chmod(secret, 0o600)     # A world-readable secret is refused on POSIX.
     task = engine.create_task('Agent API acceptance')
     service = subprocess.Popen([sys.executable, '-m', 'orch', 'agent-serve', '--data', str(store),
                                 '--agents', str(agents), '--port', '0'], cwd=ROOT,
