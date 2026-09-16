@@ -79,6 +79,10 @@ class Engine:
     def events(self, task_id):
         return self.store.events(task_id)
 
+    def admission_bound(self):
+        """How many tasks may advance at once, read in one place so tests patch one place."""
+        return MAX_ACTIVE_TASKS
+
     @contextlib.contextmanager
     def deciding(self, task_id):
         """An operator decision: exclusive on the task, and on the store while it commits.
@@ -110,12 +114,17 @@ class Engine:
             # than lose a race with another worker doing exactly the same thing.
             with self.store.exclusive(wait=CLAIM_TIMEOUT):
                 active = self.store.admitted(task_id)
-                if len(active) >= MAX_ACTIVE_TASKS:
+                if len(active) >= self.admission_bound():
                     raise Rejected("Too many tasks are being advanced at once (%d); wait for one to finish"
                                    % len(active))
                 existing = self.store.owner(task_id)
                 state, context = self.store.task(task_id)
                 generation = existing["generation"] if existing else 0
+                if existing and existing["expires_at"] and self.store.live(existing):
+                    # An agent holds this task; a worker does not take it from under one.
+                    from .agent_sessions import describe
+                    raise Rejected("That task is held by " + describe(existing)
+                                   + " until " + existing["expires_at"])
                 if existing and existing["owner"] != self.owner:
                     generation += 1
                     self._event(state, context, "task_ownership_taken",
