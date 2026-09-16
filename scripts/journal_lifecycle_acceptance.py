@@ -1,8 +1,10 @@
-"""Retire a full integration operation journal and prove its successor refuses a second attempt.
+"""Walk both operation journals through their whole lifecycle, through the real CLI.
 
-Runs the whole walkthrough for both operation journals, through the real CLI, without a
-server, credentials or network calls. Retirement deletes nothing here and authorizes
-nothing: no record changes state, and no dispatch or retry becomes available.
+A full journal retires into a successor that refuses a second attempt for any task its
+chain retains, and a prepared operation whose scope went stale is withdrawn so its task can
+be prepared again. Neither deletes a record, and neither releases an attempt: a consumed
+one is refused here as part of the walkthrough. No server, credentials or network calls are
+involved, and nothing authorizes dispatch or retry.
 """
 import argparse
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
@@ -28,6 +30,7 @@ from jira_action_support import profile, intent as jira_intent, capture as jira_
 from test_github_journal_capacity import proposal
 
 REASON = 'Journal full; acceptance walkthrough continues in the successor'
+REVISION_REASON = 'The base branch moved before dispatch'
 
 
 def cli(*argv):
@@ -67,14 +70,20 @@ def refused(*argv):
     return False
 
 
-def github_stage(journal, number):
-    saved = journal.stage(proposal(number), 'example/project', 123)
+def github_stage(journal, number, character=None):
+    source = proposal(number)
+    if character:                       # The same task under a new operation identifier.
+        source['operation_id'] = character * 32
+        source['head'] = 'orchd/' + source['task_id'] + '/' + character * 32
+    saved = journal.stage(source, 'example/project', 123)
     return saved['operation_id'], saved['sha256']
 
 
-def jira_stage(journal, number):
+def jira_stage(journal, number, character=None):
     config = profile()
     proposed = jira_intent('create_issue', number)
+    if character:                       # The same task under a new operation identifier.
+        proposed['operation_id'] = character * 32
     observed = jira_capture(proposed, config)
     preview = preview_action(proposed, config, observed)
     saved = journal.stage_action(proposed, config, observed, preview['sha256'])
@@ -159,9 +168,78 @@ def run(family, opener, stage, root):
     fresh = cli(family + '-journal-backup', '--journal', str(first), '--destination', str(later))
     assert cli(family + '-compare-journal-backup', '--journal', str(first), '--destination', str(later),
                '--expected-sha256', fresh['sha256'])['status'] == 'matches'
+    revision = revise(family, opener, stage, successor, root)
     return {'family': family, 'journal': str(first), 'successor': str(successor),
             'retirement': retired, 'chain': walked, 'stale_comparison': stale['status'],
-            'audit_sha256': before['sha256'], 'records_deleted': 0}
+            'audit_sha256': before['sha256'], 'revision': revision, 'records_deleted': 0}
+
+
+def revise(family, opener, stage, journal_path, root):
+    """Withdraw a prepared operation in the successor and prepare its task again."""
+    snapshot, after = root / 'successor-snapshot', root / 'successor-after'
+    journal = opener(journal_path)
+    try:
+        live = journal.db.execute("SELECT operation_id,sha256 FROM intents WHERE state='prepared'").fetchone()
+        operation, scope = live['operation_id'], live['sha256']
+        task = journal.db.execute("SELECT task_id FROM intents WHERE operation_id=?", (operation,)).fetchone()[0]
+        reserved = stage(journal, 5)                 # A second task, whose attempt is consumed.
+        journal.reserve(*reserved)
+    finally:
+        journal.close()
+    # The snapshot has to describe the journal as the upgrade will find it.
+    created = cli(family + '-journal-backup', '--journal', str(journal_path), '--destination', str(snapshot))
+
+    assert refused(family + '-journal-withdraw', '--journal', str(journal_path), '--operation-id',
+                   operation, '--expected-sha256', scope, '--reason', REVISION_REASON), 'not upgraded yet'
+    upgraded = cli(family + '-journal-upgrade', '--journal', str(journal_path),
+                   '--destination', str(snapshot), '--expected-sha256', created['sha256'])
+    assert upgraded['status'] == 'upgraded' and upgraded['records_changed'] == 0
+    assert upgraded['records_deleted'] == 0 and upgraded['audit_sha256'] == created['audit_sha256']
+
+    assert refused(family + '-journal-withdraw', '--journal', str(journal_path), '--operation-id',
+                   reserved[0], '--expected-sha256', reserved[1], '--reason', REVISION_REASON), \
+        'a consumed attempt must never be withdrawn'
+    withdrawn = cli(family + '-journal-withdraw', '--journal', str(journal_path), '--operation-id',
+                    operation, '--expected-sha256', scope, '--reason', REVISION_REASON)
+    assert withdrawn['status'] == 'withdrawn' and not withdrawn['attempt_released']
+    assert withdrawn['records_deleted'] == 0 and withdrawn['task_id'] == task
+
+    journal = opener(journal_path)
+    try:
+        for identifier in (None, 'f'):               # The spent identifier stays spent.
+            try:
+                stage(journal, 9, identifier) if identifier else stage(journal, 9)
+                if identifier is None:
+                    raise AssertionError('a withdrawn operation identifier must not be reused')
+            except Rejected:
+                if identifier is not None:
+                    raise AssertionError('the task must be free under a new identifier')
+        try:
+            stage(journal, 9, 'e')
+            raise AssertionError('one live operation per task')
+        except Rejected:
+            pass
+        try:
+            journal.reserve(operation, scope)
+            raise AssertionError('a withdrawn operation must never be reserved')
+        except Rejected:
+            pass
+    finally:
+        journal.close()
+
+    usage = cli(family + '-journal-usage', '--journal', str(journal_path))
+    # The withdrawn original, the reserved second task and the replacement: nothing left.
+    assert usage['withdrawn_records'] == 1 and usage['records'] == 3
+    stale = cli_different(family + '-compare-journal-backup', '--journal', str(journal_path),
+                          '--destination', str(snapshot), '--expected-sha256', created['sha256'])
+    assert any('withdrawal_mismatch' in entry['reasons'] for entry in stale['binding']['differences'])
+    fresh = cli(family + '-journal-backup', '--journal', str(journal_path), '--destination', str(after))
+    assert cli(family + '-compare-journal-backup', '--journal', str(journal_path), '--destination',
+               str(after), '--expected-sha256', fresh['sha256'])['status'] == 'matches'
+    drill = cli(family + '-journal-recovery-drill', '--destination', str(after), '--expected-sha256', fresh['sha256'])
+    assert drill['status'] == 'passed' and drill['binding']['withdrawn_checked'] == 1
+    return {'upgrade': upgraded, 'withdrawal': withdrawn, 'withdrawn_records': usage['withdrawn_records'],
+            'records_deleted': 0, 'attempt_released': False}
 
 
 def main():
@@ -177,21 +255,22 @@ def main():
         stack.enter_context(patch('subprocess.Popen', side_effect=AssertionError('Fixture must not launch processes')))
         # Canonical: succession records name journals by path, and a hosted Windows runner
         # hands out an 8.3 short %TEMP% that the journal itself would never store.
-        scratch = real_path(stack.enter_context(tempfile.TemporaryDirectory(prefix='orchd-succession-')))
+        scratch = real_path(stack.enter_context(tempfile.TemporaryDirectory(prefix='orchd-lifecycle-')))
         families = []
         for family, opener, stage in FAMILIES:
             root = scratch / family
             root.mkdir()
             families.append(run(family, opener, stage, root))
-    report = {'kind': 'JournalSuccessionAcceptance', 'status': 'passed', 'families': families,
+    report = {'kind': 'JournalLifecycleAcceptance', 'status': 'passed', 'families': families,
               'records_deleted': 0, 'restore_allowed': False, 'retry_allowed': False,
               'live_authorized': False, 'remote_effect_confirmed': False}
     if destination is not None:
         destination.mkdir(parents=True)
         (destination / 'acceptance.json').write_bytes(canonical(report))
     print(canonical(report).decode())
-    print('PASS: both operation journals retire against a verified snapshot, delete nothing, '
-          'refuse new admission, and their successors refuse a second attempt for a retained task')
+    print('PASS: both operation journals retire into a successor that refuses a second attempt, '
+          'withdraw a stale prepared operation so its task can be prepared again, and refuse to '
+          'withdraw a consumed attempt; no record is deleted')
     return 0
 
 

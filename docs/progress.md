@@ -1,5 +1,13 @@
 # Roadmap progress — September 15, 2026
 
+The [intent revision milestone](journal-revision.md) closes the other half of the same
+contract: a task whose prepared scope went stale, because the base branch moved or the plan
+changed, could never be prepared again. A prepared operation is now withdrawn against its
+retained scope digest and an audited reason, freeing its task for a new operation ID, while
+a consumed attempt is refused and must be reconciled. A unique index restricted to live
+operations enforces one live operation per task in storage rather than in code, and the
+rebuilt table is reached by a verified, atomic upgrade that reproduces every record.
+
 The [operation journal succession milestone](journal-succession.md) closes the same dead
 end for the GitHub and Jira operation journals, where the hazard is sharper: their records
 hold one-use attempt reservations, so a hand-made replacement journal would hand a task a

@@ -122,6 +122,15 @@ its chain already retains and fails closed when a predecessor cannot be read, wh
 property a hand-made replacement journal cannot have. Backup comparison reports succession
 changes, so a snapshot taken before retirement no longer claims to describe the journal.
 
+[Intent revision](journal-revision.md) completes that lifecycle. A prepared operation whose
+scope has gone stale is withdrawn against its retained digest and an audited reason, so its
+task can be prepared again under a new operation identifier, while the withdrawn record, its
+scope and its identifier stay exactly where they are. A consumed attempt can never be
+withdrawn: it must be reconciled, as an uncertain task must be. Storage enforces the rule
+through a unique index over live operations and a trigger that permits only two transitions,
+and the rebuilt table is reached through a verified, atomic upgrade that refuses to commit
+unless every record comes through unchanged.
+
 Phase 1 is the design baseline. M1–M3 are implemented for the bounded fixture workflow;
 the local management UI now covers M4 visibility and explicit decisions. M5 has an
 offline CLI conformance boundary and [Copilot protocol codec](copilot-protocol.md);
