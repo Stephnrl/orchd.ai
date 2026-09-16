@@ -9,6 +9,7 @@ from urllib.parse import urlsplit, parse_qs
 
 from .contracts import Rejected, ref
 from .operator_session import OperatorSession
+from .status import report as status_report
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,10 @@ class Application:
                     raise Rejected('Explicit repository task title and intent required')
                 task = self.engine.create_repository_task(payload['intent'], payload['title'])
                 return 201, self.engine.task(task)
+            if method == "GET" and parts == ["status"]:
+                # Read-only and lock-free, so it answers while work is happening rather than
+                # waiting for it to stop. See docs/status.md.
+                return 200, status_report(self.engine)
             if method == "GET" and parts == ["tasks"]:
                 after, limit = page(query)
                 rows = self.engine.store.db.execute("SELECT rowid,id,state,context FROM tasks WHERE rowid>? ORDER BY rowid LIMIT ?", (after, limit + 1)).fetchall()

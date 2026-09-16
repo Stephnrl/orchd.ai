@@ -78,6 +78,12 @@ it. Jira already modelled the ticket and the link; nothing modelled the issue.
 letting an agent write into a repository: the issue is derived from the specification a person
 confirmed, so it says what was signed and cannot say anything else, and its operation
 identifier is derived too, so an interrupted dispatch resumes rather than filing a second.
+[One answer instead of six](docs/status.md) reports what is happening now — tasks by state,
+which are waiting on a person and since when, who holds what, leases that lapsed, work
+available by role, quotas and journal capacity — without taking the store-wide lock, so it
+answers while everything is busy rather than refusing until it stops.
+[What each module is for](docs/modules.md) maps the package, generated from each module's own
+opening sentence so it cannot describe something the code stopped doing.
 [Finding the work](docs/agent-queue.md) lets a container discover what is its to do rather
 than being handed identifiers: tasks whose next step belongs to a role it is enrolled for and
 which nobody holds, as identifiers and state only, with the admission bound alongside. Building

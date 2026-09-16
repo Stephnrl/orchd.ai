@@ -40,6 +40,13 @@ arbitrary text in a repository even indirectly, and its operation identifier is 
 so a retry resumes the operation it was rather than starting a new one. Verified against the
 real API through preview without creating anything.
 
+The [status milestone](status.md) answers the operator's morning question in one command and
+one endpoint, separating work in progress from work stopped on a person, and reads without
+excluding anything so it responds while the machine is busy. [A module map](modules.md)
+generated from docstrings replaces the reorganisation that was considered and rejected: moving
+sixty modules into subpackages would change what `broker.source_digest` reports a broker to be,
+for a navigational gain a map delivers without the risk.
+
 The [work discovery milestone](agent-queue.md) lets a container find its own work instead of
 being handed task identifiers, scoped to its enrolled roles and carrying no task content. It
 also closed two faults it exposed: an agent could be enrolled as `human` and claim an approval

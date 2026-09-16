@@ -190,6 +190,17 @@ have written is the one the second searches for, so reconciliation finds the iss
 rather than filing a second. An unconfirmed draft implies nothing, and a specification too
 large to render is refused rather than trimmed.
 
+[One answer instead of six](status.md) collects the signals that were scattered across
+`doctor`, `storage-usage`, `agent-sessions`, the journal usage commands and the deployment
+check. The distinction it is built around is that a task waiting on a person is the machine
+stopped and the operator is the reason, while a task an agent holds is the machine working;
+lumping them together produces a number that rises for two opposite reasons. It never takes the
+store-wide lock and never asks for quiescence, because a status view that refused while work was
+happening would be useless exactly when it was wanted, and a journal it cannot open is reported
+rather than raised. `GET /status` serves the same report to the operator window, and
+[a generated module map](modules.md) describes the package from each module's own opening
+sentence, with a test that fails when the two stop matching.
+
 [Finding the work](agent-queue.md) gives a container a way to discover what it could take.
 The listing is filtered to the roles that agent is enrolled for, because work it can never
 claim is not its business to know about; it carries identifiers and state and never a task's
