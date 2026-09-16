@@ -122,6 +122,14 @@ its chain already retains and fails closed when a predecessor cannot be read, wh
 property a hand-made replacement journal cannot have. Backup comparison reports succession
 changes, so a snapshot taken before retirement no longer claims to describe the journal.
 
+[Worker admission](worker-admission.md) bounds that concurrency: at most four tasks advance
+at once in one store, counted on claims whose worker is alive, so a crash frees its slot
+while a running worker holds it. The refusal happens before anything is claimed or changed,
+there is no queue, and a worker never competes with itself. Registering a claim waits
+briefly for the shared lock rather than failing a race two workers would otherwise lose to
+each other, and a process that tries to advance a task it is already advancing is refused
+by name, because file locks do not separate threads.
+
 [Task ownership](task-ownership.md) begins the concurrent-worker phase by removing what
 made it impossible: one store-wide lock that every engine mutation took. Task work now
 holds a per-task lock, operator decisions hold that lock and the store-wide one, and

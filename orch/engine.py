@@ -14,7 +14,7 @@ from .execution import Executor, FixtureWorker
 from .fixtures import recipe, repository
 from .provider import MockProvider, Scenario
 from .cli_provider import FixtureCliProvider
-from .storage import Store
+from .storage import CLAIM_TIMEOUT, MAX_ACTIVE_TASKS, Store
 from .broker import BrokerClient, BrokerUncertain, identity
 
 EDGES = {
@@ -58,6 +58,7 @@ class Engine:
         # Who this worker is, for the claim it records while advancing a task. The session
         # distinguishes two processes of the same account, and outlives a recycled pid.
         self.owner = canonical({"principal": identity(), "pid": os.getpid(), "session": uid()}).decode()
+        self._advancing = set()
         self.after_operation = None  # Test crash injection, after durable receipt commit.
 
     def repository_tasks(self, task_id):
@@ -101,8 +102,17 @@ class Engine:
         Taking over a claim whose worker is gone is recorded as an event and never re-runs
         its work: an operation left `started` still forces explicit reconciliation.
         """
+        if task_id in self._advancing:
+            # File locks exclude other processes, not other threads in this one.
+            raise Rejected("This worker is already advancing that task")
         with self.store.exclusive(task_id):
-            with self.store.exclusive():
+            # Registering a claim is a millisecond of shared work, so wait for it rather
+            # than lose a race with another worker doing exactly the same thing.
+            with self.store.exclusive(wait=CLAIM_TIMEOUT):
+                active = self.store.admitted(task_id)
+                if len(active) >= MAX_ACTIVE_TASKS:
+                    raise Rejected("Too many tasks are being advanced at once (%d); wait for one to finish"
+                                   % len(active))
                 existing = self.store.owner(task_id)
                 state, context = self.store.task(task_id)
                 generation = existing["generation"] if existing else 0
@@ -114,9 +124,11 @@ class Engine:
                     state, context = self.store.task(task_id)
                 with self.store.transaction():
                     self.store.claim(task_id, self.owner, state["revision"], max(generation, 1))
+            self._advancing.add(task_id)
             try:
                 yield
             finally:
+                self._advancing.discard(task_id)
                 try:
                     with self.store.transaction():
                         self.store.disclaim(task_id, self.owner)

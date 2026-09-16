@@ -41,6 +41,9 @@ stays where it is and must be reconciled.
 [Task ownership](docs/task-ownership.md) replaces the store-wide dispatcher lock with one
 owner per task, so two workers can advance two different tasks at once and never the same
 one, and a worker that dies leaves a recorded claim instead of a silently reusable task.
+[Worker admission](docs/worker-admission.md) bounds how many tasks may be advancing at
+once, refusing new work before anything is claimed rather than exhausting the host and
+leaving an operation to reconcile.
 [The consolidated Jira package](docs/jira-integration.md) adds Epic/Story/Task preparation,
 relationships, transitions, GitHub associations and review/preflight diagnostics, with
 synthetic examples and a complete offline acceptance scenario. Live activation remains gated.
