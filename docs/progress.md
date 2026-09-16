@@ -1,5 +1,14 @@
 # Roadmap progress — September 16, 2026
 
+The [draft specification milestone](draft-spec.md) closes a fail-open at the top of the
+chain. `create_task` invented a specification, wrote `confirmed_by` and set `spec_confirmed`
+in one transaction, so the evidence recorded a human confirmation nobody performed — and
+every later gate takes the specification as given. A task can now be opened with no
+specification at all, drafted and revised as append-only evidence, stopped on questions a
+human must answer, and confirmed only by a person naming the sha256 of the words they read.
+The fixture path is unchanged and still opt-out; what follows `SPEC_READY` is still the
+greeting fixture, and routing drafting through the authenticated agent API is a separate step.
+
 The [agent protocol context milestone](agent-protocol-context.md) publishes how to work
 through this control plane as plain Markdown an agent container can be given. The tools that
 run agents disagree about where such text lives, not about what it says, so there is one

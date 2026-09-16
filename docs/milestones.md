@@ -130,6 +130,17 @@ role and that role is the one the task's next step needs. The wire is five fixed
 request and reply contracts, HMAC verified before any JSON is parsed, replies signed with the
 secret that authenticated them and bound to the route and nonce they answer.
 
+[The draft specification stage](draft-spec.md) implements the states and contracts the
+design has carried from the start but no code ever used. A task can be opened with no
+specification; a project manager drafts one and revises it, each revision kept rather than
+edited; questions it cannot answer itself record a `ClarificationRequest` bound to the draft
+they are about and stop the task until a human records a `ClarificationResponse`; and
+`SPEC_READY` requires a human to confirm the exact specification they read, named by its
+sha256, so a draft revised in between is refused rather than silently confirmed. A
+confirmation does not survive a return to `DRAFT_SPEC`. Answering and confirming are human
+acts that no agent route performs. Everything downstream is still the greeting fixture, so a
+specification drafted about anything else stops at planning.
+
 [The agent protocol as plain context](agent-protocol-context.md) publishes what those
 containers are missing: the rules an agent works by, as plain Markdown rather than one tool's
 format. A short core carries the four rules and the claim loop, a reference carries the state

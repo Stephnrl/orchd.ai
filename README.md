@@ -52,6 +52,11 @@ human.
 agent container holds a secret and a socket instead of the store, the agent it is comes from
 the secret that signed the request, and the roles it may claim come from the service's own
 registry.
+[The draft specification stage](docs/draft-spec.md) makes the project manager's step real:
+a task can be opened with no specification, drafted and revised as append-only evidence,
+stopped on questions only a human can answer, and moved on only when a person confirms the
+exact specification they read, named by its hash. `create_task` used to invent a
+specification and record its own confirmation of it.
 [The agent protocol as plain context](docs/agent-protocol-context.md) gives those containers
 the text that tells them how to work: one Markdown protocol published to a Claude-style skill
 directory, a Copilot instructions layout or a vendored copy, with `skill-export --check` for
