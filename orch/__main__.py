@@ -58,6 +58,7 @@ def main():
     parser.add_argument("--broker-secret", help="Private file holding the 64-hex shared secret of the broker service")
     parser.add_argument("--broker-root", help="Broker-owned journal directory for broker-serve")
     parser.add_argument("--workspaces", help="Orchestrator workspace parent directory that broker-serve may execute in")
+    parser.add_argument("--dispatch-credential", help="Private origin= and token= file the broker alone reads for outbound dispatch; never given to an agent")
     parser.add_argument("--pilot-root", help="Pilot journal directory whose Docker workers broker-serve may run; requires --image")
     parser.add_argument("--complete", action="store_true", help="For broker-rotate-secret, drop the previous secret after every process has re-read the file")
     parser.add_argument("--successor", help="New journal that continues a retired one: a directory for pilots, a database file for integrations")
@@ -89,7 +90,8 @@ def main():
         from .contracts import Rejected
         try:
             service = BrokerService(args.broker_root, args.broker_secret, args.workspaces,
-                                    "trusted-fixture" if args.trusted_fixture else "docker", args.image, args.port, args.pilot_root)
+                                    "trusted-fixture" if args.trusted_fixture else "docker", args.image, args.port,
+                                    args.pilot_root, args.dispatch_credential)
         except (Rejected, OSError):
             parser.error("Broker service rejected its configuration; check the journal, secret, workspace and profile")
         print(f"Broker service: http://127.0.0.1:{service.port}", flush=True)

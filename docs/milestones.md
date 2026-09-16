@@ -130,6 +130,22 @@ role and that role is the one the task's next step needs. The wire is five fixed
 request and reply contracts, HMAC verified before any JSON is parsed, replies signed with the
 secret that authenticated them and bound to the route and nonce they answer.
 
+[Outbound dispatch](outbound-dispatch.md) gives this control plane its first and only way
+to reach something outside it, on the broker rather than in an agent container. A credential
+mounted into an agent would make every approval above it decorative, because the container
+could use it whenever it liked while the evidence recorded one approved call; the broker
+already runs under its own OS account for exactly this reason. A credential file names the
+origin it may be sent to, so a misdirected profile cannot carry a live token somewhere it was
+never issued for, and a cleartext origin is refused outright. A request is sent only if it
+hashes to the sha256 its approval was granted over, carries no authentication of its own, is
+a write, and contains no recognised secret; each of those refuses before any byte leaves.
+Redirects are recorded and never followed, since following one hands the token to whatever
+the redirect named. Every outcome after the bytes go is returned as a receipt rather than
+raised, because `Rejected` is a `ValueError` here and a broad catch would discard the one
+record saying an effect may exist. An `outbound_dispatch` deployment gate passes only when a
+credential is configured and the broker is a separate OS account, since a credential on the
+orchestrator's own account is readable by everything the orchestrator runs.
+
 [GitHub issues as intents](github-issues.md) close the gap between the two halves of
 tracking work. Jira actions modelled Epics, Stories, Tasks, Epic and issue links and a
 `github_link` naming an issue by number, while the only GitHub intent was a pull request, so

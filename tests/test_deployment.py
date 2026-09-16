@@ -24,7 +24,9 @@ class DeploymentTests(unittest.TestCase):
             report = json.loads(output.getvalue())
             self.assertEqual(report["status"], "blocked")
             self.assertFalse(report["provider_authorized"])
-            self.assertEqual(len(report["blocking_gates"]), 7)
+            # Every gate blocks when nothing has been supplied. Counting them by name rather
+            # than by number means adding a gate does not quietly need this test edited.
+            self.assertEqual(report["blocking_gates"], [gate["id"] for gate in report["gates"]])
             self.assertIn("broker_identity", report["blocking_gates"])
             self.assertEqual(report["broker_identity"]["status"], "not_supplied")
             self.assertEqual(report["worker_runtime"]["status"], "not_supplied")
@@ -40,7 +42,10 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(report["worker_runtime"]["status"], "current")
             self.assertNotIn("worker_runtime", report["blocking_gates"])
             self.assertNotIn("executable_digest", report["blocking_gates"])
-            self.assertEqual(len(report["blocking_gates"]), 5)
+            passed = {gate["id"] for gate in report["gates"] if gate["status"] == "passed"}
+            self.assertEqual(passed, {"executable_digest", "worker_runtime"})
+            self.assertEqual(set(report["blocking_gates"]),
+                             {gate["id"] for gate in report["gates"]} - passed)
             self.assertIn("broker_identity", report["blocking_gates"])
             self.assertFalse(report["provider_authorized"])
             self.assertFalse(report["provider"]["provider_authorized"])

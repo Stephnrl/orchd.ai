@@ -52,6 +52,12 @@ human.
 agent container holds a secret and a socket instead of the store, the agent it is comes from
 the secret that signed the request, and the roles it may claim come from the service's own
 registry.
+[Outbound dispatch](docs/outbound-dispatch.md) is the one path that actually sends a
+prepared request, and it lives on the broker because the credential does: an agent holds a
+secret that proves which agent it is and grants nothing, while the broker under its own OS
+account holds what can change the world. The credential names the origin it may go to, the
+request must hash to what was approved, redirects are never followed, and refused, failed
+and uncertain are three different answers.
 [GitHub issues as intents](docs/github-issues.md) add the half of a project manager's
 tracking work that was missing: an issue intent with a read plan, a repository pinned by
 numeric ID, labels that must already exist, an operation marker that makes creation

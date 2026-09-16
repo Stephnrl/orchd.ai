@@ -245,6 +245,9 @@
             "null"
           ],
           "maxLength": 4096
+        },
+        "dispatch": {
+          "type": "boolean"
         }
       }
     },
@@ -1021,6 +1024,130 @@
         },
         "stale": {
           "type": "boolean"
+        }
+      }
+    },
+    "DispatchRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "operation_id",
+        "expected_sha256",
+        "request"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "dispatch"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "expected_sha256": {
+          "$ref": "#/$defs/Hash"
+        },
+        "request": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "method",
+            "url",
+            "headers"
+          ],
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": [
+                "POST",
+                "PATCH",
+                "PUT"
+              ]
+            },
+            "url": {
+              "type": "string",
+              "maxLength": 2048
+            },
+            "headers": {
+              "type": "object",
+              "maxProperties": 16,
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 1024
+              },
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9-]{1,64}$"
+              }
+            },
+            "body": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "DispatchReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "identity",
+        "receipt"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "dispatch"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "identity": {
+          "$ref": "#/$defs/Identity"
+        },
+        "receipt": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "schema_version",
+            "kind",
+            "operation_id",
+            "request_sha256",
+            "origin",
+            "method",
+            "url",
+            "outcome",
+            "started_at",
+            "ended_at",
+            "simulated"
+          ],
+          "properties": {
+            "kind": {
+              "const": "DispatchReceipt"
+            },
+            "outcome": {
+              "type": "string",
+              "enum": [
+                "succeeded",
+                "failed",
+                "uncertain"
+              ]
+            },
+            "simulated": {
+              "const": false
+            }
+          }
         }
       }
     }

@@ -17,9 +17,11 @@ def deployment_check(provider, executable=None, expected_sha256=None, image=None
         except (Rejected, OSError):
             runtime = {"status": "rejected", "reason": "Runtime evidence is invalid, expired, or does not match the current source/host/image"}
     identity = {"status": "not_supplied", "reason": "Supply the broker service endpoint and its secret file to assess the broker OS identity"}
+    outbound = False
     if broker is not None:
         try:
             assessment = assess_identity(broker)
+            outbound = bool((assessment.get("profile") or {}).get("dispatch"))
             reasons = {"separate": None,
                        "secret_attention": "The broker shared secret is mid-rotation or older than the reported maximum age; see broker-check",
                        "source_mismatch": "The broker service runs different broker source than this orchestrator; see broker-check"}
@@ -38,6 +40,14 @@ def deployment_check(provider, executable=None, expected_sha256=None, image=None
          "next_step": "Verify the offline Copilot codec against the exact deployed CLI version" if inventory["protocol"] else "Document and implement the corporate CLI native protocol"},
         {"id": "provider_containment", "status": "blocked",
          "next_step": "Independently test native tool disablement, outbound access and process-tree termination for this provider; worker Docker tests are insufficient"},
+        {"id": "outbound_dispatch",
+         "status": "passed" if outbound and identity["status"] == "separate" else "blocked",
+         # A dispatch credential only means anything when the broker is a different account.
+         # On a shared account the orchestrator, and everything it runs, can read the file.
+         "next_step": ("Give broker-serve a private --dispatch-credential naming its origin"
+                       if not outbound else
+                       "Run that broker under a separate OS account; a dispatch credential on the "
+                       "orchestrator's own account is readable by everything the orchestrator runs")},
         {"id": "credentials", "status": "blocked",
          "next_step": "Review credential and SSO provisioning, isolation, revocation and redaction on the deployment host without including secrets in this report"},
         {"id": "live_admission", "status": "blocked",

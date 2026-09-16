@@ -25,6 +25,9 @@ MAX_REPLY = 1024 * 1024    # Largest authenticated reply; matches the journal si
 ROUTES = {"identity": ("IdentityRequest", "IdentityReply"), "execute": ("ExecuteRequest", "ExecuteReply"),
           "result": ("ExecuteRequest", "ExecuteReply"), "retire": ("RetireRequest", "RetireReply"),
           "reconcile": ("ReconcileRequest", "ReconcileReply"),
+          # The only route that reaches outside this host. It exists on the broker because
+          # the credential does, and the credential is here so no agent container holds it.
+          "dispatch": ("DispatchRequest", "DispatchReply"),
           "pilot-profile": ("PilotProfileRequest", "PilotProfileReply"),
           "pilot-execute": ("PilotExecuteRequest", "PilotExecuteReply"),
           "pilot-reconcile": ("PilotReconcileRequest", "PilotReconcileReply")}
@@ -88,7 +91,10 @@ def atomic_json(path, data):
 def source_digest():
     base = Path(__file__).parent
     files = {name: hashlib.sha256((base / name).read_bytes()).hexdigest()
-             for name in ("broker.py", "broker_process.py", "broker_service.py", "execution.py", "process.py", "fixtures.py")}
+             # dispatch.py is here because it is the code that can send a credential off
+             # this host; a broker whose outbound path changed is not the same broker.
+             for name in ("broker.py", "broker_process.py", "broker_service.py", "dispatch.py",
+                          "execution.py", "process.py", "fixtures.py")}
     files["wire_schema"] = digest(WIRE_SCHEMA)
     return digest(files)
 
