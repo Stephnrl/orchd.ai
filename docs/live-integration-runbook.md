@@ -127,11 +127,9 @@ rather than acting on a partial view of what exists.
 ### 1.6 Create one
 
 ```sh
-# 1. The intent
-cat > intent.json <<'EOF'
-{"schema_version": "1.0.0", "task_id": "<32 hex>", "operation_id": "<32 hex>",
- "repository": "OWNER/NAME", "title": "...", "body": "...", "labels": []}
-EOF
+# 1. The intent. Derive it from a confirmed specification rather than writing one, so the
+#    issue says what a person signed — and so a retry resumes the same operation.
+python -m orch task-issue-intent --task TASK --github-profile profile.json > intent.json
 
 # 2. What must be observed first, and observing it
 python -m orch github-issue-read-plan --github-profile profile.json --intent intent.json > plan.json
@@ -244,7 +242,8 @@ work.
 These are genuinely open — they need decisions or evidence that cannot be produced on the
 development workstation.
 
-1. **Confirm a Jira read plan survives `broker-fetch`.** The plan's request shape passes the
+1. **Confirm a Jira read plan survives `broker-fetch`**, tracked as
+   [issue #130](https://github.com/Stephnrl/orchd.ai/issues/130). The plan's request shape passes the
    fetch checks offline; what is unconfirmed is whether a real Jira's responses satisfy
    `jira_actions.responses` — particularly the `createmeta` and `editmeta` bodies, which vary
    by version and configuration. Start with `jira-action-read-plan` for a `create_issue` and

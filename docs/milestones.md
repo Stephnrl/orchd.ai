@@ -178,6 +178,18 @@ issue carries an operation marker, so creation is idempotent and an uncertain di
 reconciled to the one issue it made. A duplicate search says what to ask and checks the
 answer, because giving this control plane a network read is its own gate.
 
+[The issue a specification implies](derived-issues.md) joins an agent's drafting to the
+tracker without letting an agent write into a repository. Letting it compose the issue text
+would have undone the confirmation: a human would have signed one set of words and an agent
+put different ones in the repository. The intent is instead a pure function of the confirmed
+specification — request, then acceptance criteria, then constraints, in one fixed order — so
+the issue says what was signed and cannot say anything else, and anyone can re-derive it and
+compare. The operation identifier is derived from the task and the specification's digest as
+well, which is what lets an interrupted dispatch resume: the marker the first attempt would
+have written is the one the second searches for, so reconciliation finds the issue that exists
+rather than filing a second. An unconfirmed draft implies nothing, and a specification too
+large to render is refused rather than trimmed.
+
 [An agent doing the work](agent-work.md) closes the gap between an authenticated container
 and the work it was enrolled to do. `task_drafts` was reachable only from the command line, so
 a project manager container could claim a task and do nothing with it; three routes now let it

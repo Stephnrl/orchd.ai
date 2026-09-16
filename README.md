@@ -74,6 +74,10 @@ tracking work that was missing: an issue intent with a read plan, a repository p
 numeric ID, labels that must already exist, an operation marker that makes creation
 idempotent and reconcilable, and a duplicate search that says what to ask rather than asking
 it. Jira already modelled the ticket and the link; nothing modelled the issue.
+[The issue a specification implies](docs/derived-issues.md) joins the two halves without
+letting an agent write into a repository: the issue is derived from the specification a person
+confirmed, so it says what was signed and cannot say anything else, and its operation
+identifier is derived too, so an interrupted dispatch resumes rather than filing a second.
 [An agent doing the work](docs/agent-work.md) connects the two: a project manager container
 can read, write and revise a specification and raise a clarification through the API it
 authenticates to, and every one of those requires a live lease it holds on that task. Nothing
