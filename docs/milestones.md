@@ -122,6 +122,14 @@ its chain already retains and fails closed when a predecessor cannot be read, wh
 property a hand-made replacement journal cannot have. Backup comparison reports succession
 changes, so a snapshot taken before retirement no longer claims to describe the journal.
 
+[The loopback agent API](agent-api.md) makes those sessions enforceable. Each agent has its
+own secret and its own entry in a registry of the roles it may claim; the service holds the
+store and the agent holds nothing else. Identity is the secret that signed the request, so no
+body can name a different agent, and a claim passes only if the agent is enrolled for the
+role and that role is the one the task's next step needs. The wire is five fixed routes with
+request and reply contracts, HMAC verified before any JSON is parsed, replies signed with the
+secret that authenticated them and bound to the route and nonce they answer.
+
 [Agent sessions](agent-sessions.md) extend the same registry to agents that call in rather
 than run in the kernel. A session is a lease held by a named agent in a declared role, live
 until it expires, renewed while the agent works and released when its container stops. The

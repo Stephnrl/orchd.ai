@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
+    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-serve", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -60,6 +60,9 @@ def main():
     parser.add_argument("--complete", action="store_true", help="For broker-rotate-secret, drop the previous secret after every process has re-read the file")
     parser.add_argument("--successor", help="New journal that continues a retired one: a directory for pilots, a database file for integrations")
     parser.add_argument("--agent", help="Name of the agent holding an agent session")
+    parser.add_argument("--agents", help="Registry directory of agent role and secret files for agent-serve")
+    parser.add_argument("--agent-endpoint", help="127.0.0.1:PORT of an agent service to call instead of opening the store")
+    parser.add_argument("--agent-secret", help="This agent's secret file, for calling an agent service")
     parser.add_argument("--role", help="Role an agent session claims work as")
     parser.add_argument("--lease", type=int, help="Seconds an agent session lasts before it must be renewed")
     parser.add_argument("--title", default="Repository JSON validation")
@@ -343,15 +346,53 @@ def main():
         print(canonical(report).decode())
         if report.get('status') == 'blocked': raise SystemExit(2)
         return
+    if args.command == 'agent-serve':
+        from .agent_service import AgentService
+        from .contracts import Rejected
+        import sqlite3
+        if not args.agents:
+            parser.error('agent-serve requires an --agents registry directory')
+        try:
+            service = AgentService(args.data, args.agents, args.port or 0)
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error('Agent service refused to start; check the store, the registry directory and each agent role and secret file')
+        print(json.dumps({'kind': 'AgentServiceStarted', 'endpoint': '127.0.0.1:' + str(service.port),
+                          'agents': sorted(service.agents), 'live_authorized': False}), flush=True)
+        try:
+            service.serve_forever()
+        except KeyboardInterrupt:
+            service.close()
+        return
     if args.command in ('agent-claim', 'agent-renew', 'agent-release', 'agent-sessions'):
         from .agent_sessions import claim, release, renew, sessions
         from .contracts import Rejected, canonical
         import sqlite3
         listing = args.command == 'agent-sessions'
-        if not listing and not (args.task and args.agent):
-            parser.error('Agent sessions require --task and --agent')
+        through_service = bool(args.agent_endpoint or args.agent_secret)
+        if not listing and not (args.task and (args.agent or through_service)):
+            parser.error('Agent sessions require --task, and --agent unless a service names the agent by its secret')
         if args.command == 'agent-claim' and not args.role:
             parser.error('Claiming requires the --role this agent works as')
+        if args.agent_endpoint or args.agent_secret:
+            # Through the service: the agent never opens the store, and the secret it
+            # signs with is what decides which agent it is.
+            from .agent_client import AgentClient
+            if not (args.agent_endpoint and args.agent_secret):
+                parser.error('Calling an agent service needs both --agent-endpoint and --agent-secret')
+            try:
+                client = AgentClient(args.agent_endpoint, args.agent_secret)
+                if listing:
+                    report = client.sessions()
+                elif args.command == 'agent-claim':
+                    report = client.claim(args.task, args.role, args.lease, args.expected_revision)
+                elif args.command == 'agent-renew':
+                    report = client.renew(args.task, args.lease)
+                else:
+                    report = client.release(args.task)
+            except (Rejected, OSError):
+                parser.error('Agent service rejected the request; check the endpoint, the secret, the role this agent may claim and the task state')
+            print(canonical(report).decode())
+            return
         engine = None
         try:
             engine = Engine(args.data, Executor('trusted-fixture' if args.trusted_fixture else 'docker', args.image))

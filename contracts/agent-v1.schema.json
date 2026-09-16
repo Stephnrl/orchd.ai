@@ -1,0 +1,470 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orchd.local/contracts/agent-v1.schema.json",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/AgentIdentityRequest"
+    },
+    {
+      "$ref": "#/$defs/AgentIdentityReply"
+    },
+    {
+      "$ref": "#/$defs/AgentClaimRequest"
+    },
+    {
+      "$ref": "#/$defs/AgentClaimReply"
+    },
+    {
+      "$ref": "#/$defs/AgentRenewRequest"
+    },
+    {
+      "$ref": "#/$defs/AgentReleaseRequest"
+    },
+    {
+      "$ref": "#/$defs/AgentSessionsRequest"
+    },
+    {
+      "$ref": "#/$defs/AgentSessionsReply"
+    },
+    {
+      "$ref": "#/$defs/AgentReleaseReply"
+    },
+    {
+      "$ref": "#/$defs/AgentRenewReply"
+    }
+  ],
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    },
+    "Task": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    },
+    "Agent": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+    },
+    "Role": {
+      "type": "string",
+      "enum": [
+        "human",
+        "project_manager",
+        "lead_clarifier",
+        "lead_planner",
+        "junior",
+        "reviewer",
+        "guardian",
+        "orchestrator",
+        "test_runner",
+        "action_broker"
+      ]
+    },
+    "Moment": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Lease": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 3600
+    },
+    "Session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_id",
+        "agent",
+        "role",
+        "kind",
+        "claimed_at",
+        "expires_at",
+        "revision",
+        "generation",
+        "live"
+      ],
+      "properties": {
+        "task_id": {
+          "$ref": "#/$defs/Task"
+        },
+        "agent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Agent"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Role"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "worker"
+          ]
+        },
+        "claimed_at": {
+          "$ref": "#/$defs/Moment"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Moment"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "live": {
+          "type": "boolean"
+        }
+      }
+    },
+    "AgentIdentityRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-identity"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        }
+      }
+    },
+    "AgentIdentityReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "agent",
+        "roles",
+        "store_sha256",
+        "live_authorized"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-identity"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "agent": {
+          "$ref": "#/$defs/Agent"
+        },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/Role"
+          }
+        },
+        "store_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "live_authorized": {
+          "const": false
+        }
+      }
+    },
+    "AgentClaimRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "task_id",
+        "role"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-claim"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "task_id": {
+          "$ref": "#/$defs/Task"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "lease": {
+          "$ref": "#/$defs/Lease"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "AgentClaimReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "status",
+        "session",
+        "live_authorized",
+        "retry_allowed"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-claim"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "status": {
+          "const": "claimed"
+        },
+        "session": {
+          "$ref": "#/$defs/Session"
+        },
+        "live_authorized": {
+          "const": false
+        },
+        "retry_allowed": {
+          "const": false
+        }
+      }
+    },
+    "AgentRenewRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "task_id"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-renew"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "task_id": {
+          "$ref": "#/$defs/Task"
+        },
+        "lease": {
+          "$ref": "#/$defs/Lease"
+        }
+      }
+    },
+    "AgentReleaseRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "task_id"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-release"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "task_id": {
+          "$ref": "#/$defs/Task"
+        }
+      }
+    },
+    "AgentReleaseReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "status",
+        "task_id",
+        "agent",
+        "released_at",
+        "live_authorized",
+        "retry_allowed"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-release"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "status": {
+          "const": "released"
+        },
+        "task_id": {
+          "$ref": "#/$defs/Task"
+        },
+        "agent": {
+          "$ref": "#/$defs/Agent"
+        },
+        "released_at": {
+          "$ref": "#/$defs/Moment"
+        },
+        "live_authorized": {
+          "const": false
+        },
+        "retry_allowed": {
+          "const": false
+        }
+      }
+    },
+    "AgentSessionsRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-sessions"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        }
+      }
+    },
+    "AgentSessionsReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "sessions",
+        "held",
+        "live_authorized",
+        "retry_allowed"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-sessions"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "sessions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/Session"
+          }
+        },
+        "held": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "live_authorized": {
+          "const": false
+        },
+        "retry_allowed": {
+          "const": false
+        }
+      }
+    },
+    "AgentRenewReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "status",
+        "session",
+        "live_authorized",
+        "retry_allowed"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-renew"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "status": {
+          "const": "renewed"
+        },
+        "session": {
+          "$ref": "#/$defs/Session"
+        },
+        "live_authorized": {
+          "const": false
+        },
+        "retry_allowed": {
+          "const": false
+        }
+      }
+    }
+  }
+}
