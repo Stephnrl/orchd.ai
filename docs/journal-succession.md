@@ -110,6 +110,13 @@ byte-comparable with its source.
 Each record is bound by digest to the journal it was written in, so a record copied from
 another journal, or written to describe one, is refused wherever it would have an effect.
 
+## Withdrawal still works in a retired journal
+
+Retirement stops new admission, not the rest of the lifecycle, so a prepared operation whose
+scope has gone stale can still be [withdrawn](journal-revision.md) in the retired journal.
+Its task is then free, and the successor will admit it under a new operation identifier —
+identifiers themselves are never reused, in any state, anywhere in the chain.
+
 ## Boundaries
 
 Succession is not archive, compaction, deletion or restore. The retained records still

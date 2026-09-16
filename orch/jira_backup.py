@@ -132,7 +132,9 @@ def compare_journal_backup(source, directory, expected_sha256):
         else:
             if live['task_id'] != backup['task_id'] or live['sha256'] != backup['sha256']:
                 reasons.append('scope_mismatch')
-            if live['state'] != backup['state'] or live['reserved_at'] != backup['reserved_at']:
+            if 'withdrawn' in (live['state'], backup['state']) and live['state'] != backup['state']:
+                reasons.append('withdrawal_mismatch')
+            elif live['state'] != backup['state'] or live['reserved_at'] != backup['reserved_at']:
                 reasons.append('reservation_mismatch')
         if reasons:
             differences.append({"operation_id": operation, "reasons": reasons})
@@ -154,7 +156,7 @@ def drill_journal_backup(directory, expected_sha256):
     manifest = _verified_manifest(directory)
     if manifest['sha256'] != expected_sha256:
         raise Rejected("Unexpected journal backup digest")
-    prepared = uncertain = 0
+    prepared = uncertain = withdrawn = 0
     with tempfile.TemporaryDirectory(prefix='orchd-jira-drill-') as scratch:
         database = Path(scratch) / 'journal.sqlite'
         _copy_database(Path(directory) / 'journal.sqlite', database)
@@ -171,7 +173,11 @@ def drill_journal_backup(directory, expected_sha256):
                 if time.monotonic() > deadline:
                     raise Rejected("Journal recovery drill timed out")
                 operation, scope = record['operation_id'], record['sha256']
-                if record['state'] == 'prepared':
+                if record['state'] == 'withdrawn':
+                    # A withdrawn operation released its task, never an attempt: it must
+                    # still refuse reservation, which the repeat check below proves.
+                    withdrawn += 1
+                elif record['state'] == 'prepared':
                     reserved = journal.reserve(operation, scope)
                     if reserved['binding']['state'] != 'uncertain' or reserved['binding']['sha256'] != scope:
                         raise Rejected("Drill reservation failed")
@@ -186,11 +192,11 @@ def drill_journal_backup(directory, expected_sha256):
                     raise Rejected("Drill allowed a consumed reservation")
             final = journal.audit()
             if (len(final['binding']['records']) != len(original['binding']['records'])
-                    or any(row['state'] != 'uncertain' for row in final['binding']['records'])):
+                    or any(row['state'] not in ('uncertain', 'withdrawn') for row in final['binding']['records'])):
                 raise Rejected("Drill did not retain consumed reservations")
             for before, after in zip(original['binding']['records'], final['binding']['records']):
                 if (any(before[key] != after[key] for key in ('operation_id', 'task_id', 'sha256'))
-                        or (before['state'] == 'uncertain' and before != after)):
+                        or (before['state'] in ('uncertain', 'withdrawn') and before != after)):
                     raise Rejected('Drill changed retained Jira scope or reservation history')
         finally:
             journal.close()
@@ -201,12 +207,15 @@ def drill_journal_backup(directory, expected_sha256):
             for row in final['binding']['records']:
                 if time.monotonic() > deadline:
                     raise Rejected('Journal recovery drill timed out')
+                if row['state'] == 'withdrawn':
+                    continue   # Nothing was attempted, so there is no recovery to plan.
                 reopened.recovery_plan(row['operation_id'], row['sha256'])
         finally:
             reopened.close()
     binding = {"schema_version": "1.0.0", "backup_sha256": manifest['sha256'],
                "audit_sha256": original['sha256'], "prepared_exercised": prepared,
-               "existing_uncertain_checked": uncertain, "repeat_reservations_rejected": prepared + uncertain,
+               "existing_uncertain_checked": uncertain, "withdrawn_checked": withdrawn,
+               "repeat_reservations_rejected": prepared + uncertain + withdrawn,
                "recovery_plans_checked": prepared + uncertain}
     return {"kind": "JiraJournalRecoveryDrill", "binding": binding, "sha256": digest(binding),
             "status": "passed", "restore_allowed": False, "retry_allowed": False, "live_authorized": False,

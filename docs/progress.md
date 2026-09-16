@@ -1,4 +1,4 @@
-# Roadmap progress — September 15, 2026
+# Roadmap progress — September 16, 2026
 
 The [task ownership milestone](task-ownership.md) removes the single obstacle to more
 than one worker: a store-wide dispatcher lock that let exactly one process advance anything
@@ -8,6 +8,14 @@ task and survives a crash that a kernel lock cannot. Whole-store maintenance sti
 every task mutation, and takeover never repeats interrupted work: an unresolved operation
 still forces explicit reconciliation. Scheduling, admission slots and conflict handling
 remain unimplemented, and nothing here starts a second worker.
+
+The [intent revision milestone](journal-revision.md) closes the other half of the same
+contract: a task whose prepared scope went stale, because the base branch moved or the plan
+changed, could never be prepared again. A prepared operation is now withdrawn against its
+retained scope digest and an audited reason, freeing its task for a new operation ID, while
+a consumed attempt is refused and must be reconciled. A unique index restricted to live
+operations enforces one live operation per task in storage rather than in code, and the
+rebuilt table is reached by a verified, atomic upgrade that reproduces every record.
 
 The [operation journal succession milestone](journal-succession.md) closes the same dead
 end for the GitHub and Jira operation journals, where the hazard is sharper: their records

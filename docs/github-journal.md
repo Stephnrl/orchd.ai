@@ -12,9 +12,12 @@ The command validates the [intent](github-preview.md) and expected repository id
 before creating the journal. It persists the prepared preview and numeric repository ID
 under a canonical digest, then returns `state: prepared`. Repeating exactly the same
 task/operation/scope is idempotent. Changing the content, destination or repository ID
-is rejected. One operation per task is enforced even if a caller supplies a new operation
-ID and corresponding branch. Replacement, cancellation and retirement policies are not
-implemented; this deliberately conservative milestone does not allow intent revision.
+is rejected. One live operation per task is enforced even if a caller supplies a new operation
+ID and corresponding branch. A prepared operation whose scope has gone stale can be
+[withdrawn](journal-revision.md) so its task can be prepared again under a new operation
+ID; a consumed attempt never can be. A full journal [retires](journal-succession.md) into a
+successor. Revising a retained scope in place remains unimplemented, and always will be:
+records are immutable.
 
 ## Reservation behavior
 
@@ -93,7 +96,7 @@ python -m orch github-journal-usage --journal .runtime/github-journal.sqlite
 
 Usage opens an existing journal read-only and reports record count, retained scope bytes,
 remaining capacity and limits without returning scope contents, plus the journal's
-succession status and either neighbour. Missing databases are not
+succession status, either neighbour and how many records have been withdrawn. Missing databases are not
 created. These are logical storage measurements, not record-integrity verification or
 physical disk usage.
 

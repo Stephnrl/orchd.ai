@@ -35,6 +35,9 @@ comparison and disposable recovery drills without replacing active journals.
 [Operation journal succession](docs/journal-succession.md) retires a full GitHub or Jira
 journal against such a snapshot and continues in a recorded successor that refuses a second
 attempt for any task its chain already retains, deleting no record.
+[Intent revision](docs/journal-revision.md) withdraws a prepared operation whose scope went
+stale so its task can be prepared again under a new operation ID, while a consumed attempt
+stays where it is and must be reconciled.
 [Task ownership](docs/task-ownership.md) replaces the store-wide dispatcher lock with one
 owner per task, so two workers can advance two different tasks at once and never the same
 one, and a worker that dies leaves a recorded claim instead of a silently reusable task.

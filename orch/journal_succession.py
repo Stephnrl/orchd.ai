@@ -54,7 +54,8 @@ def audited_reason(reason):
 
 
 def installed(db):
-    return db.execute("PRAGMA user_version").fetchone()[0] == VERSION
+    # Every schema version from this one onward carries the succession table.
+    return db.execute("PRAGMA user_version").fetchone()[0] >= VERSION
 
 
 def install(db):
@@ -165,8 +166,9 @@ def check_admission(journal, task_id, operation_id, limit=CHAIN_LIMIT):
     for path in predecessors(journal, limit):
         previous = cls(path, read_only=True)
         try:
+            from . import journal_revision
             row = previous.db.execute(
-                "SELECT operation_id,task_id,state FROM intents WHERE operation_id=? OR task_id=? LIMIT 1",
+                "SELECT operation_id,task_id,state FROM intents WHERE " + journal_revision.LIVE_CLAUSE + " LIMIT 1",
                 (operation_id, task_id)).fetchone()
         finally:
             previous.close()

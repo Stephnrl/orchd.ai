@@ -53,7 +53,7 @@ def stages(lane, manifest):
     if lane not in LANES: raise Rejected('Unknown release lane')
     result = []
     if lane in ('offline', 'full'):
-        result = ['contracts', 'python', 'jira_acceptance', 'journal_succession_acceptance', 'batch_acceptance',
+        result = ['contracts', 'python', 'jira_acceptance', 'journal_lifecycle_acceptance', 'batch_acceptance',
                   'pilot_acceptance', 'repository_task_acceptance', 'broker_service_acceptance',
                   'security_acceptance', 'javascript_syntax']
         ui = sorted(name for name in manifest if re.fullmatch(r'tests/test_ui_[a-z0-9_]+\.cjs', name))
@@ -98,7 +98,7 @@ def _execute(stage, root, python, node, env):
             'contracts': [python, 'scripts/validate_contracts.py'],
             'python': [python, 'scripts/ci_tests.py', '--result', str(receipt)],
             'jira_acceptance': [python, 'scripts/jira_acceptance.py'],
-            'journal_succession_acceptance': [python, 'scripts/journal_succession_acceptance.py'],
+            'journal_lifecycle_acceptance': [python, 'scripts/journal_lifecycle_acceptance.py'],
             'batch_acceptance': [python, 'scripts/batch_acceptance.py'],
             'pilot_acceptance': [python, 'scripts/pilot_acceptance.py'],
             'repository_task_acceptance': [python, 'scripts/repository_task_acceptance.py'],
