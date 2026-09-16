@@ -74,9 +74,12 @@ task should stay held if the agent disappears, not how long the agent intends to
 
 ## What this is not
 
-A session is **cooperative scheduling between agents that already run on this host under the
-operator's account**. It is not an authorization boundary: nothing here authenticates the
-caller, and any local process could claim any role. What an agent may actually *do* is
+A session claimed **directly against the store**, as this page describes, is cooperative
+scheduling: the CLI does not authenticate the caller, so any local process could claim any
+role. That is the right model for an operator working on their own machine, and the wrong one
+for an agent container — which is why containers go through [the loopback agent
+API](agent-api.md), where the agent is the secret that signed the request and its roles come
+from a registry it cannot edit. What an agent may actually *do* is
 unchanged and is enforced elsewhere — approvals gate effects, the guardian decides tool
 requests, the broker records what really ran, and every fence on scope, revision and
 receipts still applies. Adding authenticated agent identity is a separate decision about

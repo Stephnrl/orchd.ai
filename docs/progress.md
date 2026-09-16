@@ -1,5 +1,16 @@
 # Roadmap progress — September 16, 2026
 
+The [agent API milestone](agent-api.md) turns role-scoped claiming from a convention into a
+boundary. An agent container held a lease only because it had the control plane installed
+and the store mounted, so it could have claimed any role or written the evidence directly.
+Agents now reach one loopback service through five authenticated fixed routes: the agent a
+request comes from is the secret that signed it rather than a field in the body, and the
+roles it may claim come from the service's registry rather than the caller. Secrets rotate
+live as the broker's do, replies are signed with the secret that authenticated the request
+and name the route and nonce they answer, and each request opens the store and closes it
+again. The service decides which agent and which role; approvals, the guardian and the
+broker still decide what that agent may do.
+
 The [agent sessions milestone](agent-sessions.md) adds the holder an agent needs. Ownership
 claims a task with a lock held by the process doing the work, which an agent calling in from
 its own container never has, so a session is a role-scoped lease instead: granted to a named

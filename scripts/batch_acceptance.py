@@ -19,7 +19,11 @@ sys.path.insert(0, str(ROOT))
 
 from datetime import datetime, timedelta
 
+import json
+import secrets as randomness
+
 from orch import agent_sessions
+from orch.agent_client import AgentClient
 from orch.batches import Batches
 from orch.contracts import Rejected, canonical, now
 from orch.engine import Engine
@@ -119,6 +123,56 @@ def agents(engine):
             'human_pause_refused': True, 'sessions_held_after': agent_sessions.sessions(engine.store)['held']}
 
 
+def through_the_api(engine, store, root):
+    """The same session, but taken the way a container takes it: a secret and a socket."""
+    agents = root / 'agents'
+    for name, role in (('lead-devops', 'lead_planner'), ('junior-devops', 'junior')):
+        folder = agents / name
+        folder.mkdir(parents=True)
+        (folder / 'role').write_text(role + "\n", encoding='ascii')
+        (folder / 'secret').write_text(randomness.token_hex(32) + "\n", encoding='ascii')
+    task = engine.create_task('Agent API acceptance')
+    service = subprocess.Popen([sys.executable, '-m', 'orch', 'agent-serve', '--data', str(store),
+                                '--agents', str(agents), '--port', '0'], cwd=ROOT,
+                               env={**os.environ, 'PYTHONPATH': str(ROOT)},
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                               creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+    try:
+        started = json.loads(service.stdout.readline())
+        endpoint = started['endpoint']
+        lead = AgentClient(endpoint, agents / 'lead-devops' / 'secret')
+        junior = AgentClient(endpoint, agents / 'junior-devops' / 'secret')
+        if lead.whoami()['agent'] != 'lead-devops' or junior.whoami()['roles'] != ['junior']:
+            raise RuntimeError('The service did not read identity from the secret')
+        try:
+            junior.claim(task, 'lead_planner')
+            raise RuntimeError('An agent must not claim a role it was not enrolled for')
+        except Rejected:
+            pass
+        claimed = lead.claim(task, 'lead_planner', 300)
+        if claimed['session']['agent'] != 'lead-devops':
+            raise RuntimeError('The claim did not name the authenticated agent')
+        if lead.renew(task, 600)['status'] != 'renewed':
+            raise RuntimeError('The lease did not renew over the wire')
+        try:
+            junior.release(task)
+            raise RuntimeError('One agent must not release another agent\'s session')
+        except Rejected:
+            pass
+        if lead.release(task)['status'] != 'released':
+            raise RuntimeError('The agent did not release over the wire')
+        held = junior.sessions()['held']
+    finally:
+        service.terminate()          # Never leave a service holding the store behind.
+        try:
+            service.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            service.kill()
+            service.communicate(timeout=30)
+    return {'task': task, 'endpoint_served': True, 'identity_from_secret': True,
+            'unenrolled_role_refused': True, 'sessions_held_after': held}
+
+
 def run(destination):
     destination = Path(destination)
     destination.mkdir()
@@ -141,8 +195,9 @@ def run(destination):
         # The same kernel, without a batch: two workers advancing two tasks at once.
         concurrent = parallel(engine, destination/'store')
         held = agents(engine)
+        served = through_the_api(engine, destination/'store', destination)
         report = {'kind':'SerialBatchAcceptance', 'status':'passed', 'tasks':tasks, 'rounds':rounds,
-                  'parallel_workers':concurrent, 'agent_session':held,
+                  'parallel_workers':concurrent, 'agent_session':held, 'agent_api':served,
                   'fixture_only':True, 'live_authorized':False}
         (destination/'acceptance.json').write_bytes(canonical(report))
         return report

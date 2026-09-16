@@ -48,6 +48,10 @@ leaving an operation to reconcile.
 role-scoped lease it renews and releases, so agents that call in between thinking are
 holders in the same registry as worker processes, and no agent can take work waiting on a
 human.
+[The loopback agent API](docs/agent-api.md) makes that enforced rather than cooperative: an
+agent container holds a secret and a socket instead of the store, the agent it is comes from
+the secret that signed the request, and the roles it may claim come from the service's own
+registry.
 [The consolidated Jira package](docs/jira-integration.md) adds Epic/Story/Task preparation,
 relationships, transitions, GitHub associations and review/preflight diagnostics, with
 synthetic examples and a complete offline acceptance scenario. Live activation remains gated.
