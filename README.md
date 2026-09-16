@@ -74,6 +74,10 @@ tracking work that was missing: an issue intent with a read plan, a repository p
 numeric ID, labels that must already exist, an operation marker that makes creation
 idempotent and reconcilable, and a duplicate search that says what to ask rather than asking
 it. Jira already modelled the ticket and the link; nothing modelled the issue.
+[An agent doing the work](docs/agent-work.md) connects the two: a project manager container
+can read, write and revise a specification and raise a clarification through the API it
+authenticates to, and every one of those requires a live lease it holds on that task. Nothing
+an agent can call answers a clarification or confirms a specification.
 [The draft specification stage](docs/draft-spec.md) makes the project manager's step real:
 a task can be opened with no specification, drafted and revised as append-only evidence,
 stopped on questions only a human can answer, and moved on only when a person confirms the

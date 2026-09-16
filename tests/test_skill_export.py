@@ -81,19 +81,18 @@ class SkillTextTests(unittest.TestCase):
         self.assertEqual(seconds, [sessions.MIN_LEASE, sessions.DEFAULT_LEASE, sessions.MAX_LEASE])
 
     def test_the_route_table_names_exactly_the_routes_that_exist(self):
-        published = [unticked(route) for route, _, _ in rows(self.reference, "The five routes")]
+        published = [unticked(route) for route, _, _ in rows(self.reference, "The routes")]
         self.assertEqual(sorted(published), sorted(ROUTES))
-        self.assertEqual(len(ROUTES), 5, "The reference calls them the five routes")
 
     def test_no_route_is_documented_with_a_field_its_contract_does_not_have(self):
-        for route, sent, received in rows(self.reference, "The five routes"):
+        for route, sent, received in rows(self.reference, "The routes"):
             request, reply = ROUTES[unticked(route)]
             for kind, cell in ((request, sent), (reply, received)):
                 allowed = set(WIRE_SCHEMA["$defs"][kind].get("properties", {}))
                 self.assertEqual(named(cell) - allowed, set(), kind + " has no such field")
 
     def test_every_required_reply_field_is_either_documented_or_common(self):
-        for route, _, received in rows(self.reference, "The five routes"):
+        for route, _, received in rows(self.reference, "The routes"):
             reply = ROUTES[unticked(route)][1]
             required = set(WIRE_SCHEMA["$defs"][reply].get("required", ()))
             self.assertEqual(required - named(received) - ENVELOPE - COMMON, set(),

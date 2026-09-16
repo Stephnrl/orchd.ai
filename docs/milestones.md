@@ -178,6 +178,18 @@ issue carries an operation marker, so creation is idempotent and an uncertain di
 reconciled to the one issue it made. A duplicate search says what to ask and checks the
 answer, because giving this control plane a network read is its own gate.
 
+[An agent doing the work](agent-work.md) closes the gap between an authenticated container
+and the work it was enrolled to do. `task_drafts` was reachable only from the command line, so
+a project manager container could claim a task and do nothing with it; three routes now let it
+read, write and revise a specification and raise a clarification. Each requires a live lease
+held by that agent on that task, which is the first time a session gates anything but itself
+and is a real gate because a lease is only granted for the role the task's next step needs —
+so a junior cannot draft a specification, not because drafting checks for juniors, but because
+a junior can never hold a task waiting on the project manager. The service check and the
+kernel's state check compose and neither is redundant. Nothing an agent can call answers a
+clarification or confirms a specification: both take a principal, are recorded as a human's,
+and a test asserts the route table rather than trusting their absence.
+
 [The draft specification stage](draft-spec.md) implements the states and contracts the
 design has carried from the start but no code ever used. A task can be opened with no
 specification; a project manager drafts one and revises it, each revision kept rather than

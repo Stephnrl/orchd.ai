@@ -223,6 +223,77 @@ def through_the_api(engine, store, root):
             'unenrolled_role_refused': True, 'sessions_held_after': held}
 
 
+def managed(engine, store, root):
+    """A project manager container doing its step over a socket: claim, draft, ask, stop."""
+    agents = root / 'manager-agents'
+    folder = agents / 'project-manager'
+    folder.mkdir(parents=True)
+    (folder / 'role').write_text('project_manager\n', encoding='ascii')
+    secret = folder / 'secret'
+    secret.write_text(randomness.token_hex(32) + '\n', encoding='ascii')
+    os.chmod(secret, 0o600)
+
+    task = engine.create_task('Draft specification by agent', draft=True)
+    service = subprocess.Popen([sys.executable, '-m', 'orch', 'agent-serve', '--data', str(store),
+                                '--agents', str(agents), '--port', '0'],
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                               cwd=str(Path(__file__).resolve().parents[1]))
+    try:
+        started = json.loads(service.stdout.readline())
+        manager = AgentClient(started['endpoint'], str(secret))
+
+        # Nothing may be written to a task this agent has not claimed.
+        try:
+            manager.draft(task, {'title': 'x', 'request': 'y', 'acceptance_criteria': ['z']})
+            raise RuntimeError('An agent must not write to a task it is not holding')
+        except Rejected:
+            pass
+
+        manager.claim(task, 'project_manager', 900)
+        if manager.specification(task)['draft']['spec'] is not None:
+            raise RuntimeError('A drafted task starts with no specification')
+        written = manager.draft(task, {
+            'title': 'Add a rate limit to the public API',
+            'request': 'Requests from one client should be limited.',
+            'acceptance_criteria': ['A client over the limit receives 429'],
+            'constraints': ['No new runtime dependency'], 'allowed_paths': ['api/limits.py']})['draft']
+        if written['spec_revision'] != 0 or written['confirmed']:
+            raise RuntimeError('The agent did not write an unconfirmed first draft')
+
+        asked = manager.ask(task, [{'question_id': 'window', 'question': 'Over what window?'}])['draft']
+        if asked['state'] != 'AWAITING_CLARIFICATION':
+            raise RuntimeError('A question should stop the work')
+
+        # A person answers; no route the agent can reach does.
+        task_drafts.answer(engine, task, [{'question_id': 'window', 'answer': 'A rolling minute.'}],
+                           'local-operator')
+        revised = manager.draft(task, {
+            'title': 'Add a rate limit to the public API',
+            'request': 'Requests from one client are limited over a rolling minute.',
+            'acceptance_criteria': ['A client over the limit receives 429'],
+            'constraints': ['No new runtime dependency'], 'allowed_paths': ['api/limits.py']})['draft']
+
+        # And a person confirms, after which the agent that wrote it cannot change a word.
+        confirmed = task_drafts.confirm(engine, task, revised['spec_sha256'], 'local-operator')
+        if confirmed['state'] != 'SPEC_READY':
+            raise RuntimeError('Confirmation should reach SPEC_READY')
+        try:
+            manager.draft(task, {'title': 'after', 'request': 'after', 'acceptance_criteria': ['after']})
+            raise RuntimeError('A confirmed specification must be beyond the agent that wrote it')
+        except Rejected:
+            pass
+    finally:
+        service.terminate()
+        try:
+            service.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            service.kill()
+            service.communicate(timeout=30)
+    return {'task': task, 'unheld_write_refused': True, 'drafted_over_the_wire': True,
+            'clarification_stopped_the_work': True, 'confirmed_by': 'local-operator',
+            'agent_locked_out_after_confirmation': True, 'state': confirmed['state']}
+
+
 def run(destination):
     destination = Path(destination)
     destination.mkdir()
@@ -247,8 +318,9 @@ def run(destination):
         held = agents(engine)
         served = through_the_api(engine, destination/'store', destination)
         drafted = specified(engine)
+        by_agent = managed(engine, destination/'store', destination)
         report = {'kind':'SerialBatchAcceptance', 'status':'passed', 'tasks':tasks, 'rounds':rounds,
-                  'parallel_workers':concurrent, 'agent_session':held, 'agent_api':served, 'draft_specification':drafted,
+                  'parallel_workers':concurrent, 'agent_session':held, 'agent_api':served, 'draft_specification':drafted, 'agent_drafting':by_agent,
                   'fixture_only':True, 'live_authorized':False}
         (destination/'acceptance.json').write_bytes(canonical(report))
         return report
