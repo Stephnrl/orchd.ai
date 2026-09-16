@@ -15,3 +15,16 @@ select{font:inherit;width:100%;min-width:0;max-width:100%;padding:10px;border:1p
 .queue.quiet li{background:#f6f8f4;border-style:dashed}
 .attention .settled{color:var(--green);font-weight:650}
 @media(max-width:850px){.queue li{grid-template-columns:minmax(0,1fr);gap:8px}.queue li .waited{text-align:left}}
+
+/* Agents: presence an operator can read at a glance, not a table to decode. */
+.roster{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+.roster li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:#fbfdfa}
+.dot{width:10px;height:10px;border-radius:50%;background:#c2ccc4}
+.dot.working{background:#2f9e5f}.dot.idle{background:#8fc4a5}.dot.gone{background:#c0554a}
+.roster .who{display:grid;gap:3px;min-width:0}
+.roster .who b{font-weight:650;overflow-wrap:anywhere}
+.roster .who span{font-size:12px;color:var(--muted)}
+.roster .when{font:11px ui-monospace,monospace;color:var(--muted);white-space:nowrap}
+.roster li.asking{border-color:#b8863a;background:#fdf7ec}
+.roster li.asking .who span{color:#8a5d12;font-weight:650}
+@media(max-width:850px){.roster li{grid-template-columns:auto minmax(0,1fr)}.roster .when{grid-column:2}}

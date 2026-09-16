@@ -212,6 +212,16 @@ build, a bind-mounted secret arrives world-accessible on Docker Desktop and is r
 refused, a container cannot reach a loopback service there at all, and one that started early
 died instead of waiting.
 
+Agents are now visible whether or not they hold anything. Holding a task was the only way an
+agent appeared, so a container running and correctly idle looked exactly like one that crashed;
+presence is derived from the authenticated requests each agent already makes, needs no
+heartbeat route and no new trust, and an agent whose task is stopped on a person is marked
+separately because that is the one to notice. `agent-enrol` declares an agent with its
+permissions already right, refusing a second enrolment rather than replacing a secret a
+container may be using, and the window can open a task with no specification — the kind an
+agent picks up. Work goes to a role and not to a container, which is what keeps the role gate
+and the lease meaningful.
+
 The operator window now leads with that answer rather than a column of cards: a state is
 shown as a sentence, work stopped on a person is separated from work merely in progress, and
 every row opens the task it names. The panel reads `GET /status` and adds no authority, so

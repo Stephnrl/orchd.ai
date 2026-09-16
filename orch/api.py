@@ -37,9 +37,17 @@ def page(query):
 
 
 class Application:
-    def __init__(self, engine, sessions=None):
+    def __init__(self, engine, sessions=None, agents=None):
         self.engine = engine
+        # The agent registry directory, when the operator named one. Read per request so
+        # enrolling an agent shows up without restarting the window.
+        self.agents = agents
         self.sessions = sessions if sessions is not None else OperatorSession()
+
+    def registry(self):
+        """The declared agents, re-read each time so enrolment does not need a restart."""
+        from .status import roster
+        return roster(self.agents)
 
     @property
     def session(self):
@@ -83,7 +91,7 @@ class Application:
             if method == "GET" and parts == ["status"]:
                 # Read-only and lock-free, so it answers while work is happening rather than
                 # waiting for it to stop. See docs/status.md.
-                return 200, status_report(self.engine)
+                return 200, status_report(self.engine, registry=self.registry())
             if method == "GET" and parts == ["tasks"]:
                 after, limit = page(query)
                 rows = self.engine.store.db.execute("SELECT rowid,id,state,context FROM tasks WHERE rowid>? ORDER BY rowid LIMIT ?", (after, limit + 1)).fetchall()
@@ -133,9 +141,16 @@ class Application:
                 from .maintenance import integrity_report
                 return 200, integrity_report(self.engine.store)
             if method == "POST" and parts == ["tasks"]:
-                if set(payload) - {"title"}:
+                if set(payload) - {"title", "draft"}:
                     raise Rejected("Unknown create fields")
-                return 201, {"task_id": self.engine.create_task(payload.get("title", "Greeting fixture"))}
+                # `draft` opens a task with no specification, which is the kind an agent picks
+                # up: the project manager writes the specification and a person confirms it.
+                # Without it the window could only create the greeting fixture, which no
+                # agent has anything to do with.
+                if not isinstance(payload.get("draft", False), bool):
+                    raise Rejected("Draft is true or false")
+                return 201, {"task_id": self.engine.create_task(payload.get("title", "Greeting fixture"),
+                                                                draft=bool(payload.get("draft", False)))}
             if len(parts) < 2 or parts[0] != "tasks":
                 return 404, {"error": "Unknown route"}
             task = parts[1]
@@ -217,8 +232,9 @@ class Application:
             return 409, {"error": "Request rejected; inspect current task and approval"}
 
 
-def serve(engine, port=8080):
+def serve(engine, port=8080, agents=None):
     app = Application(engine)
+    app.agents = agents
 
     class Handler(BaseHTTPRequestHandler):
         def end_headers(self):

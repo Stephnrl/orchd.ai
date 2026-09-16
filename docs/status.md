@@ -88,6 +88,56 @@ rather than a search.
 The panel adds no authority. It reads `GET /status`, which changes nothing, and every decision
 still happens where it always did, behind the same approval with the same revision fence.
 
+## Agents, and whether they are there
+
+Holding a task was the only way an agent was visible. A container that is running and
+correctly idle — because nothing for its role is waiting — looked exactly like one that
+crashed an hour ago.
+
+```text
+Agents                                    2 of 3 present, and 1 waiting on you.
+
+  ●  lead-devops       Waiting on you before it can go on    12s ago   [Open task]
+  ●  project-manager   Idle, waiting for work · project_manager  4s ago
+  ●  junior-devops     Not seen · junior                     never
+```
+
+**Presence is derived, not reported.** There is no heartbeat route. The service records when
+each agent last called as a side effect of requests it already makes, and [the loop](agent-container.md)
+asks for work every fifteen seconds while idle. An agent cannot forget to send a heartbeat it
+never has to send, and every presence record is backed by a signature that verified, which is
+more than a ping would prove. Four missed rounds — sixty seconds — and it stops counting as
+present.
+
+An agent whose task is stopped on a person is marked separately, because that is the one an
+operator should notice: it is not stuck, it is waiting for them.
+
+## Declaring an agent
+
+```sh
+python -m orch agent-enrol --agents DIR --agent project-manager --role project_manager
+python -m orch agent-enrol --agents DIR --agent lead-devops --role lead_planner,reviewer
+```
+
+Writing the two files by hand is how a secret ends up world-readable, which is refused on
+Linux later and elsewhere. The command writes the role, generates the secret, and sets the
+permissions, so they are not something to remember. It prints the secret's **path** and never
+its contents: a secret printed to a terminal is a secret in that terminal's history.
+
+Enrolling an agent that already exists is refused rather than replacing its secret, which
+would silently cut off a container using the old one. `human` is not an enrollable role.
+
+## Giving the team work
+
+The window could only create the greeting fixture, which no agent has anything to do with. It
+can now open a task with **no specification** — the kind an agent picks up, where the project
+manager writes the specification and a person confirms it.
+
+Work goes to a **role**, not to a container. You do not address an agent: the state machine
+says which role is next, and whichever agent enrolled for it claims the task. That is what
+makes the role gate and the lease mean anything; being able to hand work to a particular
+container would route around the thing that makes the evidence worth having.
+
 ## What it is not
 
 It changes nothing, decides nothing and authorizes nothing. It does not say whether a

@@ -16,6 +16,8 @@ The service holds the store; an agent holds nothing but a secret and a socket.
 """
 import contextlib
 import json
+import os
+import secrets
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 import re
@@ -66,6 +68,30 @@ def _unique(pairs):
 
 def _invalid_number(_):
     raise ValueError("Non-JSON number")
+
+
+def enrol(directory, name, roles):
+    """Declare an agent: a role file, and a secret only this account can read.
+
+    Doing this by hand means writing two files and remembering `chmod 600` on one of them,
+    and a secret written with default permissions is refused on Linux — which is a footgun
+    with a sharp end, because the refusal arrives later and elsewhere. This exists so the
+    permissions are not something anybody has to remember.
+    """
+    name = agent_sessions.identifier(name)
+    roles = sorted({role for role in roles if role})
+    if not 1 <= len(roles) <= MAX_ROLES or any(role not in agent_sessions.AGENT_ROLES for role in roles):
+        raise Rejected("An agent is enrolled for one to %d roles an agent may hold" % MAX_ROLES)
+    folder = real_path(directory) / name
+    if folder.exists():
+        raise Rejected("Agent " + name + " is already enrolled; remove its directory to re-enrol")
+    folder.mkdir(parents=True)
+    (folder / "role").write_text("\n".join(roles) + "\n", encoding="ascii")
+    secret = folder / "secret"
+    secret.write_text(secrets.token_hex(32) + "\n", encoding="ascii")
+    os.chmod(secret, 0o600)
+    return {"kind": "AgentEnrolled", "agent": name, "roles": roles,
+            "secret": str(secret), "live_authorized": False}
 
 
 def registry(directory):
@@ -168,6 +194,12 @@ class AgentService:
                     "roles": list(self.agents[agent]["roles"]), "store_sha256": self.source,
                     "live_authorized": False}
         with self.opened() as engine:
+            # Every authenticated request is proof this container is running, so presence is
+            # recorded here rather than asked for: an agent cannot forget to send a heartbeat
+            # it never has to send. `agent-identity` opens no store and so records nothing;
+            # a running agent polls for work within seconds of starting anyway.
+            with engine.store.transaction():
+                engine.store.seen(agent, route)
             if route == "agent-available":
                 # Only the roles this agent is enrolled for: a listing of work it could never
                 # claim would tell it about tasks it has no business knowing exist.

@@ -5,6 +5,8 @@ could claim any role or write the evidence directly. These tests fix the enforce
 the service holds the store, the agent holds a secret, and the name and the permitted roles
 come from the service's own configuration.
 """
+from contextlib import redirect_stderr, redirect_stdout
+import io
 import json
 import os
 from pathlib import Path
@@ -13,10 +15,12 @@ import subprocess
 import sys
 import tempfile
 import threading
+from unittest.mock import patch
 import unittest
 
+from orch.__main__ import main
 from orch.agent_client import AgentClient
-from orch.agent_service import AgentService, registry
+from orch.agent_service import AgentService, enrol, registry
 from orch.broker import SecretFile, rotate_secret, sign
 from orch.contracts import Rejected, canonical, uid
 from orch.engine import Engine
@@ -227,6 +231,89 @@ class AgentApiTests(unittest.TestCase):
             cwd=ROOT, env={**os.environ, 'PYTHONPATH': str(ROOT)}, capture_output=True, text=True, timeout=120)
         self.assertEqual(result.returncode, 0, result.stderr[-400:])
         self.assertEqual(json.loads(result.stdout)['session']['agent'], 'lead-devops')
+
+
+
+class EnrolmentTests(unittest.TestCase):
+    """Declaring an agent, without anybody having to remember a chmod.
+
+    Writing the two files by hand is how a secret ends up world-readable, which is refused on
+    Linux later and elsewhere — the refusal that made an earlier release red. The command
+    exists so the permissions are not something to remember.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.agents = Path(self.temp.name) / "agents"
+
+    def test_an_enrolled_agent_is_one_the_service_will_serve(self):
+        report = enrol(self.agents, "project-manager", ["project_manager"])
+        self.assertEqual(report["agent"], "project-manager")
+        self.assertEqual(report["roles"], ["project_manager"])
+        self.assertIs(report["live_authorized"], False)
+        self.assertEqual({name: sorted(entry["roles"]) for name, entry in registry(self.agents).items()},
+                         {"project-manager": ["project_manager"]})
+
+    def test_the_secret_is_written_private(self):
+        report = enrol(self.agents, "lead-devops", ["lead_planner"])
+        mode = os.stat(report["secret"]).st_mode & 0o777
+        if os.name == "nt":
+            # Windows has no mode bits to set; the rule is asserted where one exists, and the
+            # service refuses an exposed secret on the platform that has them.
+            self.assertTrue(Path(report["secret"]).is_file())
+        else:
+            self.assertEqual(mode, 0o600)
+
+    def test_an_agent_may_hold_several_roles(self):
+        enrol(self.agents, "lead-devops", ["lead_planner", "reviewer"])
+        self.assertEqual(sorted(registry(self.agents)["lead-devops"]["roles"]), ["lead_planner", "reviewer"])
+
+    def test_no_agent_is_enrolled_as_a_human(self):
+        # The hole that let an agent claim an approval pause; enrolment closes it too.
+        with self.assertRaisesRegex(Rejected, "roles an agent may hold"):
+            enrol(self.agents, "impostor", ["human"])
+
+    def test_an_unknown_role_and_an_empty_one_are_refused(self):
+        for roles in ([], ["not_a_role"], [""]):
+            with self.subTest(roles=roles):
+                with self.assertRaisesRegex(Rejected, "roles an agent may hold"):
+                    enrol(self.agents, "someone", roles)
+
+    def test_enrolling_twice_refuses_rather_than_replacing_a_secret(self):
+        # Overwriting would silently cut off a container that is using the old one.
+        enrol(self.agents, "project-manager", ["project_manager"])
+        with self.assertRaisesRegex(Rejected, "already enrolled"):
+            enrol(self.agents, "project-manager", ["junior"])
+
+    def test_an_unusable_name_is_refused_before_anything_is_written(self):
+        with self.assertRaises(Rejected):
+            enrol(self.agents, "../escape", ["junior"])
+        self.assertFalse((self.agents / ".." / "escape").exists())
+
+    def test_the_command_line_prints_the_path_and_never_the_secret(self):
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(sys, "argv", ["orch", "agent-enrol", "--agents", str(self.agents),
+                                        "--agent", "project-manager", "--role", "project_manager"]), \
+                redirect_stdout(out), redirect_stderr(err):
+            try:
+                main()
+                code = 0
+            except SystemExit as exit:
+                code = exit.code
+        self.assertEqual(code, 0, err.getvalue())
+        report = json.loads(out.getvalue())
+        self.assertEqual(report["agent"], "project-manager")
+        secret = Path(report["secret"]).read_text(encoding="ascii").strip()
+        self.assertNotIn(secret, out.getvalue(), "a secret printed to a terminal is a secret in its history")
+
+    def test_the_command_line_takes_several_roles_at_once(self):
+        out = io.StringIO()
+        with patch.object(sys, "argv", ["orch", "agent-enrol", "--agents", str(self.agents),
+                                        "--agent", "lead-devops", "--role", "lead_planner,reviewer"]), \
+                redirect_stdout(out), redirect_stderr(io.StringIO()):
+            main()
+        self.assertEqual(json.loads(out.getvalue())["roles"], ["lead_planner", "reviewer"])
 
 
 if __name__ == '__main__':

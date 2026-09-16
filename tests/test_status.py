@@ -162,6 +162,84 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(printed["summary"]["work_available"], 1)
 
 
+class PresenceTests(unittest.TestCase):
+    """An agent that is running and idle is not an agent that is gone."""
+
+    def setUp(self):
+        helpers.WorkflowTests.setUp(self)
+
+    def tearDown(self):
+        helpers.WorkflowTests.tearDown(self)
+
+    REGISTRY = {"project-manager": ["project_manager"], "junior-devops": ["junior"]}
+
+    def enrolled(self, registry=None):
+        return {row["agent"]: row for row in
+                status.report(self.engine, registry=registry or self.REGISTRY)["enrolled"]}
+
+    def test_a_declared_agent_that_has_never_called_is_not_seen(self):
+        rows = self.enrolled()
+        self.assertEqual({name: row["state"] for name, row in rows.items()},
+                         {"project-manager": "not seen", "junior-devops": "not seen"})
+        self.assertIsNone(rows["project-manager"]["last_seen"])
+
+    def test_calling_at_all_is_what_makes_an_agent_present(self):
+        # Derived from work the agent already does; there is no heartbeat to forget.
+        with self.engine.store.transaction():
+            self.engine.store.seen("project-manager", "agent-available")
+        rows = self.enrolled()
+        self.assertEqual(rows["project-manager"]["state"], "idle")
+        self.assertEqual(rows["junior-devops"]["state"], "not seen")
+        self.assertIsNotNone(rows["project-manager"]["last_seen"])
+
+    def test_an_agent_holding_a_task_is_working_rather_than_idle(self):
+        task = self.engine.create_task("Rate limiting", draft=True)
+        with self.engine.store.transaction():
+            self.engine.store.seen("project-manager", "agent-claim")
+        agent_sessions.claim(self.engine, task, "project-manager", "project_manager", 900)
+        row = self.enrolled()["project-manager"]
+        self.assertEqual(row["state"], "working")
+        self.assertEqual(row["holding"], task)
+
+    def test_an_agent_whose_task_waits_on_a_person_is_marked(self):
+        # The one an operator should notice: it is not stuck, it is waiting for them.
+        task = self.engine.create_task("Rate limiting", draft=True)
+        agent_sessions.claim(self.engine, task, "project-manager", "project_manager", 900)
+        task_drafts.draft(self.engine, task, SPEC)
+        task_drafts.ask(self.engine, task, [{"question_id": "q", "question": "Which window?"}])
+        with self.engine.store.transaction():
+            self.engine.store.seen("project-manager", "agent-ask")
+        row = self.enrolled()["project-manager"]
+        self.assertEqual(row["state"], "working", "it is still holding the task it asked about")
+        self.assertTrue(row["needs_you"], "and that task is now stopped on a person")
+
+    def test_going_quiet_for_long_enough_stops_counting_as_present(self):
+        from datetime import datetime, timedelta
+        from orch.contracts import now as moment
+        with self.engine.store.transaction():
+            self.engine.store.seen("project-manager", "agent-available")
+        later = (datetime.fromisoformat(moment()) + timedelta(seconds=status.UNSEEN_SECONDS + 5)).isoformat().replace("+00:00", "Z")
+        with patch("orch.status.now", return_value=later):
+            self.assertEqual(self.enrolled()["project-manager"]["state"], "not seen")
+
+    def test_presence_records_the_latest_call_rather_than_every_call(self):
+        with self.engine.store.transaction():
+            self.engine.store.seen("project-manager", "agent-available")
+            self.engine.store.seen("project-manager", "agent-claim")
+        self.assertEqual(self.engine.store.presence()["project-manager"]["route"], "agent-claim")
+        self.assertEqual(len(self.engine.store.presence()), 1)
+
+    def test_no_registry_means_no_claim_about_agents(self):
+        # Reporting nothing is honest; reporting an empty roster would not be.
+        self.assertEqual(status.report(self.engine)["enrolled"], [])
+
+    def test_a_registry_that_cannot_be_read_is_reported_rather_than_raised(self):
+        unreadable = Path(self.temp.name) / "not-a-registry"
+        unreadable.write_text("certainly not a directory of agents", encoding="utf-8")
+        self.assertEqual(status.roster(str(unreadable)), {})
+        self.assertEqual(status.report(self.engine, registry=status.roster(str(unreadable)))["enrolled"], [])
+
+
 class StatusEndpointTests(unittest.TestCase):
     """The same report through the authenticated API, for the operator's own window."""
 

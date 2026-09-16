@@ -14,10 +14,11 @@ from .contracts import Rejected, canonical, now, redact, ref, uid, validate
 AUDIT_RESERVE_BYTES = 4 * 1024 * 1024
 OWNERSHIP_VERSION = 3
 SESSION_VERSION = 4
+PRESENCE_VERSION = 5
 # What a store migrates to. Name it once so a new schema step changes this line and the
 # accepted set, and never a number spelled out somewhere else.
-CURRENT_VERSION = SESSION_VERSION
-SUPPORTED_VERSIONS = (2, OWNERSHIP_VERSION, SESSION_VERSION)
+CURRENT_VERSION = PRESENCE_VERSION
+SUPPORTED_VERSIONS = (2, OWNERSHIP_VERSION, SESSION_VERSION, PRESENCE_VERSION)
 # How many tasks may be advancing at once in one store. Each advancing task can hold a
 # container, a workspace and a provider process, so this is a host-resource bound, not a
 # throughput target: work is refused before it starts rather than failing halfway and
@@ -77,6 +78,11 @@ class Store:
             # A lease expires; a worker's lock does not, and leaves this column NULL.
             if "expires_at" not in {r[1] for r in self.db.execute("PRAGMA table_info(task_owners)")}:
                 self.db.execute("ALTER TABLE task_owners ADD COLUMN expires_at TEXT")
+            # When each agent was last heard from. Current state rather than evidence, like
+            # ownership: an agent that is running and idle holds nothing, and without this it
+            # is indistinguishable from one that stopped an hour ago. Nothing is appended and
+            # nothing is kept, so it carries no append-only trigger.
+            self.db.execute("CREATE TABLE IF NOT EXISTS agent_presence(agent TEXT PRIMARY KEY, last_seen TEXT NOT NULL, route TEXT NOT NULL)")
             self.db.execute("PRAGMA user_version=%d" % CURRENT_VERSION)
         self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_execution_receipt ON records(task_id,kind,json_extract(payload,'$.operation_id')) WHERE kind IN ('PatchReceipt','TestReceipt','ExternalActionReceipt')")
         self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_invocation_receipt ON records(task_id,json_extract(payload,'$.invocation_id')) WHERE kind='AgentInvocationReceipt'")
@@ -155,6 +161,20 @@ class Store:
     def owner(self, task):
         row = self.db.execute("SELECT * FROM task_owners WHERE task_id=?", (task,)).fetchone()
         return dict(row) if row else None
+
+    def seen(self, agent, route):
+        """Record that this agent called, which is the only liveness anyone needs.
+
+        Derived from work the agent already does rather than from a heartbeat it could
+        forget: every authenticated request proves the container is running and that its
+        secret still verifies, which is more than a liveness ping would prove.
+        """
+        self.db.execute("INSERT INTO agent_presence VALUES(?,?,?) ON CONFLICT(agent) DO UPDATE "
+                        "SET last_seen=excluded.last_seen, route=excluded.route", (agent, now(), route))
+
+    def presence(self):
+        return {row["agent"]: {"last_seen": row["last_seen"], "route": row["route"]}
+                for row in self.db.execute("SELECT * FROM agent_presence")}
 
     def owners(self):
         return [dict(row) for row in self.db.execute("SELECT * FROM task_owners ORDER BY task_id")]

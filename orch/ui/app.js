@@ -391,6 +391,43 @@ function queueEntry(list, name, why, since, open) {
   return item;
 }
 
+// Which agents exist, and which of them are actually there. An agent that is running and
+// correctly idle holds nothing, so before presence it was indistinguishable from one that
+// stopped; the dot is the difference an operator acts on.
+const PRESENCE = {working: "Working", idle: "Idle, waiting for work", "not seen": "Not seen"};
+function renderAgents(report) {
+  const declared = report.enrolled || [];
+  const list = $("agent-list");
+  list.replaceChildren();
+  for (const row of declared) {
+    const item = document.createElement("li");
+    const dot = document.createElement("span");
+    dot.className = "dot " + (row.state === "working" ? "working" : row.state === "idle" ? "idle" : "gone");
+    const who = document.createElement("div");
+    who.className = "who";
+    const name = document.createElement("b");
+    name.textContent = row.agent;
+    const detail = document.createElement("span");
+    // The one that should catch the eye: this agent's task is stopped on a person.
+    detail.textContent = row.needs_you ? "Waiting on you before it can go on"
+      : PRESENCE[row.state] + " \u00b7 " + row.roles.join(", ");
+    who.append(name, detail);
+    const when = document.createElement("span");
+    when.className = "when";
+    when.textContent = row.last_seen ? waited(row.last_seen) + " ago" : "never";
+    item.className = row.needs_you ? "asking" : "";
+    item.append(dot, who, when);
+    if (row.holding) item.append(button("Open task", async () => { await select(row.holding); }));
+    list.append(item);
+  }
+  const present = declared.filter(row => row.state !== "not seen").length;
+  const asking = declared.filter(row => row.needs_you).length;
+  $("agents-summary").textContent = !declared.length
+    ? "No agent registry was given to this server. Start it with --agents to see them here."
+    : present + " of " + declared.length + " present"
+      + (asking ? ", and " + asking + " waiting on you." : ".");
+}
+
 async function attention() {
   const version = epoch;
   try {
@@ -416,6 +453,7 @@ async function attention() {
     if (report.work.at_bound) parts.push("As many tasks are advancing as this workspace allows; new work will wait.");
     if (report.agents.lapsed_count) parts.push(report.agents.lapsed_count + " lease(s) lapsed without being released.");
     if (!parts.length) parts.push(report.summary.tasks_active ? "Nothing needs you. " + report.summary.tasks_active + " task(s) in progress." : "Nothing needs you, and nothing is in progress.");
+    renderAgents(report);
     $("attention-summary").textContent = parts.join(" ");
     $("attention-summary").className = waiting.length ? "" : "settled";
   } catch (error) {
@@ -616,6 +654,7 @@ async function sessionAction(action) {
 for (const action of ["check", "rotate", "revoke"]) $("session-" + action).addEventListener("click", () => sessionAction(action));
 $("refresh").addEventListener("click", () => tasks().then(attention).catch(e => notice(e.message)));
 $("attention-refresh").addEventListener("click", () => attention().catch(e => notice(e.message)));
+$("agents-refresh").addEventListener("click", () => attention().catch(e => notice(e.message)));
 $("refresh-task").addEventListener("click", () => {
   if (busy || !token || !selected) return;
   return state().catch(e => notice(e.message));
@@ -641,7 +680,7 @@ $("renew-approval").addEventListener("click", () => {
   mutate(() => api(`/tasks/${task}/renew-approval`, payload)).catch(e => notice(e.message));
 });
 $("create").addEventListener("submit", e => {
-  e.preventDefault(); mutate(async () => { const result = await api("/tasks", {title: $("title").value}); epoch++; selected = result.task_id; cursor = 0; $("cancel-reason").value = ""; $("cancellation").open = false; $("events").replaceChildren(); $("event-status").textContent = "Loading event history…"; $("evidence").hidden = true; $("empty").hidden = true; $("detail").hidden = false; }).catch(e => notice(e.message));
+  e.preventDefault(); mutate(async () => { const result = await api("/tasks", {title: $("title").value, draft: $("create-draft").checked}); epoch++; selected = result.task_id; cursor = 0; $("cancel-reason").value = ""; $("cancellation").open = false; $("events").replaceChildren(); $("event-status").textContent = "Loading event history…"; $("evidence").hidden = true; $("empty").hidden = true; $("detail").hidden = false; attention().catch(() => {}); }).catch(e => notice(e.message));
 });
 $("run").addEventListener("click", () => mutate(() => api(`/tasks/${selected}/run`, {})).catch(e => notice(e.message)));
 $("cancel-form").addEventListener("submit", e => {

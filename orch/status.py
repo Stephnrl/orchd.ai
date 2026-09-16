@@ -25,12 +25,37 @@ import sqlite3
 
 from .agent_queue import available
 from .agent_sessions import AGENT_ROLES, holder, role_for
+from datetime import datetime
+
 from .contracts import Rejected, now
 from .engine import TERMINAL
 from .github_journal import GitHubJournal
 from .jira_journal import JiraJournal
 
 MAX_LISTED = 50
+# How long after its last call an agent stops counting as present. The loop asks for work
+# every fifteen seconds while idle, so four missed rounds is a container that has stopped
+# rather than one that is merely between questions.
+UNSEEN_SECONDS = 60
+
+
+def roster(directory):
+    """The agents an operator declared, or nothing when the registry cannot be read.
+
+    Reported rather than raised, for the same reason an unopenable journal is: a status view
+    that dies because one of the things it describes is broken is the opposite of useful.
+    """
+    if not directory:
+        return None
+    from .agent_service import registry
+    try:
+        return {name: entry["roles"] for name, entry in registry(directory).items()}
+    except (Rejected, OSError):
+        return {}
+
+
+def parse(moment):
+    return datetime.fromisoformat(str(moment).replace("Z", "+00:00"))
 
 
 def tasks(store):
@@ -49,6 +74,39 @@ def tasks(store):
                             "since": state.get("created_at")})
     return {"by_state": dict(sorted(counts.items())), "total": sum(counts.values()),
             "active": active, "waiting_on_a_person": waiting}
+
+
+def enrolled(store, registry):
+    """Every agent an operator declared, and whether it is working, idle, or gone.
+
+    Holding a task was the only way an agent was visible, which made a container that is
+    running and correctly waiting — because there is nothing for its role to do —
+    indistinguishable from one that crashed. Presence separates them.
+    """
+    if not registry:
+        return []
+    held, waiting = {}, set()
+    for row in store.owners():
+        if store.live(row):
+            held[holder(row).get("agent")] = row["task_id"]
+    for row in store.db.execute("SELECT id, state FROM tasks"):
+        state = json.loads(row[1])
+        if role_for(state["state"]) == "human":
+            waiting.add(row[0])
+    seen, moment = store.presence(), now()
+    result = []
+    for name in sorted(registry):
+        last = (seen.get(name) or {}).get("last_seen")
+        fresh = bool(last) and (parse(moment) - parse(last)).total_seconds() <= UNSEEN_SECONDS
+        task = held.get(name)
+        result.append({"agent": name, "roles": sorted(registry[name]), "last_seen": last,
+                       "holding": task,
+                       # Three states an operator acts on differently: doing something,
+                       # available for something, or not there at all.
+                       "state": "working" if task and fresh else "idle" if fresh else "not seen",
+                       # The one that should catch the eye: this agent's task needs a person.
+                       "needs_you": bool(task and task in waiting)})
+    return result
 
 
 def agents(store):
@@ -109,10 +167,11 @@ def journal(path, family):
         book.close()
 
 
-def report(engine, github_journal=None, jira_journal=None):
+def report(engine, github_journal=None, jira_journal=None, registry=None):
     """Everything at once, for the operator who wants one answer rather than six."""
     result = {"kind": "OrchdStatus", "checked_at": now(), "tasks": tasks(engine.store),
-              "agents": agents(engine.store), "work": work(engine),
+              "agents": agents(engine.store), "enrolled": enrolled(engine.store, registry),
+              "work": work(engine),
               "artifacts": artifacts(engine.store), "journals": [],
               "live_authorized": False, "retry_allowed": False}
     for path, family in ((github_journal, "GitHub"), (jira_journal, "Jira")):
@@ -127,5 +186,7 @@ def report(engine, github_journal=None, jira_journal=None):
         "work_available": result["work"]["available"],
         "at_bound": result["work"]["at_bound"],
         "attention": bool(waiting or result["work"]["at_bound"] or result["agents"]["lapsed_count"]),
+        "agents_enrolled": len(result["enrolled"]),
+        "agents_present": sum(1 for row in result["enrolled"] if row["state"] != "not seen"),
     }
     return result
