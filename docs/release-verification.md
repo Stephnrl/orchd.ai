@@ -40,7 +40,7 @@ fixed command directly in the trusted development environment:
 | `contracts` | `python scripts/validate_contracts.py` |
 | `python` | `python scripts/ci_tests.py` |
 | `jira_acceptance` | `python scripts/jira_acceptance.py` |
-| `journal_succession_acceptance` | `python scripts/journal_succession_acceptance.py` |
+| `journal_lifecycle_acceptance` | `python scripts/journal_lifecycle_acceptance.py` |
 | `batch_acceptance` | `python scripts/batch_acceptance.py` |
 | `pilot_acceptance` | `python scripts/pilot_acceptance.py` |
 | `repository_task_acceptance` | `python scripts/repository_task_acceptance.py` |

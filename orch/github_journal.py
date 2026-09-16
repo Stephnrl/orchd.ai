@@ -7,7 +7,7 @@ import sqlite3
 from .contracts import Rejected, canonical, digest, now
 from .github_preview import prepare_pull_request
 from .maintenance import real_path
-from . import journal_succession
+from . import journal_revision, journal_succession
 
 MAX_RECORDS = 1000
 MAX_TOTAL_SCOPE_BYTES = 16 * 1024 * 1024
@@ -58,7 +58,7 @@ class GitHubJournal:
             self.db = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, isolation_level=None, timeout=5)
             self.db.row_factory = sqlite3.Row
             try:
-                if (self.db.execute("PRAGMA user_version").fetchone()[0] not in (1, journal_succession.VERSION)
+                if (self.db.execute("PRAGMA user_version").fetchone()[0] not in (1, journal_succession.VERSION, journal_revision.VERSION)
                         or self.db.execute("PRAGMA application_id").fetchone()[0] != 1330792264):
                     raise Rejected("Not a supported GitHub journal")
             except BaseException:
@@ -78,7 +78,7 @@ class GitHubJournal:
                     self.db.execute(statement)
                 self.db.execute("PRAGMA application_id=1330792264")
                 self.db.execute("PRAGMA user_version=1")
-            elif version not in (1, journal_succession.VERSION) or identity != 1330792264:
+            elif version not in (1, journal_succession.VERSION, journal_revision.VERSION) or identity != 1330792264:
                 raise Rejected("Not a supported GitHub journal")
             self.db.execute("COMMIT")
         except BaseException:
@@ -91,18 +91,10 @@ class GitHubJournal:
         self.db.close()
 
     def _check_schema(self):
-        expected = {('table', 'intents', 'intents', SCHEMA_SQL[0]),
-                    ('index', 'sqlite_autoindex_intents_1', 'intents', None),
-                    ('index', 'sqlite_autoindex_intents_2', 'intents', None)}
-        expected.update(('trigger', name, 'intents', sql) for name, sql in zip(
-            ('immutable_scope', 'no_delete', 'one_reservation'), SCHEMA_SQL[1:]))
-        # A retired journal and its successor carry the succession table as well; every
-        # other shape, including that table without its version or triggers, is refused.
+        # One shape per schema version and no other: the original journal, the same plus
+        # succession, or the rebuilt table that intent revision needs.
         version = self.db.execute('PRAGMA user_version').fetchone()[0]
-        if version == journal_succession.VERSION:
-            expected |= journal_succession.OBJECTS
-        elif version != 1:
-            raise Rejected("Unsupported GitHub journal schema or constraint configuration")
+        expected = journal_revision.schema_objects(SCHEMA_SQL, version)
         actual = {tuple(row) for row in self.db.execute(
             "SELECT type,name,tbl_name,CASE WHEN length(sql)<=4096 THEN sql END FROM main.sqlite_master LIMIT ?",
             (len(expected) + 1,))}
@@ -125,9 +117,9 @@ class GitHubJournal:
                     or digest(scope) != row['sha256'] or intent['task_id'] != row['task_id']
                     or intent['operation_id'] != row['operation_id']):
                 raise Rejected("Invalid journal scope binding")
-            if row['state'] == 'prepared':
+            if row['state'] in ('prepared', 'withdrawn'):
                 if row['reserved_at'] is not None:
-                    raise Rejected("Prepared intent has reservation evidence")
+                    raise Rejected("Intent has reservation evidence without a reservation")
             elif row['state'] == 'uncertain':
                 reserved = row['reserved_at']
                 if not isinstance(reserved, str) or not reserved.endswith('Z'):
@@ -137,9 +129,13 @@ class GitHubJournal:
                 raise Rejected("Invalid journal state")
         except (KeyError, TypeError, ValueError, UnicodeError, RecursionError) as exc:
             raise Rejected("Invalid GitHub journal record") from exc
-        return {"operation_id": row['operation_id'], "task_id": row['task_id'], "scope": scope,
-                "sha256": row['sha256'], "state": row['state'], "reserved_at": row['reserved_at'],
-                "live_authorized": False, "retry_allowed": False}
+        record = {"operation_id": row['operation_id'], "task_id": row['task_id'], "scope": scope,
+                  "sha256": row['sha256'], "state": row['state'], "reserved_at": row['reserved_at'],
+                  "live_authorized": False, "retry_allowed": False}
+        if row['state'] == 'withdrawn':
+            # Only a withdrawn record carries this, so every other record reads as before.
+            record["withdrawal"] = journal_revision.read_record(self.db, row['operation_id'])
+        return record
 
     def usage(self):
         """Logical admission usage only; not a disk-size or record-integrity check."""
@@ -149,7 +145,7 @@ class GitHubJournal:
         succession = journal_succession.summary(self.db)
         return {"records": row['records'], "scope_bytes": row['scope_bytes'],
                 "journal_status": succession['status'], "successor": succession['successor'],
-                "predecessor": succession['predecessor'],
+                "predecessor": succession['predecessor'], **journal_revision.counts(self.db),
                 "limits": {"records": MAX_RECORDS, "scope_bytes": MAX_TOTAL_SCOPE_BYTES, "record_scope_bytes": MAX_SCOPE_BYTES},
                 "remaining_records": max(0, MAX_RECORDS - row['records']),
                 "remaining_scope_bytes": max(0, MAX_TOTAL_SCOPE_BYTES - row['scope_bytes']),
@@ -208,8 +204,13 @@ class GitHubJournal:
         self.db.execute("BEGIN IMMEDIATE")
         try:
             self._check_schema()
-            existing = self.db.execute("SELECT operation_id FROM intents WHERE operation_id=? OR task_id=?", (operation, intent['task_id'])).fetchall()
+            # An operation identifier is never reused, whatever its state; a task is free
+            # again once its operation has been withdrawn.
+            existing = self.db.execute("SELECT operation_id,state FROM intents WHERE " + journal_revision.LIVE_CLAUSE,
+                                       (operation, intent['task_id'])).fetchall()
             if existing:
+                if existing[0]['state'] == 'withdrawn':
+                    raise Rejected("That operation was withdrawn; prepare this task under a new operation")
                 if len(existing) != 1 or existing[0]['operation_id'] != operation or self.get(operation)['sha256'] != sha:
                     raise Rejected("Task or operation is already bound to another scope")
             else:

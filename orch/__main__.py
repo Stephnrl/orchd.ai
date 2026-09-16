@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "repository-task-create", "repository-task-run", "repository-task-approve", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
+    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "repository-task-create", "repository-task-run", "repository-task-approve", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -339,6 +339,36 @@ def main():
             if journal is not None: journal.close()
         print(canonical(report).decode())
         if report.get('status') == 'blocked': raise SystemExit(2)
+        return
+    if args.command in ('github-journal-upgrade', 'github-journal-withdraw',
+                        'jira-journal-upgrade', 'jira-journal-withdraw'):
+        from .contracts import Rejected, canonical
+        from .journal_revision import upgrade, withdraw
+        from .journal_succession import family
+        import sqlite3
+        label = 'GitHub' if args.command.startswith('github-') else 'Jira'
+        upgrading = args.command.endswith('-upgrade')
+        if not args.journal:
+            parser.error('Journal revision commands require --journal')
+        if upgrading and not (args.destination and args.expected_sha256):
+            parser.error('Upgrading requires a verified --destination snapshot and its --expected-sha256')
+        if not upgrading and not (args.operation_id and args.expected_sha256 and args.reason):
+            parser.error('Withdrawal requires --operation-id, the retained scope --expected-sha256 and an audited --reason')
+        if not Path(args.journal).is_file():
+            parser.error('An existing journal is required')
+        journal = None
+        try:
+            if upgrading:
+                report = upgrade(args.journal, args.destination, args.expected_sha256, label)
+            else:
+                journal = family(label)[0](args.journal)
+                report = withdraw(journal, args.operation_id, args.expected_sha256, args.reason)
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error('Journal revision rejected; check the snapshot digest, schema version, retained scope digest, operation state and audited reason')
+        finally:
+            if journal is not None:
+                journal.close()
+        print(canonical(report).decode())
         return
     if args.command in ('github-journal-retire', 'github-journal-chain',
                         'jira-journal-retire', 'jira-journal-chain'):

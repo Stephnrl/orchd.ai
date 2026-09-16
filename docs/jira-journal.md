@@ -41,7 +41,9 @@ replace saved scope. One operation per task is enforced; assigning a new operati
 cannot create another comment slot for that task. This bounded contract does not support
 a sequence of comments per task. A full journal can now be [retired into a recorded
 successor](journal-succession.md) that refuses a second attempt for any task its chain
-retains; revision, cancellation and replacement policies remain unimplemented.
+retains, and a prepared operation can be [withdrawn](journal-revision.md) so its task can be
+prepared again under a new operation ID. Editing a retained scope in place remains
+unimplemented; records are immutable.
 
 ## Reservation and restart behavior
 

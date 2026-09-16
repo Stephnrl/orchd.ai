@@ -8,7 +8,7 @@ import stat
 from .contracts import Rejected, canonical, digest, now
 from .jira_reconcile import prepare_comment_read_plan, assess_comments
 from .maintenance import real_path
-from . import journal_succession
+from . import journal_revision, journal_succession
 
 APPLICATION_ID = 1330793034
 MAX_RECORDS = 1000
@@ -101,18 +101,10 @@ class JiraJournal:
         self.db.close()
 
     def _check_schema(self):
-        expected = {('table', 'intents', 'intents', SCHEMA_SQL[0]),
-                    ('index', 'sqlite_autoindex_intents_1', 'intents', None),
-                    ('index', 'sqlite_autoindex_intents_2', 'intents', None)}
-        expected.update(('trigger', name, 'intents', sql) for name, sql in zip(
-            ('immutable_scope', 'no_delete', 'one_reservation'), SCHEMA_SQL[1:]))
-        # A retired journal and its successor carry the succession table as well; every
-        # other shape, including that table without its version or triggers, is refused.
+        # One shape per schema version and no other: the original journal, the same plus
+        # succession, or the rebuilt table that intent revision needs.
         version = self.db.execute('PRAGMA user_version').fetchone()[0]
-        if version == journal_succession.VERSION:
-            expected |= journal_succession.OBJECTS
-        elif version != 1:
-            raise Rejected('Unsupported Jira journal schema or constraints')
+        expected = journal_revision.schema_objects(SCHEMA_SQL, version)
         actual = {tuple(row) for row in self.db.execute(
             'SELECT type,name,tbl_name,CASE WHEN length(sql)<=4096 THEN sql END FROM main.sqlite_master LIMIT ?',
             (len(expected) + 1,))}
@@ -135,9 +127,9 @@ class JiraJournal:
                     or scope['intent']['operation_id'] != row['operation_id']
                     or scope['intent']['task_id'] != row['task_id']):
                 raise Rejected('Invalid Jira journal binding')
-            if row['state'] == 'prepared':
+            if row['state'] in ('prepared', 'withdrawn'):
                 if row['reserved_at'] is not None:
-                    raise Rejected('Prepared operation has a reservation')
+                    raise Rejected('Operation has a reservation time without a reservation')
             elif row['state'] == 'uncertain':
                 reserved = row['reserved_at']
                 if not isinstance(reserved, str) or not reserved.endswith('Z'):
@@ -149,6 +141,8 @@ class JiraJournal:
                 raise Rejected('Invalid Jira journal state')
         except (KeyError, TypeError, ValueError, UnicodeError, RecursionError) as exc:
             raise Rejected('Invalid Jira journal record') from exc
+        if row['state'] == 'withdrawn':
+            journal_revision.read_record(self.db, operation_id)   # Validated on every read.
         return {key: row[key] for key in ('operation_id', 'task_id', 'sha256', 'state', 'reserved_at')} | {'scope': scope, **FLAGS}
 
     @staticmethod
@@ -162,6 +156,9 @@ class JiraJournal:
                    'preview_sha256': scope['preview_sha256'], 'read_plan_sha256': scope['read_plan']['sha256']}
         if scope.get('kind') == 'JiraActionScope':
             binding['action'] = scope['intent']['action']
+        if record['state'] == 'withdrawn':
+            # Only a withdrawn record carries this, so every other binding is unchanged.
+            binding['withdrawal'] = journal_revision.read_record(self.db, operation_id)
         return {'kind': 'JiraJournalRecord', 'binding': binding, 'sha256': digest(binding), **FLAGS}
 
     def usage(self):
@@ -173,7 +170,7 @@ class JiraJournal:
         succession = journal_succession.summary(self.db)
         return {'records': row['records'], 'scope_bytes': row['scope_bytes'],
                 'journal_status': succession['status'], 'successor': succession['successor'],
-                'predecessor': succession['predecessor'],
+                'predecessor': succession['predecessor'], **journal_revision.counts(self.db),
                 'limits': {'records': MAX_RECORDS, 'scope_bytes': MAX_TOTAL_SCOPE_BYTES, 'record_scope_bytes': MAX_SCOPE_BYTES},
                 'remaining_records': max(0, MAX_RECORDS-row['records']),
                 'remaining_scope_bytes': max(0, MAX_TOTAL_SCOPE_BYTES-row['scope_bytes']), **FLAGS}
@@ -200,8 +197,13 @@ class JiraJournal:
         self.db.execute('BEGIN IMMEDIATE')
         try:
             self._check_schema()
-            existing = self.db.execute('SELECT operation_id FROM intents WHERE operation_id=? OR task_id=?', (operation, task)).fetchall()
+            # An operation identifier is never reused, whatever its state; a task is free
+            # again once its operation has been withdrawn.
+            existing = self.db.execute('SELECT operation_id,state FROM intents WHERE ' + journal_revision.LIVE_CLAUSE,
+                                       (operation, task)).fetchall()
             if existing:
+                if existing[0]['state'] == 'withdrawn':
+                    raise Rejected('That operation was withdrawn; prepare this task under a new operation')
                 if len(existing) != 1 or existing[0]['operation_id'] != operation or self.get(operation)['sha256'] != sha:
                     raise Rejected('Jira task or operation already bound to another scope')
             else:

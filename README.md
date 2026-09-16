@@ -35,6 +35,9 @@ comparison and disposable recovery drills without replacing active journals.
 [Operation journal succession](docs/journal-succession.md) retires a full GitHub or Jira
 journal against such a snapshot and continues in a recorded successor that refuses a second
 attempt for any task its chain already retains, deleting no record.
+[Intent revision](docs/journal-revision.md) withdraws a prepared operation whose scope went
+stale so its task can be prepared again under a new operation ID, while a consumed attempt
+stays where it is and must be reconciled.
 [The consolidated Jira package](docs/jira-integration.md) adds Epic/Story/Task preparation,
 relationships, transitions, GitHub associations and review/preflight diagnostics, with
 synthetic examples and a complete offline acceptance scenario. Live activation remains gated.
