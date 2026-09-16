@@ -81,12 +81,15 @@ class Application:
                 return 201, self.engine.task(task)
             if method == "GET" and parts == ["tasks"]:
                 after, limit = page(query)
-                rows = self.engine.store.db.execute("SELECT rowid,id,state FROM tasks WHERE rowid>? ORDER BY rowid LIMIT ?", (after, limit + 1)).fetchall()
+                rows = self.engine.store.db.execute("SELECT rowid,id,state,context FROM tasks WHERE rowid>? ORDER BY rowid LIMIT ?", (after, limit + 1)).fetchall()
                 items = []
                 for row in rows[:limit]:
                     state = json.loads(row["state"])
-                    spec = self.engine.store.get(state["spec"], row["id"], "TaskSpec")
-                    items.append({"task_id": row["id"], "title": spec["title"], "state": state})
+                    # A task still being drafted has no specification yet, so its title is the
+                    # one it was opened with. See docs/draft-spec.md.
+                    spec = self.engine.store.get(state["spec"], row["id"], "TaskSpec") if state["spec"] else None
+                    title = spec["title"] if spec else json.loads(row["context"]).get("draft_title")
+                    items.append({"task_id": row["id"], "title": title, "state": state})
                 return 200, {"items": items,
                              "next": rows[limit-1]["rowid"] if len(rows) > limit else None}
             if query and not (method == "GET" and len(parts) == 3 and parts[2] in ("records", "stream")):

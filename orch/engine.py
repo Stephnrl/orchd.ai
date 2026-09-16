@@ -187,13 +187,20 @@ class Engine:
                 raise Rejected("Successful simulated action required")
         if target == "BLOCKED":
             state["resume_state"] = source
+        if target == "DRAFT_SPEC":
+            # A specification sent back to be redrafted is no longer the one a human read, so
+            # their confirmation does not survive the return trip. Without this, a task that
+            # came back from CHANGES_REQUESTED could reach SPEC_READY again on a confirmation
+            # of words that had since been rewritten.
+            context["spec_confirmed"] = False
+            context.pop("confirmed_sha256", None)
         state["state"] = target
         state["revision"] += 1
         self._event(state, context, "state_transition", before=source)
         if target in {"CHANGES_REQUESTED", "FAILED", "COMPLETED"}:
             self._event(state, context, {"CHANGES_REQUESTED": "changes_requested", "FAILED": "workflow_failed", "COMPLETED": "workflow_completed"}[target])
 
-    def create_task(self, title="Greeting fixture", scenario=None, principal="local-operator"):
+    def create_task(self, title="Greeting fixture", scenario=None, principal="local-operator", draft=False):
         if not isinstance(title, str) or not title or len(title) > 200 or redact(title) != title:
             raise Rejected("Invalid title")
         scenario = scenario or Scenario()
@@ -204,6 +211,14 @@ class Engine:
                          pending_approval=None, last_event_sequence=0, error=None)
             context = {"scenario": asdict(scenario), "attempt": 0, "planning_attempt": 0, "spec_confirmed": False}
             self.store.db.execute("INSERT INTO tasks VALUES(?,?,?)", (task_id, canonical(state).decode(), canonical(context).decode()))
+            if draft:
+                # Neither a specification nor a confirmation of one: writing the first is the
+                # project manager's work and confirming it is a human's, in that order.
+                # See docs/draft-spec.md. The fixture path below does both at once, which is
+                # why it stays a fixture.
+                context["draft_title"] = title
+                self._event(state, context, "task_created", {"drafted": True}, role="human")
+                return task_id
             spec = make("TaskSpec", task_id, revision=0, title=title, request=self.store.artifact(task_id, "Replace hello with hello world in greeting.txt", "text/plain"),
                         repository=repository(task_id), acceptance_criteria=["greeting.txt equals hello world followed by newline"], constraints=["offline fixture only"],
                         allowed_paths=["greeting.txt"], external_references=[], confirmed_by=principal)

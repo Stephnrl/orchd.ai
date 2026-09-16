@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-serve", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "skill-export", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
+    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-serve", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "skill-export", "task-open", "spec-draft", "spec-ask", "spec-answer", "spec-confirm", "spec-show", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -69,6 +69,9 @@ def main():
     parser.add_argument("--layout", choices=["plain", "claude", "copilot"], default="plain",
                         help="Where skill-export places the protocol: beside the destination, under .claude/skills, or with a Copilot instructions pointer")
     parser.add_argument("--check", action="store_true", help="For skill-export, report whether a vendored copy is current without writing anything")
+    parser.add_argument("--from", dest="source", help="JSON file holding a draft specification, questions or answers")
+    parser.add_argument("--principal", help="Who a human boundary crossing is attributed to")
+    parser.add_argument("--spec-sha256", help="The sha256 of the exact specification being confirmed")
     parser.add_argument("--title", default="Repository JSON validation")
     parser.add_argument("--decision", choices=["approve", "reject"])
     args = parser.parse_args()
@@ -349,6 +352,46 @@ def main():
             if journal is not None: journal.close()
         print(canonical(report).decode())
         if report.get('status') == 'blocked': raise SystemExit(2)
+        return
+    if args.command in ('task-open', 'spec-draft', 'spec-ask', 'spec-answer', 'spec-confirm', 'spec-show'):
+        from .contracts import Rejected, canonical
+        from . import task_drafts
+        import sqlite3
+        if args.command != 'task-open' and not args.task:
+            parser.error('That command needs the --task it acts on')
+        if args.command in ('spec-draft', 'spec-ask', 'spec-answer') and not args.source:
+            parser.error('That command reads its content from a --from JSON file')
+        if args.command in ('spec-answer', 'spec-confirm') and not args.principal:
+            parser.error('A human boundary crossing needs the --principal it is attributed to')
+        if args.command == 'spec-confirm' and not args.spec_sha256:
+            parser.error('spec-confirm needs the --spec-sha256 of the specification you read')
+        content = None
+        if args.source:
+            try:
+                content = json.loads(Path(args.source).read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                parser.error('Could not read a JSON document from --from')
+        engine = None
+        try:
+            engine = Engine(args.data, Executor('trusted-fixture' if args.trusted_fixture else 'docker', args.image))
+            if args.command == 'task-open':
+                task = engine.create_task(args.title, draft=True)
+                report = task_drafts.show(engine, task)
+            elif args.command == 'spec-draft':
+                report = task_drafts.draft(engine, args.task, content, args.expected_revision)
+            elif args.command == 'spec-ask':
+                report = task_drafts.ask(engine, args.task, content, args.expected_revision)
+            elif args.command == 'spec-answer':
+                report = task_drafts.answer(engine, args.task, content, args.principal, args.expected_revision)
+            elif args.command == 'spec-confirm':
+                report = task_drafts.confirm(engine, args.task, args.spec_sha256, args.principal, args.expected_revision)
+            else:
+                report = task_drafts.show(engine, args.task)
+        except (Rejected, OSError, sqlite3.Error) as exc:
+            parser.error('Specification step refused: ' + str(exc))
+        finally:
+            if engine is not None: engine.close()
+        print(canonical(report).decode())
         return
     if args.command == 'skill-export':
         from .contracts import Rejected, canonical

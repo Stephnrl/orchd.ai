@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 import json
 import secrets as randomness
 
-from orch import agent_sessions
+from orch import agent_sessions, task_drafts
 from orch.agent_client import AgentClient
 from orch.batches import Batches
 from orch.contracts import Rejected, canonical, now
@@ -123,6 +123,54 @@ def agents(engine):
             'human_pause_refused': True, 'sessions_held_after': agent_sessions.sessions(engine.store)['held']}
 
 
+def specified(engine):
+    """A task with no specification, drafted and questioned, then confirmed by a person."""
+    task = engine.create_task('Draft specification acceptance', draft=True)
+    if engine.task(task)['state']['spec'] is not None:
+        raise RuntimeError('A drafted task starts with no specification')
+    draft = {'title': 'Add a rate limit to the public API',
+             'request': 'Requests from one client should be limited.',
+             'acceptance_criteria': ['A client over the limit receives 429'],
+             'constraints': ['No new runtime dependency'], 'allowed_paths': ['api/limits.py']}
+    try:
+        task_drafts.confirm(engine, task, '0' * 64, 'local-operator')
+        raise RuntimeError('There is nothing to confirm before anything is drafted')
+    except Rejected:
+        pass
+    task_drafts.draft(engine, task, draft)
+    task_drafts.ask(engine, task, [{'question_id': 'window', 'question': 'Over what window?'}])
+    if engine.task(task)['state']['state'] != 'AWAITING_CLARIFICATION':
+        raise RuntimeError('A question should stop the work')
+    try:
+        task_drafts.draft(engine, task, draft)
+        raise RuntimeError('Nothing may be drafted while a question is outstanding')
+    except Rejected:
+        pass
+    task_drafts.answer(engine, task, [{'question_id': 'window', 'answer': 'A rolling minute.'}], 'local-operator')
+
+    # A human reads one specification; the project manager then revises it. The hash the
+    # human holds no longer names the specification, so their confirmation cannot apply.
+    read = task_drafts.show(engine, task)['spec_sha256']
+    task_drafts.draft(engine, task, dict(draft, request='Limited over a rolling minute.'))
+    try:
+        task_drafts.confirm(engine, task, read, 'local-operator')
+        raise RuntimeError('A specification revised after it was read must not be confirmable')
+    except Rejected:
+        pass
+    current = task_drafts.show(engine, task)['spec_sha256']
+    confirmed = task_drafts.confirm(engine, task, current, 'local-operator')
+    if confirmed['state'] != 'SPEC_READY' or not confirmed['confirmed']:
+        raise RuntimeError('Confirming the current specification should reach SPEC_READY')
+    specs = engine.store.db.execute(
+        "SELECT payload FROM records WHERE task_id=? AND kind='TaskSpec'", (task,)).fetchall()
+    signed = [json.loads(row[0])['confirmed_by'] for row in specs]
+    if sorted(x or '' for x in signed) != ['', '', 'local-operator']:
+        raise RuntimeError('Every draft should be kept, and only the confirmed one signed')
+    return {'task': task, 'drafts_kept': len(specs), 'clarified': True,
+            'stale_confirmation_refused': True, 'confirmed_by': 'local-operator',
+            'state': confirmed['state']}
+
+
 def through_the_api(engine, store, root):
     """The same session, but taken the way a container takes it: a secret and a socket."""
     agents = root / 'agents'
@@ -198,8 +246,9 @@ def run(destination):
         concurrent = parallel(engine, destination/'store')
         held = agents(engine)
         served = through_the_api(engine, destination/'store', destination)
+        drafted = specified(engine)
         report = {'kind':'SerialBatchAcceptance', 'status':'passed', 'tasks':tasks, 'rounds':rounds,
-                  'parallel_workers':concurrent, 'agent_session':held, 'agent_api':served,
+                  'parallel_workers':concurrent, 'agent_session':held, 'agent_api':served, 'draft_specification':drafted,
                   'fixture_only':True, 'live_authorized':False}
         (destination/'acceptance.json').write_bytes(canonical(report))
         return report
