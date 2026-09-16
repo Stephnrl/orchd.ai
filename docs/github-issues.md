@@ -87,17 +87,65 @@ Two issues with the same title are ordinary; two carrying the same operation mar
 so that case is a blocker rather than a choice. An intent may not write a marker itself —
 otherwise one operation could make another's issue look like its own.
 
+## Holding one, and approving it
+
+The dispatcher sends only a request matching the sha256 it is given — but on its own, nothing
+recorded *which* hash a human approved. Staging closes that.
+
+```sh
+python -m orch github-issue-stage --journal github.sqlite --github-profile profile.json     --intent intent.json --transcript capture.json --expected-sha256 PREVIEW_SHA
+python -m orch github-approval-preview --journal github.sqlite --operation-id OP     --expected-sha256 SCOPE_SHA --records evidence.json
+python -m orch github-check-approval ...
+```
+
+An issue intent now lives in [the same journal](github-journal.md) as a pull request, with the
+same properties: one live operation per task, an immutable scope, a reservation consumed
+exactly once, and nothing ever deleted.
+
+The two families store their scope differently because they must. A pull-request scope stores
+its preview and recovers the intent from it; an issue scope stores the **inputs** — intent,
+profile and capture — and recomputes the preview on every read, because an issue preview
+cannot exist without the capture it was checked against. Either way the property is the same:
+a stored scope that no longer reconstructs to what it claims is refused rather than acted on.
+
+### Evidence follows what is being approved
+
+A pull request is approved against the patch, the test that passed on it and the review that
+accepted it. **An issue has none of those.** It is approved against the specification a human
+[confirmed](draft-spec.md) and the duplicate search that found nothing already tracking it:
+
+| | Envelope |
+| --- | --- |
+| Pull request | `task_id`, `patch_sha256`, `test_sha256`, `review_sha256`, `policy_sha256` |
+| Issue | `task_id`, `spec_sha256`, `duplicates_sha256`, `policy_sha256` |
+
+Offering one family's evidence for the other's approval is refused. That is not tidiness: a
+patch digest says nothing about whether an issue should be filed, and accepting it would let
+an approval look complete while resting on evidence about something else entirely.
+
+### The link the dispatcher was missing
+
+The approved scope contains the preview, and the preview contains the exact request. So the
+hash handed to [the dispatcher](outbound-dispatch.md) is reachable *from the approval* rather
+than asserted beside it:
+
+```text
+approval ──> scope ──> preview ──> request ──> sha256 the dispatcher will accept
+```
+
+After dispatch, `reserve` has consumed the one reservation, and if the answer never came back
+the journal reconciles by the operation marker — the same route `github-issue-reconcile` uses,
+now bound to a retained reservation rather than run loose.
+
 ## What this is not
 
 This is a codec, not a client. It produces request data that a human or a broker could act
 on; it performs nothing, authorizes nothing, and reaching a real GitHub still requires a
 least-privilege token and a destination-bound broker, which remain their own gate.
 
-It is also not yet wired into the workflow. [The GitHub journal](github-journal.md) is
-pull-request shaped — its destination check matches `/pulls` and it holds one operation per
-task — so staging an issue intent with a reservation and an approval is a separate step, as
-is connecting it to [the draft specification stage](draft-spec.md) so that a project manager
-can produce an epic, its stories and the issue that tracks them as one reviewed bundle.
+It is also not yet connected to [the draft specification stage](draft-spec.md): a project
+manager producing an epic, its stories and the issue that tracks them as one reviewed bundle
+is still a separate step, and so is admitting a real receipt into the task workflow.
 
 Creating the issue and linking a ticket to it are two actions with two approvals. Nothing
 here makes them one transaction, and on two different services nothing could.

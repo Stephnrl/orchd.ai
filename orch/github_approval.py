@@ -3,11 +3,18 @@ from datetime import datetime, timedelta
 import re
 
 from .contracts import Rejected, canonical, digest, now, uid
-from .github_journal import validated_intent
+from .github_journal import issue_family, scope_intent, validated_intent
+
+# What a person is shown when they approve, and it differs by what they are approving. A pull
+# request is approved against the patch, the test that passed on it and the review that
+# accepted it. An issue has none of those: it is approved against the specification a human
+# confirmed and the search that found nothing already tracking it.
+ENVELOPES = {False: {'task_id', 'patch_sha256', 'test_sha256', 'review_sha256', 'policy_sha256'},
+             True: {'task_id', 'spec_sha256', 'duplicates_sha256', 'policy_sha256'}}
 
 
-def _validate_evidence(evidence):
-    fields = {'task_id', 'patch_sha256', 'test_sha256', 'review_sha256', 'policy_sha256'}
+def _validate_evidence(evidence, issue=False):
+    fields = ENVELOPES[bool(issue)]
     if not isinstance(evidence, dict) or set(evidence) != fields:
         raise Rejected("Invalid GitHub approval evidence envelope")
     if not isinstance(evidence['task_id'], str) or not re.fullmatch(r'[a-f0-9]{32}', evidence['task_id']):
@@ -18,11 +25,13 @@ def _validate_evidence(evidence):
 
 
 def prepare_approval(journal, operation_id, expected_sha256, evidence):
-    _validate_evidence(evidence)
     journal.db.execute('BEGIN')
     try:
         journal._check_schema()
         record = journal.get(operation_id)
+        # The envelope follows what is being approved, so an issue cannot be approved on a
+        # pull request's evidence or the other way round.
+        _validate_evidence(evidence, issue_family(record['scope']))
         if record['state'] != 'prepared' or record['sha256'] != expected_sha256:
             raise Rejected("Approval preview requires the expected prepared scope")
         if evidence['task_id'] != record['task_id']:
@@ -42,11 +51,12 @@ def prepare_approval(journal, operation_id, expected_sha256, evidence):
 
 
 def check_approval(journal, preview, expected_sha256, evidence):
-    _validate_evidence(evidence)
     try:
         binding = preview['binding']
-        _validate_evidence(binding['evidence'])
-        intent = validated_intent(binding['scope'])
+        issue = issue_family(binding['scope'])
+        _validate_evidence(evidence, issue)
+        _validate_evidence(binding['evidence'], issue)
+        intent = scope_intent(binding['scope'])
         issued = binding['issued_at']
         if not isinstance(issued, str) or not issued.endswith('Z'):
             raise Rejected("Invalid approval issue time")

@@ -61,7 +61,11 @@ secret that proves which agent it is and grants nothing, while the broker under 
 account holds what can change the world. The credential names the origin it may go to, the
 request must hash to what was approved, redirects are never followed, and refused, failed
 and uncertain are three different answers.
-[GitHub issues as intents](docs/github-issues.md) add the half of a project manager's
+[GitHub issues as intents](docs/github-issues.md) are now staged, approved and reserved in
+the same journal as pull requests, with evidence that suits what is being approved — a
+specification and a duplicate search rather than a patch, a test and a review — so the hash
+the dispatcher accepts is reachable from the approval rather than asserted beside it. They add
+the half of a project manager's
 tracking work that was missing: an issue intent with a read plan, a repository pinned by
 numeric ID, labels that must already exist, an operation marker that makes creation
 idempotent and reconcilable, and a duplicate search that says what to ask rather than asking
