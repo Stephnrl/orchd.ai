@@ -1,5 +1,15 @@
 # Roadmap progress — September 16, 2026
 
+The [GitHub issue milestone](github-issues.md) adds the intent a project manager needs
+to track work where the work lives. Jira already modelled Epics, Stories, Tasks and a link to
+a GitHub issue by number; nothing modelled the issue, so the number had no origin. Issue
+intents now have a read plan, a repository pinned by ID, labels that must already exist, an
+operation marker that makes creation idempotent and an uncertain dispatch reconcilable, and a
+duplicate search that produces the request to make rather than making it. It is a codec:
+staging it in a journal with an approval, and assembling an epic with its stories and issue
+as one reviewed bundle, are the next steps, and reaching a real GitHub still needs the
+least-privilege token and destination-bound broker that remain gated.
+
 The [draft specification milestone](draft-spec.md) closes a fail-open at the top of the
 chain. `create_task` invented a specification, wrote `confirmed_by` and set `spec_confirmed`
 in one transaction, so the evidence recorded a human confirmation nobody performed — and

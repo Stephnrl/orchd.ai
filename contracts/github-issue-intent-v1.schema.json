@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GitHubIssueIntent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id", "operation_id", "repository", "title", "body", "labels"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "task_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "operation_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "repository": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 256},
+    "body": {"type": "string", "maxLength": 16384},
+    "labels": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9 _.:/-]{0,49}$"}
+    }
+  }
+}
