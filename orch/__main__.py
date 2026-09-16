@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-serve", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "skill-export", "task-open", "spec-draft", "spec-ask", "spec-answer", "spec-confirm", "spec-show", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
+    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-serve", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "skill-export", "task-open", "spec-draft", "spec-ask", "spec-answer", "spec-confirm", "spec-show", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-issue-read-plan", "github-issue-preview", "github-issue-reconcile", "github-issue-duplicate-plan", "github-issue-duplicates", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -45,6 +45,8 @@ def main():
     parser.add_argument('--jira-target', help='Explicit Jira Data Center instance/project/issue target JSON')
     parser.add_argument('--jira-author-key', help='Explicit expected Jira comment author key; never inferred from captured comments')
     parser.add_argument('--jira-profile', help='Explicit Jira deployment mapping JSON; no credentials')
+    parser.add_argument('--github-profile', help='Explicit GitHub issue destination JSON: repository and its numeric ID; no credentials')
+    parser.add_argument('--terms', help='GitHub issue search terms for a duplicate read plan')
     parser.add_argument('--release-lane', choices=['offline', 'browser', 'full'], default='full', help='Exact required release acceptance lane')
     parser.add_argument('--release-report', help='Saved release verification report; requires its independently retained digest')
     parser.add_argument('--batch-id', help='Retained serial workflow batch identifier')
@@ -1002,6 +1004,38 @@ def main():
             parser.error("Invalid GitHub intent, identity or observations")
         print(json.dumps(report, indent=2))
         raise SystemExit(0 if report["status"] in ("matches", "candidate_observed") else 2)
+    if args.command in ('github-issue-read-plan', 'github-issue-preview', 'github-issue-reconcile',
+                        'github-issue-duplicate-plan', 'github-issue-duplicates'):
+        searching = args.command in ('github-issue-duplicate-plan', 'github-issue-duplicates')
+        if not args.github_profile:
+            parser.error('GitHub issue commands require the --github-profile naming the destination')
+        if searching and not args.terms:
+            parser.error('A duplicate search requires the --terms to look for')
+        if not searching and not args.intent:
+            parser.error('That command requires the --intent it acts on')
+        if args.command in ('github-issue-preview', 'github-issue-reconcile', 'github-issue-duplicates') and not args.transcript:
+            parser.error('That command requires the --transcript of the reads its plan asked for')
+        from . import github_issues
+        from .github_preview import load_intent
+        from .contracts import Rejected
+        try:
+            profile = load_intent(args.github_profile)
+            if searching:
+                plan = github_issues.duplicate_plan(profile, args.terms)
+                report = plan if args.command == 'github-issue-duplicate-plan' else github_issues.duplicates(
+                    plan, load_intent(args.transcript), profile)
+            else:
+                intent = load_intent(args.intent)
+                if args.command == 'github-issue-read-plan':
+                    report = github_issues.read_plan(intent, profile)
+                elif args.command == 'github-issue-preview':
+                    report = github_issues.preview_issue(intent, profile, load_intent(args.transcript))
+                else:
+                    report = github_issues.reconcile_issue(intent, profile, load_intent(args.transcript))
+        except (Rejected, OSError):
+            parser.error('Offline GitHub issue step rejected; check the profile, intent, capture and its binding')
+        print(json.dumps(report, indent=2))
+        return  # Success means data was prepared or read back, never a remote effect.
     if args.command == "github-preview":
         if not args.intent or not args.allow_repository:
             parser.error("github-preview requires --intent and --allow-repository")

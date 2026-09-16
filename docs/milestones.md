@@ -130,6 +130,18 @@ role and that role is the one the task's next step needs. The wire is five fixed
 request and reply contracts, HMAC verified before any JSON is parsed, replies signed with the
 secret that authenticated them and bound to the route and nonce they answer.
 
+[GitHub issues as intents](github-issues.md) close the gap between the two halves of
+tracking work. Jira actions modelled Epics, Stories, Tasks, Epic and issue links and a
+`github_link` naming an issue by number, while the only GitHub intent was a pull request, so
+that number had to come from somewhere else. An issue intent now has the same offline shape:
+a contract, a read plan naming exactly what must be observed, a capture checked against the
+plan it claims to answer, and only then the exact write request. The repository is pinned by
+numeric ID as well as name because a renamed repository still resolves; a label the
+repository lacks is named rather than created; a truncated search is refused; and every
+issue carries an operation marker, so creation is idempotent and an uncertain dispatch can be
+reconciled to the one issue it made. A duplicate search says what to ask and checks the
+answer, because giving this control plane a network read is its own gate.
+
 [The draft specification stage](draft-spec.md) implements the states and contracts the
 design has carried from the start but no code ever used. A task can be opened with no
 specification; a project manager drafts one and revises it, each revision kept rather than
