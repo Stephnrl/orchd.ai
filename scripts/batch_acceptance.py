@@ -171,6 +171,68 @@ def specified(engine):
             'state': confirmed['state']}
 
 
+def looped(engine, store, root):
+    """The loop itself, not a script of it: a runner that finds work, does it, hands it back."""
+    from orch.agent_runner import Decider, Runner
+
+    class Once(Decider):
+        """Draft once, then decline, so the loop has to do both."""
+
+        def consider(self, draft):
+            if draft['spec'] is not None:
+                return ('release', None)
+            return ('draft', {'title': 'Drafted by a loop',
+                              'request': 'Written by a runner rather than a script.',
+                              'acceptance_criteria': ['The loop claimed and released it'],
+                              'constraints': [], 'allowed_paths': ['api/limits.py'],
+                              'external_references': []})
+
+    agents = root / 'runner-agents'
+    folder = agents / 'looping-manager'
+    folder.mkdir(parents=True)
+    (folder / 'role').write_text('project_manager' + chr(10), encoding='ascii')
+    secret = folder / 'secret'
+    secret.write_text(randomness.token_hex(32) + chr(10), encoding='ascii')
+    os.chmod(secret, 0o600)
+
+    task = engine.create_task('Loop acceptance', draft=True)
+    service = subprocess.Popen([sys.executable, '-m', 'orch', 'agent-serve', '--data', str(store),
+                                '--agents', str(agents), '--port', '0'],
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                               cwd=str(Path(__file__).resolve().parents[1]))
+    waits = []
+    try:
+        started = json.loads(service.stdout.readline())
+        runner = Runner(AgentClient(started['endpoint'], str(secret)), Once(), 'project_manager',
+                        lease=60, sleeper=waits.append)
+        runner.run(rounds=3)
+        if runner.worked != 1:
+            raise RuntimeError('The loop should have drafted exactly once')
+        holders = [row['task_id'] for row in agent_sessions.sessions(engine.store)['sessions']]
+        if runner.held is not None or task in holders:
+            raise RuntimeError('A finished loop holds nothing of its own')
+        drafted = task_drafts.show(engine, task)
+        if drafted['spec_revision'] != 0 or drafted['specification']['title'] != 'Drafted by a loop':
+            raise RuntimeError('The loop did not write what its decider decided')
+        # A person confirms what the loop wrote, which is the only thing that takes the task
+        # out of the project manager's step. Only then is the loop genuinely idle.
+        task_drafts.confirm(engine, task, task_drafts.show(engine, task)['spec_sha256'], 'local-operator')
+        runner.run(rounds=1)
+        if not waits:
+            raise RuntimeError('An idle loop waits rather than asking again immediately')
+        if runner.worked != 1:
+            raise RuntimeError('A confirmed specification is beyond the loop that wrote it')
+    finally:
+        service.terminate()
+        try:
+            service.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            service.kill()
+            service.communicate(timeout=30)
+    return {'task': task, 'drafted_by_the_loop': True, 'released_when_done': True,
+            'confirmed_by_a_person': True, 'waited_when_idle': True, 'steps': runner.worked}
+
+
 def through_the_api(engine, store, root):
     """The same session, but taken the way a container takes it: a secret and a socket."""
     agents = root / 'agents'
@@ -291,6 +353,8 @@ def managed(engine, store, root):
             raise RuntimeError('A confirmed specification must be beyond the agent that wrote it')
         except Rejected:
             pass
+        # A container on its way down gives the task back rather than leaving a lease to lapse.
+        manager.release(task)
     finally:
         service.terminate()
         try:
@@ -328,8 +392,9 @@ def run(destination):
         served = through_the_api(engine, destination/'store', destination)
         drafted = specified(engine)
         by_agent = managed(engine, destination/'store', destination)
+        by_loop = looped(engine, destination/'store', destination)
         report = {'kind':'SerialBatchAcceptance', 'status':'passed', 'tasks':tasks, 'rounds':rounds,
-                  'parallel_workers':concurrent, 'agent_session':held, 'agent_api':served, 'draft_specification':drafted, 'agent_drafting':by_agent,
+                  'parallel_workers':concurrent, 'agent_session':held, 'agent_api':served, 'draft_specification':drafted, 'agent_drafting':by_agent, 'agent_loop':by_loop,
                   'fixture_only':True, 'live_authorized':False}
         (destination/'acceptance.json').write_bytes(canonical(report))
         return report

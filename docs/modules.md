@@ -17,7 +17,9 @@ python scripts/module_map.py
 | `orch/__main__.py` | Every offline command this control plane offers, and nothing that decides anything. |
 | `orch/actors.py` | Replaceable deterministic policy and external-action actors; no state authority. |
 | `orch/agent_client.py` | The agent's side of the loopback API: a secret, a socket, and nothing else. |
+| `orch/agent_main.py` | The container's entry point: configuration from the environment, then the loop. |
 | `orch/agent_queue.py` | The work an agent could take, which until now it had no way to find. |
+| `orch/agent_runner.py` | The loop a container runs: the first thing that has ever had to obey the protocol. |
 | `orch/agent_service.py` | Loopback agent API so agent containers never touch the store. |
 | `orch/agent_sessions.py` | A role-scoped, expiring claim that an agent holds across separate invocations. |
 | `orch/api.py` | Small localhost HTTP boundary. Session identity never comes from request JSON. |

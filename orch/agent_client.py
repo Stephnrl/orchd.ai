@@ -11,7 +11,7 @@ import re
 
 from .agent_service import ROUTES, VERSION, validate_wire
 from .broker import MAX_MESSAGE, MAX_REPLY, SecretFile, endpoint, sign, verify
-from .contracts import Rejected, canonical, uid
+from .contracts import Rejected, Transient, canonical, uid
 
 
 class AgentClient:
@@ -52,6 +52,14 @@ class AgentClient:
         if not verify(key, "reply", route, data, tag):
             raise Rejected("Agent reply authentication failed")
         if status != 200:
+            # The body was authenticated above, so what it says about retrying can be
+            # believed. A refusal that may change on its own is raised as one.
+            try:
+                refusal = json.loads(data.decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                refusal = {}
+            if isinstance(refusal, dict) and refusal.get("retry_allowed") is True:
+                raise Transient("Agent service refused the request for now")
             raise Rejected("Agent service refused the request")
         try:
             payload = json.loads(data.decode("utf-8"))

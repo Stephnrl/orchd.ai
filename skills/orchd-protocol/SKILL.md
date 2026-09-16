@@ -24,10 +24,12 @@ signs your request is your identity, decided by the service and not by you. Ther
 to act as another agent, so do not build one.
 
 **A refusal is an answer, not an obstacle.** orchd fails closed: when it refuses, the thing
-you asked for did not happen and will not happen by asking differently. Do not retry, reword,
-split the request, or route around it. Every reply carries `retry_allowed`; when it is false,
-stop and report the refusal to whoever gave you the work. When it is true, the state that
-refused you may change on its own — wait, then ask again unchanged.
+you asked for did not happen and will not happen by asking differently. Do not reword it,
+split it, or route around it. **A refusal carries `retry_allowed`**: when it is false, stop
+and report the refusal to whoever gave you the work. When it is true, the state that refused
+you may change on its own — the task frees, the bound empties — so wait, then ask again
+unchanged. On a successful reply the same field is always false and means nothing; it is the
+refusal that carries the answer.
 
 **You hold work only while your lease is live.** A claim grants a lease measured in seconds,
 not a lock held by your process. If you stop renewing it, it expires and the task becomes

@@ -102,13 +102,17 @@ before there is a task on the line.
 | --- | --- |
 | You asked for a role you are not enrolled for | No. Ask for one of the roles `agent-identity` returned. |
 | The task's next step belongs to another role | No. The task is not yours right now. |
-| The task is held by someone else, still live | Later. It frees when their lease expires or they release it. |
-| Too many tasks are already advancing | Later. A slot frees when any holder finishes. |
+| The task is held by someone else, still live | Later — `retry_allowed` is true. It frees when their lease expires or they release it. |
+| Too many tasks are already advancing | Later — `retry_allowed` is true. A slot frees when any holder finishes. |
 | The task moved since the revision you passed | No. Read the task again and decide afresh. |
 | The service is unreachable or your secret failed | No. Report it; this is a deployment problem, not a work problem. |
 
-The reply's `retry_allowed` is the authoritative version of this table. Where they disagree,
-believe the reply.
+A refusal carries `retry_allowed`, and that is the authoritative version of this table: where
+they disagree, believe the refusal. Only the two rows marked "Later" set it true, because only
+those stop being refusals without anybody doing anything.
+
+The same field appears on successful replies, where it is always false and carries no meaning.
+It is the refusal that answers the question.
 
 "Later" never means immediately. Wait out the lease or the work ahead of you; a tight retry
 loop against a live holder accomplishes nothing and hides a real stall from whoever is

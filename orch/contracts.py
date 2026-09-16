@@ -26,6 +26,16 @@ class Rejected(ValueError):
     pass
 
 
+class Transient(Rejected):
+    """A refusal that may stop being one without anybody doing anything.
+
+    A task held by another agent is released or its lease lapses; a full admission bound
+    empties as work finishes. Both refuse now and may permit later, which is a different
+    answer from "your role may not do this" and deserves a different reaction from a caller.
+    It stays a `Rejected`, so nothing that refuses broadly starts permitting narrowly.
+    """
+
+
 def validate(value, kind=None):
     try:
         VALIDATOR.validate(value)
