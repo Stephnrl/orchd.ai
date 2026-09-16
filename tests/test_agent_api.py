@@ -52,8 +52,10 @@ class AgentApiTests(unittest.TestCase):
         folder = self.agents / name
         folder.mkdir(parents=True)
         (folder / 'role').write_text("\n".join(roles) + "\n", encoding='ascii')
-        (folder / 'secret').write_text(randomness.token_hex(32) + "\n", encoding='ascii')
-        return folder / 'secret'
+        secret = folder / 'secret'
+        secret.write_text(randomness.token_hex(32) + "\n", encoding='ascii')
+        os.chmod(secret, 0o600)     # A world-readable secret is refused on POSIX.
+        return secret
 
     def client(self, name):
         return AgentClient(self.endpoint, self.agents / name / 'secret')
@@ -75,6 +77,7 @@ class AgentApiTests(unittest.TestCase):
     def test_an_unknown_secret_is_nobody(self):
         stranger = self.root / 'stranger.secret'
         stranger.write_text(randomness.token_hex(32) + "\n", encoding='ascii')
+        os.chmod(stranger, 0o600)
         with self.assertRaisesRegex(Rejected, 'unavailable|refused|authentication'):
             AgentClient(self.endpoint, stranger).whoami()
         self.assertEqual(self.client('lead-devops').sessions()['held'], 0)
@@ -176,12 +179,26 @@ class AgentApiTests(unittest.TestCase):
         finally:
             connection.close()
 
+    def test_a_world_readable_secret_is_refused_by_name(self):
+        # No skip: the lane permits exactly the five Docker skips, so each platform
+        # asserts what is true of it. Windows has no world bit to set.
+        exposed = self.enrol('exposed', 'junior')
+        os.chmod(exposed, 0o644)
+        if os.name == 'nt':
+            service = AgentService(self.store, self.agents)
+            service.close()
+            self.assertEqual(os.name, 'nt')
+            return
+        with self.assertRaisesRegex(Rejected, 'exposed'):
+            AgentService(self.store, self.agents)
+
     def test_a_registry_needs_a_role_and_a_secret_for_every_agent(self):
         broken = self.root / 'broken'
         (broken / 'nameless').mkdir(parents=True)
         with self.assertRaises(Rejected):
             registry(broken)
         (broken / 'nameless' / 'secret').write_text(randomness.token_hex(32) + "\n", encoding='ascii')
+        os.chmod(broken / 'nameless' / 'secret', 0o600)
         with self.assertRaisesRegex(Rejected, 'role and a secret'):
             registry(broken)
         (broken / 'nameless' / 'role').write_text("not_a_role\n", encoding='ascii')
