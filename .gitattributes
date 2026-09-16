@@ -1,0 +1,2 @@
+# The protocol an agent container reads must hash the same on every host.
+skills/orchd-protocol/*.md text eol=lf

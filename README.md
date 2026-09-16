@@ -52,6 +52,10 @@ human.
 agent container holds a secret and a socket instead of the store, the agent it is comes from
 the secret that signed the request, and the roles it may claim come from the service's own
 registry.
+[The agent protocol as plain context](docs/agent-protocol-context.md) gives those containers
+the text that tells them how to work: one Markdown protocol published to a Claude-style skill
+directory, a Copilot instructions layout or a vendored copy, with `skill-export --check` for
+an image that carries one and tests that fail when the text and the code disagree.
 [The consolidated Jira package](docs/jira-integration.md) adds Epic/Story/Task preparation,
 relationships, transitions, GitHub associations and review/preflight diagnostics, with
 synthetic examples and a complete offline acceptance scenario. Live activation remains gated.

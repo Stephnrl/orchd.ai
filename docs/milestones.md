@@ -130,6 +130,16 @@ role and that role is the one the task's next step needs. The wire is five fixed
 request and reply contracts, HMAC verified before any JSON is parsed, replies signed with the
 secret that authenticated them and bound to the route and nonce they answer.
 
+[The agent protocol as plain context](agent-protocol-context.md) publishes what those
+containers are missing: the rules an agent works by, as plain Markdown rather than one tool's
+format. A short core carries the four rules and the claim loop, a reference carries the state
+table, routes, lease bounds and refusals, and `skill-export` places both where a Claude-style
+loader, Copilot CLI or a vendored image copy expects them. The protocol files are replaced on
+export because they are ours; an existing instructions file is never overwritten. `--check`
+reports drift without writing, and tests compare every state, role, route, field and bound in
+the text against the code, so the document cannot quietly stop being true. Exporting grants
+nothing: the same gates refuse an agent that has read it.
+
 [Agent sessions](agent-sessions.md) extend the same registry to agents that call in rather
 than run in the kernel. A session is a lease held by a named agent in a declared role, live
 until it expires, renewed while the agent works and released when its container stops. The
