@@ -161,9 +161,9 @@ class AgentWorkTests(unittest.TestCase):
     def test_no_route_an_agent_can_call_confirms_or_answers(self):
         # An agent drafts; a person decides. There is deliberately no route for either, and
         # this asserts the route table rather than trusting the absence.
-        self.assertEqual(sorted(ROUTES), ["agent-ask", "agent-claim", "agent-draft",
-                                          "agent-identity", "agent-release", "agent-renew",
-                                          "agent-sessions", "agent-spec"])
+        self.assertEqual(sorted(ROUTES), ["agent-ask", "agent-available", "agent-claim",
+                                          "agent-draft", "agent-identity", "agent-release",
+                                          "agent-renew", "agent-sessions", "agent-spec"])
         for forbidden in ("agent-confirm", "agent-answer", "agent-approve"):
             self.assertNotIn(forbidden, ROUTES)
             with self.assertRaisesRegex(Rejected, "Unknown agent route"):

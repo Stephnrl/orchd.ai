@@ -67,8 +67,8 @@ def written(value):
     """The parts of a specification a project manager writes, checked before anything is stored.
 
     Acceptance criteria are required because a specification nobody can test is not a
-    specification; the other lists may be empty, since a task genuinely may have no
-    constraint or no external reference.
+    specification, and at least one allowed path because work with no permitted scope is not
+    work. Constraints and external references may be empty: a task genuinely may have none.
     """
     if not isinstance(value, dict):
         raise Rejected("A draft is an object of specification fields")
@@ -81,6 +81,10 @@ def written(value):
         result[field] = lines(value.get(field, []), field)
     if not result["acceptance_criteria"]:
         raise Rejected("A specification states at least one acceptance criterion")
+    if not result["allowed_paths"]:
+        # The contract has always required one. Saying so here means a draft without any is
+        # refused by name rather than failing later as an unexplained invalid contract.
+        raise Rejected("A specification states at least one allowed path")
     return result
 
 

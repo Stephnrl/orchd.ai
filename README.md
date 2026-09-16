@@ -78,6 +78,12 @@ it. Jira already modelled the ticket and the link; nothing modelled the issue.
 letting an agent write into a repository: the issue is derived from the specification a person
 confirmed, so it says what was signed and cannot say anything else, and its operation
 identifier is derived too, so an interrupted dispatch resumes rather than filing a second.
+[Finding the work](docs/agent-queue.md) lets a container discover what is its to do rather
+than being handed identifiers: tasks whose next step belongs to a role it is enrolled for and
+which nobody holds, as identifiers and state only, with the admission bound alongside. Building
+it exposed two faults in the role model — an agent could be enrolled as `human` and claim an
+approval pause, and a task awaiting clarification was attributed to the project manager that
+had asked the question — both fixed.
 [An agent doing the work](docs/agent-work.md) connects the two: a project manager container
 can read, write and revise a specification and raise a clarification through the API it
 authenticates to, and every one of those requires a live lease it holds on that task. Nothing
