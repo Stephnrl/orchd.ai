@@ -1,6 +1,11 @@
 # Roadmap progress — September 16, 2026
 
-The [outbound dispatch milestone](outbound-dispatch.md) adds the first path that sends
+The [outbound dispatch milestone](outbound-dispatch.md) also performs the read plans this
+project has been preparing since its first integration. Nothing could perform one before, so
+every preview needed a person to fetch its URLs by hand; a fetch now does it with the same
+credential, needs no approval because it changes nothing, and refuses anything that is not a
+GET to that credential's origin. Plan, fetch, preview, dispatch is now one sequence, and the
+tests walk it against a real origin. It adds the first path that sends
 anything, and puts it on the broker. Mounting a token into a project manager's container was
 the obvious shape and the wrong one: the container could use it for anything at any time
 while the evidence named a single approved call, which leaves every approval above it

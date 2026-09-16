@@ -1150,6 +1150,111 @@
           }
         }
       }
+    },
+    "FetchRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "plan_sha256",
+        "requests"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "fetch"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "plan_sha256": {
+          "$ref": "#/$defs/Hash"
+        },
+        "requests": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 8,
+          "propertyNames": {
+            "pattern": "^[a-z_]{1,64}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "url"
+            ],
+            "properties": {
+              "method": {
+                "const": "GET"
+              },
+              "url": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "headers": {
+                "type": "object",
+                "maxProperties": 16,
+                "additionalProperties": {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                "propertyNames": {
+                  "pattern": "^[A-Za-z0-9-]{1,64}$"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "FetchReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "identity",
+        "capture"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "fetch"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "identity": {
+          "$ref": "#/$defs/Identity"
+        },
+        "capture": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema_version",
+            "plan_sha256",
+            "responses"
+          ],
+          "properties": {
+            "schema_version": {
+              "const": "1.0.0"
+            },
+            "plan_sha256": {
+              "$ref": "#/$defs/Hash"
+            },
+            "responses": {
+              "type": "object"
+            }
+          }
+        }
+      }
     }
   }
 }

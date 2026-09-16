@@ -28,11 +28,14 @@ ROUTES = {"identity": ("IdentityRequest", "IdentityReply"), "execute": ("Execute
           # The only route that reaches outside this host. It exists on the broker because
           # the credential does, and the credential is here so no agent container holds it.
           "dispatch": ("DispatchRequest", "DispatchReply"),
+          # Reads need no approval because they change nothing, but they need the same
+          # credential, so they are performed here and nowhere else.
+          "fetch": ("FetchRequest", "FetchReply"),
           "pilot-profile": ("PilotProfileRequest", "PilotProfileReply"),
           "pilot-execute": ("PilotExecuteRequest", "PilotExecuteReply"),
           "pilot-reconcile": ("PilotReconcileRequest", "PilotReconcileReply")}
 # Pilot scopes carry the retained baseline bytes, so those routes accept larger bodies.
-LIMITS = {"pilot-execute": MAX_REPLY, "pilot-reconcile": MAX_REPLY}
+LIMITS = {"pilot-execute": MAX_REPLY, "pilot-reconcile": MAX_REPLY, "fetch": MAX_REPLY}
 WIRE_SCHEMA = json.loads((Path(__file__).resolve().parents[1] / "contracts/broker-v1.schema.json").read_text())
 
 

@@ -111,8 +111,8 @@ class BrokerService:
                 if envelope is None:
                     raise Missing("No retained broker result")
             return {"schema_version": VERSION, "kind": route, "envelope": envelope, "identity": self.identity}
-        if route == "dispatch":
-            return self._dispatch(body)
+        if route in ("dispatch", "fetch"):
+            return self._outbound(route, body)
         if route.startswith("pilot-"):
             return self._pilot(route, body)
         operation = safe_id(body["operation_id"])
@@ -127,21 +127,26 @@ class BrokerService:
         return {"schema_version": VERSION, "kind": "reconcile", "nonce": body["nonce"], "operation_id": operation,
                 "container_absent": self.executor.reconcile(operation)}
 
-    def _dispatch(self, body):
-        """The only route that reaches off this host, and the only holder of the credential.
+    def _outbound(self, route, body):
+        """The only two routes that reach off this host, and the only holder of the credential.
 
-        The request is not interpreted here beyond what safety requires: it must hash to the
-        sha256 its approval was granted over, and it must be going where the credential says
-        it may go. Everything after the bytes leave comes back as a receipt, including an
-        uncertain one, because an outcome nobody recorded is worse than a bad outcome.
+        A `dispatch` writes: it must hash to the sha256 its approval was granted over and go
+        where the credential says it may. Everything after its bytes leave comes back as a
+        receipt, including an uncertain one, because an outcome nobody recorded is worse than
+        a bad outcome. A `fetch` reads, so it needs no approval — nothing it does can be
+        undone because nothing it does changes anything — and its fence is that only GETs, to
+        that same origin, are performed.
         """
         if self.dispatch_credential is None:
-            raise Rejected("This broker holds no dispatch credential; outbound dispatch is not enabled")
+            raise Rejected("This broker holds no dispatch credential; outbound access is not enabled")
         credential = outbound.read_credential(self.dispatch_credential)
-        receipt = outbound.perform(safe_id(body["operation_id"]), body["request"],
-                                   body["expected_sha256"], credential)
-        return {"schema_version": VERSION, "kind": "dispatch", "nonce": body["nonce"],
-                "identity": self.identity, "receipt": receipt}
+        reply = {"schema_version": VERSION, "kind": route, "nonce": body["nonce"], "identity": self.identity}
+        if route == "fetch":
+            reply["capture"] = outbound.fetch(body["plan_sha256"], body["requests"], credential)
+            return reply
+        reply["receipt"] = outbound.perform(safe_id(body["operation_id"]), body["request"],
+                                            body["expected_sha256"], credential)
+        return reply
 
     def _pilot(self, route, body):
         """Docker pilot workers under the broker account. The scope must belong to the configured pilot journal."""

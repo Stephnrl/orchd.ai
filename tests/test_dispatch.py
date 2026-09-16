@@ -7,6 +7,7 @@ import socket
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 import secrets as randomness
 
@@ -26,6 +27,8 @@ class Origin:
         self.reply = (201, {"number": 42, "html_url": "https://example.invalid/issues/42"})
         self.location = None
         self.padding = 0
+        self.reads = {}          # path prefix -> (status, body)
+        self.read_status = 200
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -33,6 +36,26 @@ class Origin:
 
             def log_message(self, *args):
                 pass
+
+            def do_GET(self):
+                outer.seen.append({"path": self.path, "method": self.command,
+                                   "authorization": self.headers.get("Authorization"),
+                                   "accept": self.headers.get("Accept"), "body": ""})
+                body = {"unconfigured": True}
+                for prefix, value in outer.reads.items():
+                    if self.path.startswith(prefix):
+                        body = value
+                        break
+                raw = json.dumps(body).encode()
+                if outer.padding:
+                    raw = json.dumps({"filler": "x" * outer.padding}).encode()
+                self.send_response(outer.read_status)
+                if outer.location:
+                    self.send_header("Location", outer.location)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
 
             def do_POST(self):
                 length = int(self.headers.get("Content-Length", "0"))
@@ -322,6 +345,166 @@ class BrokerDispatchTests(unittest.TestCase):
         self.credential.unlink()
         with self.assertRaises(Rejected):
             client.call("dispatch", self.message(self.request()))
+
+
+class FetchTests(unittest.TestCase):
+    """Reads, which nothing in this project could perform until now."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.origin = Origin()
+        self.addCleanup(self.origin.close)
+        path = self.root / "credential"
+        path.write_text("origin=" + self.origin.origin + "\ntoken=" + TOKEN + "\n", encoding="ascii")
+        os.chmod(path, 0o600)
+        self.credential = dispatch.read_credential(path)
+
+    def reads(self, **changes):
+        base = {"repository": {"method": "GET", "url": self.origin.origin + "/repos/a/b",
+                               "headers": {"Accept": "application/vnd.github+json"}},
+                "labels": {"method": "GET", "url": self.origin.origin + "/repos/a/b/labels"}}
+        base.update(changes)
+        return base
+
+    def test_a_fetch_returns_the_capture_a_codec_expects(self):
+        self.origin.reads = {"/repos/a/b/labels": [{"name": "enhancement"}], "/repos/a/b": {"id": 1}}
+        capture = dispatch.fetch("a" * 64, self.reads(), self.credential)
+        self.assertEqual(capture["plan_sha256"], "a" * 64)
+        self.assertEqual(sorted(capture["responses"]), ["labels", "repository"])
+        self.assertEqual(capture["responses"]["repository"]["body"], {"id": 1})
+        self.assertIs(capture["responses"]["labels"]["redirected"], False)
+        self.assertEqual(capture["responses"]["labels"]["status"], 200)
+
+    def test_the_credential_goes_with_every_read(self):
+        dispatch.fetch("a" * 64, self.reads(), self.credential)
+        self.assertEqual({seen["authorization"] for seen in self.origin.seen}, {"Bearer " + TOKEN})
+        self.assertEqual({seen["method"] for seen in self.origin.seen}, {"GET"})
+
+    def test_a_fetch_reads_and_does_not_write(self):
+        with self.assertRaisesRegex(Rejected, "reads; it does not POST"):
+            dispatch.fetch("a" * 64, self.reads(bad={"method": "POST", "url": self.origin.origin + "/x"}),
+                           self.credential)
+        self.assertEqual(self.origin.seen, [])
+
+    def test_a_read_may_not_leave_the_credential_s_origin(self):
+        away = self.reads(other={"method": "GET", "url": "https://api.github.com/repos/a/b"})
+        with self.assertRaisesRegex(Rejected, "credential is not for https://api.github.com"):
+            dispatch.fetch("a" * 64, away, self.credential)
+        self.assertEqual(self.origin.seen, [])
+
+    def test_a_read_may_not_carry_its_own_authentication(self):
+        bad = self.reads(other={"method": "GET", "url": self.origin.origin + "/x",
+                                "headers": {"Authorization": "Bearer smuggled"}})
+        with self.assertRaisesRegex(Rejected, "may not carry its own authentication"):
+            dispatch.fetch("a" * 64, bad, self.credential)
+        self.assertEqual(self.origin.seen, [])
+
+    def test_a_plan_is_bounded_and_named(self):
+        with self.assertRaisesRegex(Rejected, "1 to 8 reads"):
+            dispatch.fetch("a" * 64, {}, self.credential)
+        many = {("read_%d" % n): {"method": "GET", "url": self.origin.origin + "/x"} for n in range(9)}
+        with self.assertRaisesRegex(Rejected, "1 to 8 reads"):
+            dispatch.fetch("a" * 64, many, self.credential)
+        with self.assertRaisesRegex(Rejected, "sha256 of the plan"):
+            dispatch.fetch("not-a-hash", self.reads(), self.credential)
+
+    def test_a_redirect_is_reported_rather_than_followed(self):
+        self.origin.read_status = 302
+        self.origin.location = "https://elsewhere.invalid/repos/a/b"
+        capture = dispatch.fetch("a" * 64, self.reads(), self.credential)
+        self.assertIs(capture["responses"]["repository"]["redirected"], True)
+        # Two reads were asked for and exactly two requests were made: neither was chased.
+        self.assertEqual(len(self.origin.seen), 2)
+
+    def test_an_oversized_or_unparseable_response_is_refused(self):
+        self.origin.padding = dispatch.MAX_RESPONSE + 100
+        with self.assertRaisesRegex(Rejected, "exceeds the read budget"):
+            dispatch.fetch("a" * 64, self.reads(), self.credential)
+
+
+class WholeLoopTests(unittest.TestCase):
+    """Plan, fetch, preview, dispatch: the sequence a project manager's issue would take.
+
+    Every step here is the real one. The reads and the write both cross a socket, the codec
+    checks the capture against the plan it asked for, and the write that goes out is the one
+    the preview produced and nothing else.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.origin = Origin()
+        self.addCleanup(self.origin.close)
+        path = self.root / "credential"
+        path.write_text("origin=" + self.origin.origin + "\ntoken=" + TOKEN + "\n", encoding="ascii")
+        os.chmod(path, 0o600)
+        self.credential = dispatch.read_credential(path)
+
+    def codec(self):
+        """The real codec, aimed at the local origin.
+
+        `github_issues` hardcodes api.github.com on purpose — no host override, no inferred
+        destination — so the test substitutes where it points rather than giving the codec a
+        way to be pointed elsewhere in production.
+        """
+        from orch import github_issues as codec
+        patcher = patch.object(codec, "API", self.origin.origin)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return codec
+
+    def test_an_issue_goes_from_plan_to_created_without_a_person_pasting_json(self):
+        codec = self.codec()
+
+        profile = {"schema_version": "1.0.0", "codec": "github-rest-2026-03-10",
+                   "repository": "a/b", "repository_id": 1}
+        intent = {"schema_version": "1.0.0", "task_id": "a" * 32, "operation_id": "b" * 32,
+                  "repository": "a/b", "title": "Add rate limiting",
+                  "body": "Requests from one client should be limited.", "labels": ["enhancement"]}
+
+        # The codec says what must be observed; the broker observes it.
+        plan = codec.read_plan(intent, profile)
+        self.origin.reads = {"/search/issues": {"total_count": 0, "items": []},
+                             "/repos/a/b/labels": [{"name": "enhancement"}],
+                             "/repos/a/b": {"id": 1, "full_name": "a/b", "archived": False,
+                                            "disabled": False, "has_issues": True}}
+        capture = dispatch.fetch(plan["sha256"], plan["binding"]["requests"], self.credential)
+
+        # The codec checks that capture against the plan it asked for, and only then writes.
+        preview = codec.preview_issue(intent, profile, capture)
+        request = preview["binding"]["request"]
+
+        # The approval is over this hash, and only a request matching it is sent.
+        self.origin.reply = (201, {"number": 42, "html_url": "https://example.invalid/issues/42"})
+        receipt = dispatch.perform(intent["operation_id"], request, digest(request), self.credential)
+
+        self.assertEqual(receipt["outcome"], "succeeded")
+        self.assertEqual(json.loads(receipt["response"]["body"])["number"], 42)
+        writes = [seen for seen in self.origin.seen if seen["method"] == "POST"]
+        self.assertEqual(len(writes), 1, "exactly one write, and only after the reads")
+        self.assertEqual(json.loads(writes[0]["body"])["title"], intent["title"])
+        self.assertIn(codec.MARKER % intent["operation_id"], json.loads(writes[0]["body"])["body"])
+        self.assertNotIn(TOKEN, canonical(receipt).decode())
+
+    def test_a_capture_from_another_plan_is_refused_before_anything_is_written(self):
+        codec = self.codec()
+
+        profile = {"schema_version": "1.0.0", "codec": "github-rest-2026-03-10",
+                   "repository": "a/b", "repository_id": 1}
+        intent = {"schema_version": "1.0.0", "task_id": "a" * 32, "operation_id": "b" * 32,
+                  "repository": "a/b", "title": "Add rate limiting", "body": "", "labels": []}
+        plan = codec.read_plan(intent, profile)
+        self.origin.reads = {"/search/issues": {"total_count": 0, "items": []},
+                             "/repos/a/b/labels": [], "/repos/a/b": {"id": 1, "full_name": "a/b",
+                                                                     "archived": False, "disabled": False,
+                                                                     "has_issues": True}}
+        capture = dispatch.fetch("f" * 64, plan["binding"]["requests"], self.credential)
+        with self.assertRaisesRegex(Rejected, "binding mismatch"):
+            codec.preview_issue(intent, profile, capture)
+        self.assertEqual([seen for seen in self.origin.seen if seen["method"] == "POST"], [])
 
 
 if __name__ == "__main__":

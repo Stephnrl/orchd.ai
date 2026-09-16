@@ -50,6 +50,29 @@ An unusable credential stops the broker at startup, naming the problem, rather t
 a puzzle at the first dispatch. The file is re-read on every request, so rotating a token
 needs no restart and withdrawing one takes effect immediately.
 
+## Reads, which nothing could perform before
+
+Every codec here prepares a **read plan** naming exactly what must be observed before acting.
+Until now nothing could perform one: a preview needed a person to fetch each URL by hand and
+paste the JSON back. The `fetch` route performs them, and returns the capture in exactly the
+shape the codec that asked for them expects.
+
+```sh
+python -m orch github-issue-read-plan --github-profile profile.json --intent intent.json > plan.json
+python -m orch broker-fetch --plan plan.json --broker-endpoint 127.0.0.1:PORT --broker-secret ... > capture.json
+python -m orch github-issue-preview --github-profile profile.json --intent intent.json --transcript capture.json
+```
+
+A fetch needs no approval, because nothing it does changes anything and nothing it does can
+need undoing. Its fence is narrower for the same reason it can be: **only GETs, only to the
+credential's origin**, at most eight of them, each bounded and parsed as strict JSON with no
+duplicate keys. A write smuggled in among the reads is refused before any of them run.
+
+The capture carries the plan hash it was asked for. The broker cannot check that hash — it
+does not hold the plan — but the codec that does refuses a capture whose reads or hash do not
+match the plan it asked, so a capture cannot be passed off as answering a different question.
+A redirect is reported as `redirected: true` rather than chased, and every codec refuses it.
+
 ## What may be sent
 
 ```sh
@@ -111,6 +134,18 @@ design exists to keep it away from.
 
 `dispatch.py` is also part of the broker's source digest, so a broker whose outbound path
 changed no longer reports as the same broker.
+
+## The loop, end to end
+
+```text
+codec ──read plan──> broker fetch ──capture──> codec preview ──approval──> broker dispatch
+        (what to        (GETs, one              (checks the                 (the approved
+         observe)        credential)             capture)                    hash only)
+```
+
+`tests/test_dispatch.py` walks exactly that against a local origin, with both the reads and
+the write crossing a real socket, and asserts that exactly one write happens and only after
+the reads.
 
 ## What this is not
 
