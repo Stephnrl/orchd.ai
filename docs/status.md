@@ -55,6 +55,39 @@ which is what a status view should describe.
 A journal that cannot be opened is reported as `unavailable` rather than raised. A status view
 that dies because one of the things it describes is broken is the opposite of useful.
 
+## The operator window shows it first
+
+The page was a column of cards with evidence behind `<details>`. That is a good reference and
+a poor starting point: it assumes you already know the workflow, and it asks you to translate
+`AWAITING_PLAN_APPROVAL` in your head to learn whether anything is waiting on you.
+
+**What needs you now** is now the first thing on the page:
+
+```text
+1 thing needs you.
+
+  d9f134d1e702   Waiting for you to approve the plan        5m   [Open task]
+
+Being worked on
+  a5c3f039310b   project-manager is holding this as project manager
+```
+
+Three things changed and nothing else did.
+
+**A state is shown as a sentence.** `AWAITING_CLARIFICATION` reads "Waiting for your answer to
+a question", in the panel and in the task list. The identifier is a protocol detail and stays
+in the evidence, where it belongs.
+
+**Work stopped on a person is separated from work in progress.** They are different questions
+and a single count would rise for two opposite reasons. A task an agent holds appears under
+"Being worked on", greyed and dashed, because it is information rather than a request.
+
+**Every row opens the task it names**, so the answer to "what do I look at next" is a button
+rather than a search.
+
+The panel adds no authority. It reads `GET /status`, which changes nothing, and every decision
+still happens where it always did, behind the same approval with the same revision fence.
+
 ## What it is not
 
 It changes nothing, decides nothing and authorizes nothing. It does not say whether a
@@ -62,6 +95,3 @@ deployment is ready — that is [`deployment-check`](deployment-readiness.md), w
 different question with gates and next steps. It does not check integrity — that is `audit`
 and `verify-backup`. And `attention: true` is never an error: it means a person is needed, not
 that anything is broken, which is why the command exits zero either way.
-
-Rendering this in the operator window is a separate step; the data is here and the endpoint
-serves it.

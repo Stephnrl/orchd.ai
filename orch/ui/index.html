@@ -38,6 +38,13 @@
           <button id="batch-abandon" disabled>Abandon selected entry</button>
         </section>
       </details>
+      <section id="attention" class="card attention" aria-labelledby="attention-title">
+        <div class="section-head"><h2 id="attention-title">What needs you now</h2><button id="attention-refresh">Refresh</button></div>
+        <p id="attention-summary" role="status" aria-live="polite">Loading the current state of this workspace.</p>
+        <ol id="attention-list" class="queue"></ol>
+        <div id="working" hidden><h3>Being worked on</h3><ol id="working-list" class="queue quiet"></ol></div>
+        <p class="hint">Nothing here changes anything. Each entry opens the task it names so you can inspect the evidence before deciding.</p>
+      </section>
       <div class="layout">
         <aside class="card"><div class="section-head"><h2>Tasks</h2><button id="refresh">Refresh</button></div><form id="create"><label for="title">New fixture task</label><input id="title" maxlength="200" value="Greeting fixture" required><p class="hint">Creating confirms the fixed request: replace the greeting with “hello world”.</p><button class="primary">Create task</button></form><nav id="tasks" aria-label="Tasks"></nav><button id="more-tasks" hidden>Load more tasks</button></aside>
         <section id="empty" class="card empty"><h2>Your workflow, step by step.</h2><p>Select a task or create a new fixture to get started.</p></section>
