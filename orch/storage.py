@@ -5,12 +5,23 @@ import json
 import os
 import re
 import sqlite3
+import time
 from pathlib import Path
 
 from .contracts import Rejected, canonical, now, redact, ref, uid, validate
 
 AUDIT_RESERVE_BYTES = 4 * 1024 * 1024
 OWNERSHIP_VERSION = 3
+# How many tasks may be advancing at once in one store. Each advancing task can hold a
+# container, a workspace and a provider process, so this is a host-resource bound, not a
+# throughput target: work is refused before it starts rather than failing halfway and
+# leaving an operation to reconcile. It is a fixed application limit like every other cap
+# here, and it counts tasks whose worker is alive, never claims left by a crash.
+MAX_ACTIVE_TASKS = 4
+# The store-wide lock is held for milliseconds when a worker registers a claim, so a
+# worker waits for it instead of failing a race it would win on the next attempt. It
+# still gives up, because a lock held this long means whole-store work is running.
+CLAIM_TIMEOUT = 10.0
 SAFE_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
@@ -87,7 +98,7 @@ class Store:
         return locks / (str(task) + ".lock")
 
     @contextlib.contextmanager
-    def exclusive(self, task=None):
+    def exclusive(self, task=None, wait=0.0):
         """One task's advancement lock, or the store-wide dispatcher lock.
 
         Task work takes its own lock, so two workers can advance two different tasks at
@@ -101,16 +112,20 @@ class Store:
             stream.seek(0)
             if os.name == "nt":
                 import msvcrt
-                try:
-                    msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
-                except OSError as exc:
-                    raise Rejected("Task is being advanced elsewhere" if task else "Dispatcher busy") from exc
+                acquire = lambda: msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
             else:
                 import fcntl
+                acquire = lambda: fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            deadline = time.monotonic() + wait
+            while True:
                 try:
-                    fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    acquire()
+                    break
                 except OSError as exc:
-                    raise Rejected("Task is being advanced elsewhere" if task else "Dispatcher busy") from exc
+                    if time.monotonic() >= deadline:
+                        raise Rejected("Task is being advanced elsewhere" if task else "Dispatcher busy") from exc
+                    time.sleep(0.02)
+                stream.seek(0)
             try:
                 yield
             finally:
@@ -138,6 +153,10 @@ class Store:
     def active_owners(self):
         """Claims whose worker is still alive, by the only evidence that cannot go stale."""
         return [row for row in self.owners() if self.held(row["task_id"])]
+
+    def admitted(self, task):
+        """Claims held by a live worker other than this task's, for the admission bound."""
+        return [row for row in self.active_owners() if row["task_id"] != task]
 
     def quiescent(self):
         """Refuse whole-store work while any worker is actually advancing a task.
