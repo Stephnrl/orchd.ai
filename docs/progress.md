@@ -40,6 +40,13 @@ arbitrary text in a repository even indirectly, and its operation identifier is 
 so a retry resumes the operation it was rather than starting a new one. Verified against the
 real API through preview without creating anything.
 
+The [work discovery milestone](agent-queue.md) lets a container find its own work instead of
+being handed task identifiers, scoped to its enrolled roles and carrying no task content. It
+also closed two faults it exposed: an agent could be enrolled as `human` and claim an approval
+pause, contradicting what two documents claimed, and a task awaiting a human's answer was
+attributed to the project manager that asked, which would have had agents claiming work they
+could not advance and starving the admission bound.
+
 The [agent work milestone](agent-work.md) makes an agent container able to do the project
 manager's step rather than only hold it. Everything built before it was operator-driven: a
 container could authenticate, claim, renew and release, and nothing else. Three routes now

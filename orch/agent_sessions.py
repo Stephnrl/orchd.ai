@@ -26,7 +26,9 @@ from .contracts import Rejected, canonical, now, uid
 # approval pause is a human's. Terminal states need nobody.
 ROLE_FOR_STATE = {
     "DRAFT_SPEC": "project_manager",
-    "AWAITING_CLARIFICATION": "project_manager",
+    # Waiting for an answer is waiting for a person, the same as either approval pause. It
+    # was the project manager's until it asked; having asked, the next move is not its own.
+    "AWAITING_CLARIFICATION": "human",
     "SPEC_READY": "lead_planner",
     "PLANNING": "lead_planner",
     "AWAITING_PLAN_APPROVAL": "human",
@@ -40,6 +42,9 @@ ROLE_FOR_STATE = {
     "BLOCKED": "human",
 }
 ROLES = frozenset(ROLE_FOR_STATE.values()) | {"guardian", "orchestrator", "lead_clarifier"}
+# What an agent may be enrolled as. `human` is a role in the workflow and never an agent: an
+# agent enrolled as one could claim the approval pauses this control plane exists to protect.
+AGENT_ROLES = ROLES - {"human"}
 AGENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 MIN_LEASE, MAX_LEASE, DEFAULT_LEASE = 60, 3600, 900
 
@@ -52,6 +57,8 @@ def identifier(agent):
 
 def session(agent, role):
     """The owner string a session records, distinct from a worker process's."""
+    if role == "human":
+        raise Rejected("No agent works as a human; approval pauses are a person's")
     if role not in ROLES:
         raise Rejected("Unknown agent role")
     return canonical({"agent": identifier(agent), "role": role, "session": uid()}).decode()

@@ -66,15 +66,35 @@ class AgentSessionTests(unittest.TestCase):
     def test_a_claim_must_match_the_role_the_next_step_needs(self):
         task = self.create()
         self.assertEqual(sessions.role_for(self.engine.task(task)["state"]["state"]), "lead_planner")
-        for role in ("junior", "reviewer", "guardian", "human"):
+        for role in ("junior", "reviewer", "guardian"):
             with self.subTest(role=role):
                 with self.assertRaisesRegex(Rejected, 'belongs to lead_planner'):
                     sessions.claim(self.engine, task, 'agent-' + role, role)
+        # `human` is refused for a stronger reason than a mismatched step: no agent works as
+        # one at all, so it is refused whatever state the task is in.
+        with self.assertRaisesRegex(Rejected, 'No agent works as a human'):
+            sessions.claim(self.engine, task, 'agent-human', 'human')
         with self.assertRaises(Rejected):
             sessions.claim(self.engine, task, 'lead-devops', 'not_a_role')
         granted = sessions.claim(self.engine, task, 'lead-devops', 'lead_planner')
         self.assertEqual((granted['status'], granted['agent'], granted['role']),
                          ('claimed', 'lead-devops', 'lead_planner'))
+
+    def test_no_agent_may_be_enrolled_as_a_human_or_claim_as_one(self):
+        """An agent enrolled as `human` could claim the approval pauses this exists to protect.
+
+        It could, until this was fixed: `ROLES` includes `human` because the workflow has
+        human steps, and enrolment checked against `ROLES`. Enrolment now checks
+        `AGENT_ROLES`, and claiming refuses `human` regardless, so neither layer alone is
+        load-bearing.
+        """
+        self.assertNotIn('human', sessions.AGENT_ROLES)
+        self.assertIn('human', sessions.ROLES)
+        task = self.create()
+        self.engine.run(task)
+        self.assertEqual(sessions.role_for(self.engine.task(task)['state']['state']), 'human')
+        with self.assertRaisesRegex(Rejected, 'No agent works as a human'):
+            sessions.claim(self.engine, task, 'impostor', 'human')
 
     def test_the_role_follows_the_task_through_the_workflow(self):
         task = self.create()

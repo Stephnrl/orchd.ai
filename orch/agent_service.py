@@ -27,7 +27,7 @@ from .contracts import Rejected, canonical
 from .engine import Engine
 from .execution import Executor
 from .maintenance import real_path
-from . import agent_sessions, task_drafts
+from . import agent_queue, agent_sessions, task_drafts
 
 VERSION = "1.0.0"
 ROUTES = {"agent-identity": ("AgentIdentityRequest", "AgentIdentityReply"),
@@ -39,7 +39,9 @@ ROUTES = {"agent-identity": ("AgentIdentityRequest", "AgentIdentityReply"),
           # holding the task, which is the first time a session gates anything but itself.
           "agent-spec": ("AgentSpecRequest", "AgentSpecReply"),
           "agent-draft": ("AgentDraftRequest", "AgentDraftReply"),
-          "agent-ask": ("AgentAskRequest", "AgentAskReply")}
+          "agent-ask": ("AgentAskRequest", "AgentAskReply"),
+          # Finding work, which needs no task because it is how a task is found.
+          "agent-available": ("AgentAvailableRequest", "AgentAvailableReply")}
 # Routes that act on a task the agent must already hold.
 WORK = ("agent-spec", "agent-draft", "agent-ask")
 MAX_AGENTS = 32
@@ -85,7 +87,7 @@ def registry(directory):
         if not role_file.is_file() or not secret_file.is_file():
             raise Rejected("Agent " + name + " needs both a role and a secret file")
         roles = [line.strip() for line in role_file.read_text(encoding="ascii").splitlines() if line.strip()]
-        if not 1 <= len(roles) <= MAX_ROLES or any(role not in agent_sessions.ROLES for role in roles):
+        if not 1 <= len(roles) <= MAX_ROLES or any(role not in agent_sessions.AGENT_ROLES for role in roles):
             raise Rejected("Agent " + name + " must list one to %d known roles" % MAX_ROLES)
         if len(agents) >= MAX_AGENTS:
             raise Rejected("This service serves at most %d agents" % MAX_AGENTS)
@@ -166,6 +168,12 @@ class AgentService:
                     "roles": list(self.agents[agent]["roles"]), "store_sha256": self.source,
                     "live_authorized": False}
         with self.opened() as engine:
+            if route == "agent-available":
+                # Only the roles this agent is enrolled for: a listing of work it could never
+                # claim would tell it about tasks it has no business knowing exist.
+                listed = agent_queue.available(engine, self.agents[agent]["roles"])
+                return {**base, **{key: listed[key] for key in
+                                   ("available", "count", "admitted", "admission_bound", "at_bound")}}
             if route == "agent-sessions":
                 listed = agent_sessions.sessions(engine.store)
                 return {**base, "sessions": listed["sessions"], "held": listed["held"]}

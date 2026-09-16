@@ -38,6 +38,7 @@ someone else's. Release it deliberately when you finish or when your container i
 ```sh
 orchd() { python -m orch "$@" --agent-endpoint "$ORCHD_ENDPOINT" --agent-secret "$ORCHD_SECRET"; }
 
+orchd agent-available                                   # what you could take
 orchd agent-sessions                                    # what is held right now
 orchd agent-claim --task TASK --role ROLE --lease 900   # ask to hold one task
 orchd agent-spec --task TASK                            # read where the work has got to
@@ -48,6 +49,11 @@ orchd agent-release --task TASK                         # when you are done, or 
 Claim before you do anything to a task, renew well before the lease ends, and release even
 when the work failed. A claim you never release is not a safe default; it is a task nobody
 can pick up until it expires.
+
+Start from `agent-available`. It lists only work your roles are next for, and only what
+nobody holds, so anything it offers is genuinely yours to claim. When it reports `at_bound`,
+the control plane is already advancing as many tasks as it allows: wait, rather than claiming
+into a refusal.
 
 **Holding the task is what lets you work on it.** The routes that write — drafting a
 specification, raising a question — all require a live lease held by you, on that task. You

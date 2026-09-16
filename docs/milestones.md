@@ -190,6 +190,19 @@ have written is the one the second searches for, so reconciliation finds the iss
 rather than filing a second. An unconfirmed draft implies nothing, and a specification too
 large to render is refused rather than trimmed.
 
+[Finding the work](agent-queue.md) gives a container a way to discover what it could take.
+The listing is filtered to the roles that agent is enrolled for, because work it can never
+claim is not its business to know about; it carries identifiers and state and never a task's
+contents, since reading a task is what holding one is for; nothing waiting on a person appears
+for any role; and the admission bound comes back with it, so an agent at the bound waits rather
+than claiming into a refusal. Building it exposed two faults in the role model that predate it:
+an agent could be enrolled as `human` — `ROLES` contains it because the workflow has human
+steps — and could then claim a task at an approval pause, which two documents said was
+impossible; and `AWAITING_CLARIFICATION` belonged to `project_manager`, so an agent would have
+claimed a task it could not act on and held an admission slot until its lease expired. Enrolment
+now checks `AGENT_ROLES` and claiming refuses `human` regardless, and a state waiting for an
+answer belongs to the person who must give it.
+
 [An agent doing the work](agent-work.md) closes the gap between an authenticated container
 and the work it was enrolled to do. `task_drafts` was reachable only from the command line, so
 a project manager container could claim a task and do nothing with it; three routes now let it

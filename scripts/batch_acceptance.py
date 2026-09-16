@@ -242,6 +242,15 @@ def managed(engine, store, root):
         started = json.loads(service.stdout.readline())
         manager = AgentClient(started['endpoint'], str(secret))
 
+        # The container finds its own work rather than being handed an identifier.
+        offered = manager.available()
+        if task not in [row['task_id'] for row in offered['available']]:
+            raise RuntimeError('A drafting task should be offered to the project manager')
+        if offered['at_bound'] or any(row['role'] != 'project_manager' for row in offered['available']):
+            raise RuntimeError('The listing should be scoped to this agent and under the bound')
+        if any('title' in row for row in offered['available']):
+            raise RuntimeError('The listing must carry no task content')
+
         # Nothing may be written to a task this agent has not claimed.
         try:
             manager.draft(task, {'title': 'x', 'request': 'y', 'acceptance_criteria': ['z']})
@@ -289,7 +298,7 @@ def managed(engine, store, root):
         except subprocess.TimeoutExpired:
             service.kill()
             service.communicate(timeout=30)
-    return {'task': task, 'unheld_write_refused': True, 'drafted_over_the_wire': True,
+    return {'task': task, 'found_its_own_work': True, 'unheld_write_refused': True, 'drafted_over_the_wire': True,
             'clarification_stopped_the_work': True, 'confirmed_by': 'local-operator',
             'agent_locked_out_after_confirmation': True, 'state': confirmed['state']}
 

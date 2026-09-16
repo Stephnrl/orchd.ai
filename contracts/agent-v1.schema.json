@@ -724,6 +724,105 @@
           "type": "boolean"
         }
       }
+    },
+    "AgentAvailableRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-available"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        }
+      }
+    },
+    "AgentAvailableReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "available",
+        "count",
+        "admitted",
+        "admission_bound",
+        "at_bound",
+        "live_authorized",
+        "retry_allowed"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-available"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "available": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "task_id",
+              "state",
+              "role",
+              "revision"
+            ],
+            "properties": {
+              "task_id": {
+                "$ref": "#/$defs/Task"
+              },
+              "state": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "role": {
+                "$ref": "#/$defs/Role"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "admitted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "admission_bound": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "at_bound": {
+          "type": "boolean"
+        },
+        "live_authorized": {
+          "const": false
+        },
+        "retry_allowed": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }

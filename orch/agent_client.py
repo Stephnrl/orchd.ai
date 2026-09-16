@@ -85,6 +85,9 @@ class AgentClient:
     def sessions(self):
         return self.call("agent-sessions")
 
+    def available(self):
+        return self.call("agent-available")
+
     def specification(self, task):
         return self.call("agent-spec", {"task_id": task})
 

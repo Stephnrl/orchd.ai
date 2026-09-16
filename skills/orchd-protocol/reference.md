@@ -11,7 +11,7 @@ requires that your role is that role. Terminal states belong to nobody and canno
 | State | Role whose turn it is |
 | --- | --- |
 | `DRAFT_SPEC` | `project_manager` |
-| `AWAITING_CLARIFICATION` | `project_manager` |
+| `AWAITING_CLARIFICATION` | `human` |
 | `SPEC_READY` | `lead_planner` |
 | `PLANNING` | `lead_planner` |
 | `AWAITING_PLAN_APPROVAL` | `human` |
@@ -27,6 +27,10 @@ requires that your role is that role. Terminal states belong to nobody and canno
 Three roles appear in no state: `guardian` decides tool requests, `orchestrator` moves work
 between steps, and `lead_clarifier` resolves ambiguity in a spec. An agent enrolled only for
 those does not claim tasks by state.
+
+Raising a question moves a task to `AWAITING_CLARIFICATION`, which belongs to a **human** —
+having asked, the next move is not yours. Do not wait on it; release the task and find other
+work.
 
 A state whose role is `human` is a pause with a person on the other side of it. It is not a
 step you may take by claiming a different role, and it is not a state you should wait in a
@@ -62,11 +66,18 @@ only if you are implementing a client.
 | `agent-renew` | `task_id`, optional `lease` | `status`, `session` |
 | `agent-release` | `task_id` | `status`, `task_id`, `agent`, `released_at` |
 | `agent-sessions` | nothing | `sessions`, `held` |
+| `agent-available` | nothing | `available`, `count`, `admitted`, `admission_bound`, `at_bound` |
 | `agent-spec` | `task_id` | `draft` |
 | `agent-draft` | `task_id`, `specification`, optional `expected_revision` | `draft` |
 | `agent-ask` | `task_id`, `questions`, optional `expected_revision` | `draft` |
 
-The last three are work rather than bookkeeping, and every one of them requires you to be
+`agent-available` is how you find work in the first place. It lists tasks whose next step
+belongs to a role you are enrolled for and which nobody is holding — identifiers and state
+only, never any task's contents, because reading a task is what holding it is for. It also
+reports the admission bound: when `at_bound` is true a claim will be refused, so wait rather
+than working through a list you cannot act on.
+
+`agent-spec`, `agent-draft` and `agent-ask` are work rather than bookkeeping, and every one of them requires you to be
 **holding** the task. A lease is only granted for the role that task's next step needs, so
 holding one is what says the work is yours to do. A `draft` tells you the state, the task
 revision, the specification's `spec_sha256` and any `pending_questions`.
