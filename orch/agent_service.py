@@ -27,14 +27,21 @@ from .contracts import Rejected, canonical
 from .engine import Engine
 from .execution import Executor
 from .maintenance import real_path
-from . import agent_sessions
+from . import agent_sessions, task_drafts
 
 VERSION = "1.0.0"
 ROUTES = {"agent-identity": ("AgentIdentityRequest", "AgentIdentityReply"),
           "agent-claim": ("AgentClaimRequest", "AgentClaimReply"),
           "agent-renew": ("AgentRenewRequest", "AgentRenewReply"),
           "agent-release": ("AgentReleaseRequest", "AgentReleaseReply"),
-          "agent-sessions": ("AgentSessionsRequest", "AgentSessionsReply")}
+          "agent-sessions": ("AgentSessionsRequest", "AgentSessionsReply"),
+          # Work, rather than bookkeeping about work. Each of these requires the agent to be
+          # holding the task, which is the first time a session gates anything but itself.
+          "agent-spec": ("AgentSpecRequest", "AgentSpecReply"),
+          "agent-draft": ("AgentDraftRequest", "AgentDraftReply"),
+          "agent-ask": ("AgentAskRequest", "AgentAskReply")}
+# Routes that act on a task the agent must already hold.
+WORK = ("agent-spec", "agent-draft", "agent-ask")
 MAX_AGENTS = 32
 MAX_ROLES = 10
 WIRE_SCHEMA = json.loads((Path(__file__).resolve().parents[1] / "contracts/agent-v1.schema.json").read_text())
@@ -163,6 +170,8 @@ class AgentService:
                 listed = agent_sessions.sessions(engine.store)
                 return {**base, "sessions": listed["sessions"], "held": listed["held"]}
             task = body["task_id"]
+            if route in WORK:
+                return {**base, "draft": self._work(engine, route, agent, task, body)}
             if route == "agent-claim":
                 role = body["role"]
                 if role not in self.agents[agent]["roles"]:
@@ -176,6 +185,30 @@ class AgentService:
                 return {**base, "status": "released", "task_id": task, "agent": agent,
                         "released_at": released["released_at"]}
             return {**base, "status": report["status"], "session": self._session(engine, task)}
+
+    def _work(self, engine, route, agent, task, body):
+        """Do the project manager's work on a task this agent is holding.
+
+        Holding it is the condition, and it is a real one: a lease is granted for a role the
+        task's next step needs, so requiring a live lease here means an agent cannot write a
+        specification for a task it never claimed, nor one whose step belongs to someone else,
+        nor one whose lease has expired while it was thinking.
+
+        What is deliberately absent: nothing here answers a clarification or confirms a
+        specification. Those take a principal and are recorded as a human's, and no route an
+        agent can reach performs either.
+        """
+        held = engine.store.owner(task)
+        if not held or not held["expires_at"] or not engine.store.live(held):
+            raise Rejected("Claim that task before working on it")
+        if agent_sessions.holder(held).get("agent") != agent:
+            raise Rejected("That task is held by another agent")
+        if route == "agent-spec":
+            return task_drafts.show(engine, task)
+        revision = body.get("expected_revision")
+        if route == "agent-draft":
+            return task_drafts.draft(engine, task, dict(body["specification"]), revision)
+        return task_drafts.ask(engine, task, list(body["questions"]), revision)
 
     @staticmethod
     def _session(engine, task):

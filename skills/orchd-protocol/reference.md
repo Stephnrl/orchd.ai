@@ -49,7 +49,7 @@ A lease is not a lock. It says the work is yours for a while. It does not stop t
 changing underneath you, which is why a claim can carry `expected_revision` — pass the
 revision you last read, and the claim is refused if the task moved since.
 
-## The five routes
+## The routes
 
 Every route is a POST to `127.0.0.1` on the endpoint your container was given, authenticated
 with an HMAC over the body. The CLI below does all of this for you; the wire detail matters
@@ -62,6 +62,14 @@ only if you are implementing a client.
 | `agent-renew` | `task_id`, optional `lease` | `status`, `session` |
 | `agent-release` | `task_id` | `status`, `task_id`, `agent`, `released_at` |
 | `agent-sessions` | nothing | `sessions`, `held` |
+| `agent-spec` | `task_id` | `draft` |
+| `agent-draft` | `task_id`, `specification`, optional `expected_revision` | `draft` |
+| `agent-ask` | `task_id`, `questions`, optional `expected_revision` | `draft` |
+
+The last three are work rather than bookkeeping, and every one of them requires you to be
+**holding** the task. A lease is only granted for the role that task's next step needs, so
+holding one is what says the work is yours to do. A `draft` tells you the state, the task
+revision, the specification's `spec_sha256` and any `pending_questions`.
 
 Every reply also carries `retry_allowed` and `live_authorized`. A `session` describes one
 held task: `task_id`, `agent`, `role`, `kind`, `claimed_at`, `expires_at`, `revision`,

@@ -40,6 +40,7 @@ orchd() { python -m orch "$@" --agent-endpoint "$ORCHD_ENDPOINT" --agent-secret 
 
 orchd agent-sessions                                    # what is held right now
 orchd agent-claim --task TASK --role ROLE --lease 900   # ask to hold one task
+orchd agent-spec --task TASK                            # read where the work has got to
 orchd agent-renew --task TASK --lease 900               # while you are still working
 orchd agent-release --task TASK                         # when you are done, or stopping
 ```
@@ -47,6 +48,11 @@ orchd agent-release --task TASK                         # when you are done, or 
 Claim before you do anything to a task, renew well before the lease ends, and release even
 when the work failed. A claim you never release is not a safe default; it is a task nobody
 can pick up until it expires.
+
+**Holding the task is what lets you work on it.** The routes that write — drafting a
+specification, raising a question — all require a live lease held by you, on that task. You
+cannot write to a task you have not claimed, one someone else holds, or one whose lease ran
+out while you were thinking. If a write is refused, read `agent-spec` before assuming why.
 
 ## Two gates, and neither is yours
 

@@ -84,3 +84,18 @@ class AgentClient:
 
     def sessions(self):
         return self.call("agent-sessions")
+
+    def specification(self, task):
+        return self.call("agent-spec", {"task_id": task})
+
+    def draft(self, task, specification, expected_revision=None):
+        body = {"task_id": task, "specification": specification}
+        if expected_revision is not None:
+            body["expected_revision"] = expected_revision
+        return self.call("agent-draft", body)
+
+    def ask(self, task, questions, expected_revision=None):
+        body = {"task_id": task, "questions": questions}
+        if expected_revision is not None:
+            body["expected_revision"] = expected_revision
+        return self.call("agent-ask", body)

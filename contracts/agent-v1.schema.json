@@ -465,6 +465,265 @@
           "const": false
         }
       }
+    },
+    "AgentSpecRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "task_id"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-spec"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "task_id": {
+          "$ref": "#/$defs/Task"
+        }
+      }
+    },
+    "AgentSpecReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "draft",
+        "live_authorized",
+        "retry_allowed"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-spec"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "draft": {
+          "type": "object"
+        },
+        "live_authorized": {
+          "const": false
+        },
+        "retry_allowed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "AgentDraftRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "task_id",
+        "specification"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-draft"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "task_id": {
+          "$ref": "#/$defs/Task"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "specification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "title",
+            "request",
+            "acceptance_criteria"
+          ],
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "request": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "acceptance_criteria": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "constraints": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "allowed_paths": {
+              "type": "array",
+              "maxItems": 50,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "external_references": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            }
+          }
+        }
+      }
+    },
+    "AgentDraftReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "draft",
+        "live_authorized",
+        "retry_allowed"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-draft"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "draft": {
+          "type": "object"
+        },
+        "live_authorized": {
+          "const": false
+        },
+        "retry_allowed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "AgentAskRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "task_id",
+        "questions"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-ask"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "task_id": {
+          "$ref": "#/$defs/Task"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "questions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "question_id",
+              "question"
+            ],
+            "properties": {
+              "question_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+              },
+              "question": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            }
+          }
+        }
+      }
+    },
+    "AgentAskReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "draft",
+        "live_authorized",
+        "retry_allowed"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-ask"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "draft": {
+          "type": "object"
+        },
+        "live_authorized": {
+          "const": false
+        },
+        "retry_allowed": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }

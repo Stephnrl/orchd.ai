@@ -33,6 +33,13 @@ staging it in a journal with an approval, and assembling an epic with its storie
 as one reviewed bundle, are the next steps, and reaching a real GitHub still needs the
 least-privilege token and destination-bound broker that remain gated.
 
+The [agent work milestone](agent-work.md) makes an agent container able to do the project
+manager's step rather than only hold it. Everything built before it was operator-driven: a
+container could authenticate, claim, renew and release, and nothing else. Three routes now
+cover reading, writing and revising a specification and raising a clarification, each
+conditional on a live lease the agent holds on that task. Answering and confirming stay a
+person's, and no route an agent can reach performs either.
+
 The [draft specification milestone](draft-spec.md) closes a fail-open at the top of the
 chain. `create_task` invented a specification, wrote `confirmed_by` and set `spec_confirmed`
 in one transaction, so the evidence recorded a human confirmation nobody performed — and
