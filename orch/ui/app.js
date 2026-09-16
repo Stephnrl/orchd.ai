@@ -336,6 +336,98 @@ $("save-selection").addEventListener("click", () => {
   document.body.append(link);
   try { link.click(); } finally { link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 });
+// A state name is a protocol detail. An operator should not have to translate one in their
+// head to learn whether a task is waiting on them, so every place that shows a state shows
+// this instead, and the raw name stays available in the evidence.
+const PLAIN = {
+  DRAFT_SPEC: "Being specified",
+  AWAITING_CLARIFICATION: "Waiting for your answer to a question",
+  SPEC_READY: "Ready to plan",
+  PLANNING: "Planning",
+  AWAITING_PLAN_APPROVAL: "Waiting for you to approve the plan",
+  READY_FOR_IMPLEMENTATION: "Ready to implement",
+  CHANGES_REQUESTED: "Changes requested",
+  IMPLEMENTING: "Implementing",
+  TESTING: "Running tests",
+  REVIEWING: "Under review",
+  AWAITING_ACTION_APPROVAL: "Waiting for you to approve the action",
+  READY_FOR_PR: "Ready to open a pull request",
+  PR_CREATED: "Pull request created",
+  BLOCKED: "Blocked, and waiting on you",
+  COMPLETED: "Completed",
+  FAILED: "Failed",
+  CANCELLED: "Cancelled",
+};
+function plain(state) { return PLAIN[state] || String(state || "").replaceAll("_", " "); }
+
+// How long something has been waiting, which is the part that tells you whether it matters.
+function waited(since) {
+  const started = Date.parse(since || "");
+  if (!Number.isFinite(started)) return "";
+  const seconds = Math.max(0, Math.round((Date.now() - started) / 1000));
+  if (seconds < 60) return seconds + "s";
+  if (seconds < 3600) return Math.round(seconds / 60) + "m";
+  if (seconds < 86400) return Math.round(seconds / 3600) + "h";
+  return Math.round(seconds / 86400) + "d";
+}
+
+function queueEntry(list, name, why, since, open) {
+  const item = document.createElement("li");
+  const what = document.createElement("div");
+  what.className = "what";
+  const label = document.createElement("div");
+  label.className = "name";
+  label.textContent = name;
+  const reason = document.createElement("div");
+  reason.className = "why";
+  reason.textContent = why;
+  what.append(label, reason);
+  const age = document.createElement("span");
+  age.className = "waited";
+  age.textContent = waited(since);
+  item.append(what, age);
+  if (open) item.append(open);
+  list.append(item);
+  return item;
+}
+
+async function attention() {
+  const version = epoch;
+  try {
+    const report = await api("/status");
+    if (version !== epoch) return;
+    const waiting = report.tasks.waiting_on_a_person || [];
+    const holding = report.agents.holding || [];
+    const list = $("attention-list");
+    list.replaceChildren();
+    for (const row of waiting) {
+      const open = button("Open task", async () => { await select(row.task_id); });
+      queueEntry(list, names.has(row.task_id) ? names.get(row.task_id).firstChild.textContent : row.task_id.slice(0, 12),
+                 plain(row.state), row.since, open);
+    }
+    const work = $("working-list");
+    work.replaceChildren();
+    for (const row of holding) {
+      queueEntry(work, row.task_id.slice(0, 12), (row.agent || "a worker") + " is holding this as " + plain_role(row.role), row.claimed_at, null);
+    }
+    $("working").hidden = holding.length === 0;
+    const parts = [];
+    if (waiting.length) parts.push(waiting.length === 1 ? "1 thing needs you." : waiting.length + " things need you.");
+    if (report.work.at_bound) parts.push("As many tasks are advancing as this workspace allows; new work will wait.");
+    if (report.agents.lapsed_count) parts.push(report.agents.lapsed_count + " lease(s) lapsed without being released.");
+    if (!parts.length) parts.push(report.summary.tasks_active ? "Nothing needs you. " + report.summary.tasks_active + " task(s) in progress." : "Nothing needs you, and nothing is in progress.");
+    $("attention-summary").textContent = parts.join(" ");
+    $("attention-summary").className = waiting.length ? "" : "settled";
+  } catch (error) {
+    if (version === epoch) $("attention-summary").textContent = "Could not read the workspace state: " + error.message;
+  }
+}
+
+const ROLES = {project_manager: "project manager", lead_planner: "lead planner", lead_clarifier: "lead clarifier",
+               junior: "junior", reviewer: "reviewer", guardian: "guardian", test_runner: "test runner",
+               orchestrator: "orchestrator", action_broker: "action broker", human: "a person"};
+function plain_role(role) { return ROLES[role] || String(role || "an agent").replaceAll("_", " "); }
+
 async function tasks(more = false) {
   if (more && (tasksLoading || taskNext === null)) return;
   const version = epoch, request = ++taskListRequest, after = more ? taskNext : 0;
@@ -348,7 +440,7 @@ async function tasks(more = false) {
     for (const item of data.items) {
       const b = button(item.title, () => select(item.task_id));
       b.className = "task-button"; b.setAttribute("aria-current", String(item.task_id === selected));
-      const small = document.createElement("small"); small.textContent = item.task_id.slice(0, 12) + " · " + item.state.state.replaceAll("_", " "); b.append(small);
+      const small = document.createElement("small"); small.textContent = plain(item.state.state) + " · " + item.task_id.slice(0, 12); b.append(small);
       $("tasks").append(b); names.set(item.task_id, b);
     }
     taskNext = data.next; $("more-tasks").hidden = taskNext === null;
@@ -497,7 +589,7 @@ $("integrity-report").addEventListener("click", () => maintenanceReport("integri
 $("connect").addEventListener("submit", async e => {
   e.preventDefault(); token = $("token").value.trim(); $("token").value = "";
   const connectingToken = token;
-  try { await tasks(); if (connectingToken !== token) return; $("login").hidden = true; $("workspace").hidden = false; $("disconnect").hidden = false; notice("Connected to the local operator session."); }
+  try { await tasks(); if (connectingToken !== token) return; $("login").hidden = true; $("workspace").hidden = false; $("disconnect").hidden = false; notice("Connected to the local operator session."); attention().catch(() => {}); }
   catch (error) { if (connectingToken === token) { token = ""; notice(error.message); } }
 });
 $("disconnect").addEventListener("click", () => location.reload());
@@ -522,7 +614,8 @@ async function sessionAction(action) {
   finally { busy = false; controls(); }
 }
 for (const action of ["check", "rotate", "revoke"]) $("session-" + action).addEventListener("click", () => sessionAction(action));
-$("refresh").addEventListener("click", () => tasks().catch(e => notice(e.message)));
+$("refresh").addEventListener("click", () => tasks().then(attention).catch(e => notice(e.message)));
+$("attention-refresh").addEventListener("click", () => attention().catch(e => notice(e.message)));
 $("refresh-task").addEventListener("click", () => {
   if (busy || !token || !selected) return;
   return state().catch(e => notice(e.message));

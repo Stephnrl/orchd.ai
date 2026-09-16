@@ -54,6 +54,10 @@ service there, and that an early-starting container died rather than waiting. A 
 proves the loop, not the thinking: no provider is admitted and everything past a confirmed
 specification is still the fixture.
 
+The operator window now opens with what needs a person, in words rather than state
+identifiers, with work in progress kept separate and each row opening its own task. It reads
+the status endpoint and grants nothing.
+
 The [status milestone](status.md) answers the operator's morning question in one command and
 one endpoint, separating work in progress from work stopped on a person, and reads without
 excluding anything so it responds while the machine is busy. [A module map](modules.md)

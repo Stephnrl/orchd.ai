@@ -212,6 +212,11 @@ build, a bind-mounted secret arrives world-accessible on Docker Desktop and is r
 refused, a container cannot reach a loopback service there at all, and one that started early
 died instead of waiting.
 
+The operator window now leads with that answer rather than a column of cards: a state is
+shown as a sentence, work stopped on a person is separated from work merely in progress, and
+every row opens the task it names. The panel reads `GET /status` and adds no authority, so
+every decision still happens behind the same approval with the same revision fence.
+
 [One answer instead of six](status.md) collects the signals that were scattered across
 `doctor`, `storage-usage`, `agent-sessions`, the journal usage commands and the deployment
 check. The distinction it is built around is that a task waiting on a person is the machine
