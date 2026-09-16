@@ -44,6 +44,10 @@ one, and a worker that dies leaves a recorded claim instead of a silently reusab
 [Worker admission](docs/worker-admission.md) bounds how many tasks may be advancing at
 once, refusing new work before anything is claimed rather than exhausting the host and
 leaving an operation to reconcile.
+[Agent sessions](docs/agent-sessions.md) let an agent in its own container hold a task by a
+role-scoped lease it renews and releases, so agents that call in between thinking are
+holders in the same registry as worker processes, and no agent can take work waiting on a
+human.
 [The consolidated Jira package](docs/jira-integration.md) adds Epic/Story/Task preparation,
 relationships, transitions, GitHub associations and review/preflight diagnostics, with
 synthetic examples and a complete offline acceptance scenario. Live activation remains gated.

@@ -1,8 +1,10 @@
-"""Synthetic two-task batch walkthrough, serial then parallel; no live providers.
+"""Synthetic batch walkthrough: serial, then parallel, then an agent holding a task.
 
 The batch rounds run two tasks strictly in order, pausing at every human decision. The
-parallel walkthrough then advances two more tasks with two real worker processes at once,
-and shows the admission bound refusing a third before it starts.
+parallel walkthrough advances two more tasks with two real worker processes at once and
+shows the admission bound refusing a third. The agent walkthrough then holds a task the way
+a container does: claim in the role the next step needs, renew, refuse a worker meanwhile,
+and release on the way down.
 """
 import argparse
 import os
@@ -15,8 +17,11 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from datetime import datetime, timedelta
+
+from orch import agent_sessions
 from orch.batches import Batches
-from orch.contracts import Rejected, canonical
+from orch.contracts import Rejected, canonical, now
 from orch.engine import Engine
 from orch.execution import Executor
 
@@ -67,6 +72,53 @@ def parallel(engine, store):
             'refused_at_bound': True, 'claims_remaining': len(engine.store.owners())}
 
 
+def agents(engine):
+    """One task held by an agent the way a container holds it, start to finish."""
+    task = engine.create_task('Agent session acceptance')
+    role = agent_sessions.role_for(engine.task(task)['state']['state'])
+    if role != 'lead_planner':
+        raise RuntimeError('The fixture workflow should start with the lead planner')
+    try:
+        agent_sessions.claim(engine, task, 'junior-devops', 'junior')
+        raise RuntimeError('An agent must not take work belonging to another role')
+    except Rejected:
+        pass
+    claimed = agent_sessions.claim(engine, task, 'lead-devops', role, 900)
+    if claimed['status'] != 'claimed' or claimed['role'] != role:
+        raise RuntimeError('The agent did not take the task')
+    try:
+        engine.advance(task)
+        raise RuntimeError('A worker must not advance a task an agent holds')
+    except Rejected:
+        pass
+    renewed = agent_sessions.renew(engine, task, 'lead-devops', 900)
+    if renewed['expires_at'] <= claimed['expires_at']:
+        raise RuntimeError('Renewal did not extend the lease')
+    listed = agent_sessions.sessions(engine.store)
+    if listed['held'] != 1 or listed['sessions'][0]['kind'] != 'agent':
+        raise RuntimeError('The session should be visible while it is held')
+
+    # An abandoned container leaves a lease that simply expires; the task comes back.
+    with patch('orch.storage.now',
+               return_value=(datetime.fromisoformat(now()) + timedelta(hours=2)).isoformat().replace('+00:00', 'Z')):
+        if engine.store.live(engine.store.owner(task)):
+            raise RuntimeError('An expired lease must not still hold the task')
+    # A container that is powered off cleanly releases instead, which is immediate.
+    if agent_sessions.release(engine, task, 'lead-devops')['status'] != 'released':
+        raise RuntimeError('The agent did not release the task')
+    if engine.run(task)['state']['state'] != 'AWAITING_PLAN_APPROVAL':
+        raise RuntimeError('A released task should advance normally')
+    if agent_sessions.role_for(engine.task(task)['state']['state']) != 'human':
+        raise RuntimeError('An approval pause belongs to a human')
+    try:
+        agent_sessions.claim(engine, task, 'lead-devops', 'lead_planner')
+        raise RuntimeError('No agent may take a task waiting on a human')
+    except Rejected:
+        pass
+    return {'task': task, 'claimed_as': role, 'renewed': True, 'released': True,
+            'human_pause_refused': True, 'sessions_held_after': agent_sessions.sessions(engine.store)['held']}
+
+
 def run(destination):
     destination = Path(destination)
     destination.mkdir()
@@ -88,8 +140,10 @@ def run(destination):
                     engine.approve(task, state['pending_approval']['id'], 'approve', state['revision'])
         # The same kernel, without a batch: two workers advancing two tasks at once.
         concurrent = parallel(engine, destination/'store')
+        held = agents(engine)
         report = {'kind':'SerialBatchAcceptance', 'status':'passed', 'tasks':tasks, 'rounds':rounds,
-                  'parallel_workers':concurrent, 'fixture_only':True, 'live_authorized':False}
+                  'parallel_workers':concurrent, 'agent_session':held,
+                  'fixture_only':True, 'live_authorized':False}
         (destination/'acceptance.json').write_bytes(canonical(report))
         return report
     finally: engine.close()

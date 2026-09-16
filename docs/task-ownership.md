@@ -14,7 +14,9 @@ kernel lock vanishes with the process that held it, leaving nothing behind, whil
 
 This milestone does not add parallel scheduling, admission slots or a second worker
 process. It makes one possible, and nothing in the repository starts one yet.
-[Worker admission](worker-admission.md) then bounds how many may advance at once.
+[Worker admission](worker-admission.md) then bounds how many may advance at once, and
+[agent sessions](agent-sessions.md) add the lease an agent holds when it has no resident
+process to hold a lock.
 
 ## What takes which lock
 

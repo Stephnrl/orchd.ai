@@ -1,5 +1,6 @@
 """SQLite records/operations and content-addressed artifacts; no workflow logic."""
 import contextlib
+from datetime import datetime, timedelta
 import hashlib
 import json
 import os
@@ -12,6 +13,11 @@ from .contracts import Rejected, canonical, now, redact, ref, uid, validate
 
 AUDIT_RESERVE_BYTES = 4 * 1024 * 1024
 OWNERSHIP_VERSION = 3
+SESSION_VERSION = 4
+# What a store migrates to. Name it once so a new schema step changes this line and the
+# accepted set, and never a number spelled out somewhere else.
+CURRENT_VERSION = SESSION_VERSION
+SUPPORTED_VERSIONS = (2, OWNERSHIP_VERSION, SESSION_VERSION)
 # How many tasks may be advancing at once in one store. Each advancing task can hold a
 # container, a workspace and a provider process, so this is a host-resource bound, not a
 # throughput target: work is refused before it starts rather than failing halfway and
@@ -34,7 +40,7 @@ class Store:
         if read_only:
             self.db = sqlite3.connect((self.root / "orch.sqlite").as_uri() + "?mode=ro" + ("&immutable=1" if immutable else ""), uri=True, isolation_level=None)
             self.db.row_factory = sqlite3.Row
-            if self.db.execute("PRAGMA user_version").fetchone()[0] not in (2, OWNERSHIP_VERSION):
+            if self.db.execute("PRAGMA user_version").fetchone()[0] not in SUPPORTED_VERSIONS:
                 self.db.close()
                 raise Rejected("Usage reporting requires an existing current-version database")
             return
@@ -46,7 +52,7 @@ class Store:
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA busy_timeout=5000")
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version not in (0, 1, 2, OWNERSHIP_VERSION):
+        if version not in (0, 1, *SUPPORTED_VERSIONS):
             self.db.close()
             raise Rejected("Unsupported database version")
         self.db.executescript('''
@@ -68,7 +74,10 @@ class Store:
             # Current ownership, not evidence: a claim is taken and released, while the
             # append-only event log keeps the history of who advanced what.
             self.db.execute("CREATE TABLE IF NOT EXISTS task_owners(task_id TEXT PRIMARY KEY REFERENCES tasks(id), owner TEXT NOT NULL, claimed_at TEXT NOT NULL, revision INTEGER NOT NULL, generation INTEGER NOT NULL)")
-            self.db.execute("PRAGMA user_version=%d" % OWNERSHIP_VERSION)
+            # A lease expires; a worker's lock does not, and leaves this column NULL.
+            if "expires_at" not in {r[1] for r in self.db.execute("PRAGMA table_info(task_owners)")}:
+                self.db.execute("ALTER TABLE task_owners ADD COLUMN expires_at TEXT")
+            self.db.execute("PRAGMA user_version=%d" % CURRENT_VERSION)
         self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_execution_receipt ON records(task_id,kind,json_extract(payload,'$.operation_id')) WHERE kind IN ('PatchReceipt','TestReceipt','ExternalActionReceipt')")
         self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_invocation_receipt ON records(task_id,json_extract(payload,'$.invocation_id')) WHERE kind='AgentInvocationReceipt'")
         for table in ("records", "events", "artifacts", "approvals", "effects", "broker_requests", "execution_provenance", "broker_identities"):
@@ -150,9 +159,19 @@ class Store:
     def owners(self):
         return [dict(row) for row in self.db.execute("SELECT * FROM task_owners ORDER BY task_id")]
 
+    def live(self, row):
+        """Whether a claim still holds: a lease until it expires, a worker while it runs.
+
+        A worker's liveness cannot go stale because it is the lock itself; an agent's is a
+        time it must keep renewing, since an agent between calls has no process at all.
+        """
+        if row["expires_at"]:
+            return row["expires_at"] > now()
+        return self.held(row["task_id"])
+
     def active_owners(self):
-        """Claims whose worker is still alive, by the only evidence that cannot go stale."""
-        return [row for row in self.owners() if self.held(row["task_id"])]
+        """Every claim that still holds, of either kind."""
+        return [row for row in self.owners() if self.live(row)]
 
     def admitted(self, task):
         """Claims held by a live worker other than this task's, for the admission bound."""
@@ -168,12 +187,20 @@ class Store:
         if active:
             raise Rejected("Task " + active[0]["task_id"] + " is being advanced; retry when workers are idle")
 
-    def claim(self, task, owner, revision, generation):
-        """Record current ownership inside the caller's transaction."""
-        self.db.execute("INSERT INTO task_owners(task_id,owner,claimed_at,revision,generation) VALUES(?,?,?,?,?)"
+    def claim(self, task, owner, revision, generation, expires_in=None):
+        """Record current ownership inside the caller's transaction.
+
+        `expires_in` seconds makes it an agent's lease; without it the holder is a worker
+        process, live for exactly as long as it holds the task's lock.
+        """
+        moment = now()
+        expires_at = None
+        if expires_in is not None:
+            expires_at = (datetime.fromisoformat(moment) + timedelta(seconds=expires_in)).isoformat().replace("+00:00", "Z")
+        self.db.execute("INSERT INTO task_owners(task_id,owner,claimed_at,revision,generation,expires_at) VALUES(?,?,?,?,?,?)"
                         " ON CONFLICT(task_id) DO UPDATE SET owner=excluded.owner, claimed_at=excluded.claimed_at,"
-                        " revision=excluded.revision, generation=excluded.generation",
-                        (task, owner, now(), revision, generation))
+                        " revision=excluded.revision, generation=excluded.generation, expires_at=excluded.expires_at",
+                        (task, owner, moment, revision, generation, expires_at))
 
     def disclaim(self, task, owner):
         """Release ownership, but never another worker's."""

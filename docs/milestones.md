@@ -122,6 +122,15 @@ its chain already retains and fails closed when a predecessor cannot be read, wh
 property a hand-made replacement journal cannot have. Backup comparison reports succession
 changes, so a snapshot taken before retirement no longer claims to describe the journal.
 
+[Agent sessions](agent-sessions.md) extend the same registry to agents that call in rather
+than run in the kernel. A session is a lease held by a named agent in a declared role, live
+until it expires, renewed while the agent works and released when its container stops. The
+role must be the one the task's next step belongs to, so approval pauses stay with a human
+and a junior cannot take the lead planner's work. Worker locks and agent leases exclude each
+other and share the admission bound, an expired lease frees its task without permitting
+repeated work, and the whole mechanism is cooperative scheduling rather than an
+authorization boundary.
+
 [Worker admission](worker-admission.md) bounds that concurrency: at most four tasks advance
 at once in one store, counted on claims whose worker is alive, so a crash frees its slot
 while a running worker holds it. The refusal happens before anything is claimed or changed,

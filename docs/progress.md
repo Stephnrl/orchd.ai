@@ -1,5 +1,15 @@
 # Roadmap progress — September 16, 2026
 
+The [agent sessions milestone](agent-sessions.md) adds the holder an agent needs. Ownership
+claims a task with a lock held by the process doing the work, which an agent calling in from
+its own container never has, so a session is a role-scoped lease instead: granted to a named
+agent, live until it expires, renewed while it works and released when its container stops.
+A task may only be claimed by the role its next step belongs to, so no agent takes work that
+is waiting on a human, and leases and worker locks exclude each other in one registry and
+count against the same admission bound. Sessions are cooperative scheduling between local
+agents, not an authorization boundary; approvals, the guardian and the broker still decide
+what an agent may do.
+
 The [worker admission milestone](worker-admission.md) bounds the concurrency ownership
 made possible: at most four tasks may be advancing at once in one store, counted on live
 claims under the store-wide lock, so two workers never both see the last free slot. Work is
@@ -118,7 +128,7 @@ an assumption that more UI features alone will make the system production-ready.
 | 8. Jira Data Center integration | Consolidated offline comments, Epic/Story/Task preparation, relationships, transitions, GitHub associations, durable journal, review/preflight and recovery; live deployment/admission remains blocked |
 | 9. Credential broker/auth hardening | Local session expiry, rotation/revocation, stale-client clearing, strict HTTP parsing and broker shared-secret rotation implemented; production provider credentials/SSO remain |
 | 10. OWASP/ACS hardening and adversarial tests | Substantial boundary tests, consolidated source-bound offline release verification and an executable criterion-to-test mapping; independent deployment review and broader live-system testing remain |
-| 11. Concurrent workers | Implemented for bounded parallel work on one host: one owner per task, recorded claims and an admission bound of four; scheduling, resource models and same-repository conflicts remain |
+| 11. Concurrent workers | Implemented for bounded parallel work on one host: one owner per task, worker locks and agent leases in one registry, role-scoped claiming and an admission bound of four; scheduling, resource models and same-repository conflicts remain |
 | 12. Advanced orchestration | Bounded serial fixture batches implemented; broader scheduling and orchestration remain to be scoped |
 
 PRs opened while developing this repository are collaboration through development
