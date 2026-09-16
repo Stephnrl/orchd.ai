@@ -97,6 +97,7 @@ def audit(store):
 def integrity_report(store):
     """Read-only integrity evidence; busy dispatchers reject rather than give a verdict."""
     with store.exclusive():
+        store.quiescent()
         report = {"version": 1, "generated_at": now(), "status": "failed", "reason": None,
                   "tasks": None, "records": None, "artifact_references": None}
         try:
@@ -116,6 +117,7 @@ def backup(store, destination):
         raise Rejected("Backup needs a new destination outside live data")
     plain(destination.parent)
     with store.exclusive():
+        store.quiescent()
         audit(store)
         with tempfile.TemporaryDirectory(prefix=".orch-backup-", dir=destination.parent) as temporary:
             staged = Path(temporary)
@@ -245,6 +247,7 @@ def restore(source, destination):
 def storage_usage(store, task_id=None):
     """Report quota accounting and orphan candidates without changing workflow data."""
     with store.exclusive():
+        store.quiescent()
         if task_id is not None:
             store.task(task_id)
         rows = store.db.execute("SELECT task_id,payload FROM artifacts").fetchall()
@@ -303,6 +306,7 @@ def collect_orphans(store, grace_seconds=86400, dry_run=False):
     if type(grace_seconds) not in (int, float) or (type(grace_seconds) is float and not math.isfinite(grace_seconds)) or grace_seconds < 3600:
         raise Rejected("Orphan grace must be finite and at least one hour")
     with store.exclusive():
+        store.quiescent()
         root = plain(store.root / "artifacts")
         retained = {json.loads(r[0])["sha256"] for r in store.db.execute("SELECT payload FROM artifacts")}
         removed = []

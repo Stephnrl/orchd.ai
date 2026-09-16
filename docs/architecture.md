@@ -100,6 +100,8 @@ the DB and referenced artifacts consistently; verify restores and replay.
 
 State update, TaskEvent insert, and outbox intent commit in one transaction with
 expected revision checking. A single dispatcher polls outbox; delivery is at-least-once.
+Task advancement itself is no longer store-wide: see [task ownership](task-ownership.md)
+for the per-task lock and the recorded claim that replaced the single dispatcher lock.
 Broker operation IDs and reconciliation prevent duplicate effects (see workflow).
 Events cannot be updated/deleted through application APIs; database triggers protect
 against accidental modification. Local administrators can still rewrite SQLite;

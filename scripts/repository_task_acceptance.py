@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from orch.engine import Engine
 from orch.execution import Executor
-from orch.maintenance import audit, backup, verify_backup
+from orch.contracts import Rejected
+from orch.maintenance import audit, backup, integrity_report, verify_backup
 from orch.pilot import Pilot
 
 
@@ -92,7 +93,40 @@ def main():
         finally: engine.close()
         assert (repo / 'settings.json').read_bytes() == b'{"retries":1}\n'
         assert git('status', '--porcelain') == ''
-    print('PASS: repository task CLI approvals, retained snapshot, replay/backup, no-retry recovery and reviewed reclamation ('+('Docker' if args.image else 'local data')+')')
+
+        # One owner per task: a second worker is refused on a task another holds, and
+        # whole-store work refuses only while that work is genuinely running.
+        # A task that still has work to do, so the refusal is about ownership alone.
+        fresh = cli('repository-task-create', '--intent', str(intent_file))['state']['task_id']
+        engine = Engine(store, executor)
+        try:
+            with engine.store.exclusive(fresh):
+                second = ("import sys\n"
+                          "from orch.contracts import Rejected\n"
+                          "from orch.engine import Engine\n"
+                          "from orch.execution import Executor\n"
+                          "engine = Engine(sys.argv[1], Executor('trusted-fixture'))\n"
+                          "try:\n"
+                          "    engine.advance(sys.argv[2])\n"
+                          "except Rejected as exc:\n"
+                          "    sys.exit(2 if 'advanced elsewhere' in str(exc) else 3)\n"
+                          "sys.exit(0)\n")
+                held = subprocess.run([sys.executable, '-c', second, str(store), fresh], cwd=ROOT,
+                                      env={**os.environ, 'PYTHONPATH': str(ROOT)}, capture_output=True, text=True)
+                assert held.returncode == 2, ('a second worker must not advance an owned task', held.stderr[-400:])
+                with engine.store.transaction():
+                    engine.store.claim(fresh, engine.owner, 0, 1)
+                try:
+                    integrity_report(engine.store)
+                    raise AssertionError('whole-store work must refuse while a task is advancing')
+                except Rejected:
+                    pass
+                with engine.store.transaction():
+                    engine.store.disclaim(fresh, engine.owner)
+            assert integrity_report(engine.store)['status'] == 'passed'
+            assert engine.store.owners() == [], 'a finished worker leaves no claim behind'
+        finally: engine.close()
+    print('PASS: repository task CLI approvals, retained snapshot, replay/backup, no-retry recovery, reviewed reclamation and one owner per task ('+('Docker' if args.image else 'local data')+')')
 
 
 if __name__ == '__main__':

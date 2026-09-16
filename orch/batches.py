@@ -116,6 +116,8 @@ class Batches:
             raise Rejected('Supply one to sixteen explicit tasks')
         self._directory()
         with file_lock(plain(self.root / 'dispatch.lock')), self.engine.store.exclusive():
+            # Snapshotting several tasks means none of them may be advancing meanwhile.
+            self.engine.store.quiescent()
             if len(list(self.root.glob('*.json'))) >= MAX_BATCHES: raise Rejected('Batch retention capacity reached')
             tasks, seen = [], set()
             for request in requests['tasks']:
@@ -200,6 +202,8 @@ class Batches:
     def abandon(self, batch_id, sha, revision, task_id, expected_snapshot):
         identifier(task_id)
         with file_lock(plain(self.root / 'dispatch.lock')), self.engine.store.exclusive():
+            # Snapshotting several tasks means none of them may be advancing meanwhile.
+            self.engine.store.quiescent()
             value = self._load(batch_id)
             self._expected(value, sha, revision)
             matches = [i for i, task in enumerate(value['scope']['tasks']) if task['task_id'] == task_id]

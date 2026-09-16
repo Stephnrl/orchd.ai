@@ -1,6 +1,9 @@
 """The only writer of workflow state. All actors return evidence to this service."""
 import asyncio
+import contextlib
 import json
+import os
+import sqlite3
 from dataclasses import asdict
 from datetime import datetime, timedelta
 
@@ -12,7 +15,7 @@ from .fixtures import recipe, repository
 from .provider import MockProvider, Scenario
 from .cli_provider import FixtureCliProvider
 from .storage import Store
-from .broker import BrokerClient, BrokerUncertain
+from .broker import BrokerClient, BrokerUncertain, identity
 
 EDGES = {
     "DRAFT_SPEC": {"AWAITING_CLARIFICATION", "SPEC_READY"},
@@ -52,6 +55,9 @@ class Engine:
         self.provider_factory = provider_factory
         self.guardian = FixtureGuardian()
         self.external_action = SimulatedPRAction(self.store)
+        # Who this worker is, for the claim it records while advancing a task. The session
+        # distinguishes two processes of the same account, and outlives a recycled pid.
+        self.owner = canonical({"principal": identity(), "pid": os.getpid(), "session": uid()}).decode()
         self.after_operation = None  # Test crash injection, after durable receipt commit.
 
     def repository_tasks(self, task_id):
@@ -71,6 +77,51 @@ class Engine:
 
     def events(self, task_id):
         return self.store.events(task_id)
+
+    @contextlib.contextmanager
+    def deciding(self, task_id):
+        """An operator decision: exclusive on the task, and on the store while it commits.
+
+        These are short and transactional, so they can hold both. Whole-store maintenance
+        therefore still excludes every task mutation, not merely advancement, while two
+        workers advancing two different tasks never wait on each other.
+        """
+        with self.store.exclusive(task_id), self.store.exclusive():
+            yield
+
+    @contextlib.contextmanager
+    def advancing(self, task_id):
+        """Hold this task's advancement lock and record who holds it.
+
+        The lock is what stops two workers touching one task; the recorded claim is what
+        survives a crash to show that a worker was interrupted, since a kernel lock does
+        not. Claiming registers under the store-wide lock as well, so whole-store
+        maintenance can stop new claims and then refuse while work is genuinely running.
+
+        Taking over a claim whose worker is gone is recorded as an event and never re-runs
+        its work: an operation left `started` still forces explicit reconciliation.
+        """
+        with self.store.exclusive(task_id):
+            with self.store.exclusive():
+                existing = self.store.owner(task_id)
+                state, context = self.store.task(task_id)
+                generation = existing["generation"] if existing else 0
+                if existing and existing["owner"] != self.owner:
+                    generation += 1
+                    self._event(state, context, "task_ownership_taken",
+                                {"previous_owner": json.loads(existing["owner"]),
+                                 "claimed_at": existing["claimed_at"], "generation": generation})
+                    state, context = self.store.task(task_id)
+                with self.store.transaction():
+                    self.store.claim(task_id, self.owner, state["revision"], max(generation, 1))
+            try:
+                yield
+            finally:
+                try:
+                    with self.store.transaction():
+                        self.store.disclaim(task_id, self.owner)
+                except (Rejected, sqlite3.Error):
+                    pass   # Releasing a claim must never mask the failure that got us here.
 
     def _event(self, state, context, event_type, detail=None, role="orchestrator", operation=None, invocation=None, before=None):
         if not self.store.db.in_transaction:
@@ -178,7 +229,7 @@ class Engine:
         if repository := self.repository_tasks(task_id): return repository.renew(task_id, request_id, expected_revision, principal)
         if type(expected_revision) is not int or expected_revision < 0 or not isinstance(request_id, str):
             raise Rejected("Invalid renewal request")
-        with self.store.exclusive(), self.store.transaction():
+        with self.deciding(task_id), self.store.transaction():
             state, context = self.store.task(task_id)
             prior = context.get("approval_renewal")
             if prior and prior["request_id"] == request_id and prior["expected_revision"] == expected_revision and prior["principal"] == principal and state["pending_approval"] == prior["replacement"]:
@@ -214,7 +265,7 @@ class Engine:
         if repository := self.repository_tasks(task_id): return repository.approve(task_id, request_id, decision, expected_revision, principal)
         if decision not in ("approve", "reject"):
             raise Rejected("Invalid approval decision")
-        with self.store.exclusive(), self.store.transaction():
+        with self.deciding(task_id), self.store.transaction():
             state, context = self.store.task(task_id)
             old = self.store.db.execute("SELECT r.payload FROM approvals a JOIN records r ON r.id=a.decision_id WHERE a.request_id=? AND r.task_id=?", (request_id, task_id)).fetchone()
             if old:
@@ -312,7 +363,7 @@ class Engine:
         reason = reason.strip()
         if not 1 <= len(reason) <= 500 or any(ord(c) < 32 or ord(c) == 127 for c in reason) or redact(reason) != reason:
             raise Rejected("Invalid cancellation reason")
-        with self.store.exclusive(), self.store.transaction():
+        with self.deciding(task_id), self.store.transaction():
             state, context = self.store.task(task_id)
             previous = context.get("cancellation")
             if state["state"] == "CANCELLED" and previous and all(previous[k] == v for k, v in (("expected_revision", expected_revision), ("reason", reason), ("principal", principal))):
@@ -337,7 +388,7 @@ class Engine:
     def recovery_diagnostics(self, task_id):
         """Inspect persisted recovery preconditions; never probe or reconcile a process."""
         if repository := self.repository_tasks(task_id): return repository.diagnostics(task_id)
-        with self.store.exclusive():
+        with self.deciding(task_id):
             state, context = self.store.task(task_id)
             rows = self.store.db.execute("SELECT id,stage,generation FROM operations WHERE task_id=? AND status='started' ORDER BY rowid LIMIT 21", (task_id,)).fetchall()
             reasons = []
@@ -357,7 +408,12 @@ class Engine:
                 if not reasons:
                     status = "preconditions_met"
                     reasons.append("Persisted preconditions permit a recovery attempt. Recovery must still verify the broker result or prove Docker cleanup; this report does not establish that execution stopped.")
+            # A claim still recorded here is evidence that a worker was interrupted: this
+            # call holds the task's lock, so nothing can be advancing it now.
+            claim = self.store.owner(task_id)
             return {"version": 1, "task_id": task_id, "revision": state["revision"], "generated_at": now(),
+                    "interrupted_claim": {"claimed_at": claim["claimed_at"], "revision": claim["revision"],
+                                          "generation": claim["generation"]} if claim else None,
                     "state": state["state"], "resume_state": state["resume_state"],
                     "active_operation_id": state["active_operation_id"],
                     "unresolved_operations": [dict(row) for row in rows[:20]], "operations_truncated": len(rows) > 20,
@@ -371,7 +427,7 @@ class Engine:
         if repository := self.repository_tasks(task_id): return repository.recover(task_id, expected_revision, principal)
         if type(expected_revision) is not int or expected_revision < 0:
             raise Rejected("Invalid recovery revision")
-        with self.store.exclusive():
+        with self.deciding(task_id):
             state, context = self.store.task(task_id)
             previous = context.get("operator_recovery")
             if previous and previous["expected_revision"] == expected_revision and previous["principal"] == principal and previous["completed_revision"] == state["revision"] and state["state"] == "CHANGES_REQUESTED":
@@ -427,7 +483,7 @@ class Engine:
         if repository := self.repository_tasks(task_id): raise Rejected("Repository tasks use task recovery and retain their workspaces")
         if type(expected_revision) is not int or expected_revision < 0:
             raise Rejected("Invalid cleanup revision")
-        with self.store.exclusive():
+        with self.deciding(task_id):
             state, context = self.store.task(task_id)
             recovery = context.get("operator_recovery")
             if (not recovery or state["state"] != "CHANGES_REQUESTED"
@@ -510,7 +566,7 @@ class Engine:
 
     def advance(self, task_id, *, expected_snapshot=None):
         if repository := self.repository_tasks(task_id): return repository.advance(task_id, expected_snapshot)
-        with self.store.exclusive():
+        with self.advancing(task_id):
             state, context = self.store.task(task_id)
             if expected_snapshot is not None and expected_snapshot != digest({'state': state, 'context': context}):
                 raise Rejected('Task changed since batch review')
