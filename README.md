@@ -52,6 +52,10 @@ human.
 agent container holds a secret and a socket instead of the store, the agent it is comes from
 the secret that signed the request, and the roles it may claim come from the service's own
 registry.
+[The live integration runbook](docs/live-integration-runbook.md) is the ordered path from a
+token to a created issue on a machine that can reach GitHub and Jira: what to scope, what to
+write, what proves each step, what to do when a dispatch comes back uncertain, and the tasks
+that are genuinely still open.
 [Outbound dispatch](docs/outbound-dispatch.md) also performs the read plans every codec
 here prepares, which nothing could do before: a preview needed a person to fetch each URL by
 hand and paste the JSON back. A fetch needs no approval because it changes nothing, and its
