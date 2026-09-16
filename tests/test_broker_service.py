@@ -370,7 +370,9 @@ class BrokerServiceTests(unittest.TestCase):
         self.assertTrue(report["source_digest_match"])
         self.assertFalse(report["live_authorized"])
         self.assertEqual(report["broker"], identity())
-        self.assertEqual(report["profile"], {"mode": "trusted-fixture", "image": None})
+        # This harness configures no dispatch credential, so the broker says it cannot
+        # reach outside; the assertion names that rather than omitting it.
+        self.assertEqual(report["profile"], {"mode": "trusted-fixture", "image": None, "dispatch": False})
         base = identity()
         other = {**base, "account_sha256": "f" * 64, "uid": None if base["uid"] is None else base["uid"] + 1}
         with patch.object(self.harness.service, "identity", other):
@@ -393,7 +395,8 @@ class BrokerServiceTests(unittest.TestCase):
         assessment = deployment_check("github_copilot_cli", broker=config)
         self.assertEqual(assessment["broker_identity"]["status"], "shared")
         self.assertIn("broker_identity", assessment["blocking_gates"])
-        self.assertEqual(len(assessment["blocking_gates"]), 7)
+        # Named rather than counted, so adding a gate does not need this test edited.
+        self.assertEqual(assessment["blocking_gates"], [gate["id"] for gate in assessment["gates"]])
         self.assertFalse(assessment["provider_authorized"])
         with patch("orch.deployment.assess_identity", return_value={"status": "separate"}):
             assessment = deployment_check("github_copilot_cli", broker=config)

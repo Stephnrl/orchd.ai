@@ -1,5 +1,16 @@
 # Roadmap progress — September 16, 2026
 
+The [outbound dispatch milestone](outbound-dispatch.md) adds the first path that sends
+anything, and puts it on the broker. Mounting a token into a project manager's container was
+the obvious shape and the wrong one: the container could use it for anything at any time
+while the evidence named a single approved call, which leaves every approval above it
+decorative. The broker holds the credential under its own OS account, the credential names
+the origin it may go to, the request must hash to what was approved, redirects are never
+followed, and refused, failed and uncertain stay three distinct answers with uncertain
+returned as a receipt rather than raised. It is not yet wired into the task workflow: reaching
+`PR_CREATED` still requires a simulated receipt, and admitting a real one there is a separate
+deliberate step.
+
 The [GitHub issue milestone](github-issues.md) adds the intent a project manager needs
 to track work where the work lives. Jira already modelled Epics, Stories, Tasks and a link to
 a GitHub issue by number; nothing modelled the issue, so the number had no origin. Issue

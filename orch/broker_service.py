@@ -16,6 +16,7 @@ from .broker_process import check_request, journal, perform
 from .contracts import Rejected, canonical, digest
 from .execution import Executor
 from .maintenance import real_path
+from . import dispatch as outbound
 from . import pilot_worker
 
 
@@ -37,7 +38,8 @@ def _invalid_number(_):
 
 
 class BrokerService:
-    def __init__(self, root, secret, workspaces, mode, image=None, port=0, pilot_root=None):
+    def __init__(self, root, secret, workspaces, mode, image=None, port=0, pilot_root=None,
+                 dispatch_credential=None):
         # Every path is canonical, so one spelling of a directory cannot pose as another.
         self.root, self.workspaces = real_path(root), real_path(workspaces)
         self.pilot_root = real_path(pilot_root) if pilot_root is not None else None
@@ -68,7 +70,14 @@ class BrokerService:
             raise Rejected("Invalid broker port")
         self.secret = SecretFile(secret)
         self.executor = Executor(mode, image)
-        self.profile = {"mode": mode, "image": image}
+        # Read once here so an unusable credential is a startup error rather than a puzzle
+        # at the first dispatch, then re-read per request so a rotated token needs no
+        # restart and a withdrawn one stops working immediately.
+        self.dispatch_credential = None
+        if dispatch_credential is not None:
+            self.dispatch_credential = real_path(dispatch_credential)
+            outbound.read_credential(self.dispatch_credential)
+        self.profile = {"mode": mode, "image": image, "dispatch": self.dispatch_credential is not None}
         self.identity = identity()
         self.root.mkdir(parents=True, exist_ok=True)
         self.server = HTTPServer(("127.0.0.1", port), self._handler())
@@ -102,6 +111,8 @@ class BrokerService:
                 if envelope is None:
                     raise Missing("No retained broker result")
             return {"schema_version": VERSION, "kind": route, "envelope": envelope, "identity": self.identity}
+        if route == "dispatch":
+            return self._dispatch(body)
         if route.startswith("pilot-"):
             return self._pilot(route, body)
         operation = safe_id(body["operation_id"])
@@ -115,6 +126,22 @@ class BrokerService:
                     "generation": body["generation"], "container_absent": absent}
         return {"schema_version": VERSION, "kind": "reconcile", "nonce": body["nonce"], "operation_id": operation,
                 "container_absent": self.executor.reconcile(operation)}
+
+    def _dispatch(self, body):
+        """The only route that reaches off this host, and the only holder of the credential.
+
+        The request is not interpreted here beyond what safety requires: it must hash to the
+        sha256 its approval was granted over, and it must be going where the credential says
+        it may go. Everything after the bytes leave comes back as a receipt, including an
+        uncertain one, because an outcome nobody recorded is worse than a bad outcome.
+        """
+        if self.dispatch_credential is None:
+            raise Rejected("This broker holds no dispatch credential; outbound dispatch is not enabled")
+        credential = outbound.read_credential(self.dispatch_credential)
+        receipt = outbound.perform(safe_id(body["operation_id"]), body["request"],
+                                   body["expected_sha256"], credential)
+        return {"schema_version": VERSION, "kind": "dispatch", "nonce": body["nonce"],
+                "identity": self.identity, "receipt": receipt}
 
     def _pilot(self, route, body):
         """Docker pilot workers under the broker account. The scope must belong to the configured pilot journal."""
