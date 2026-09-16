@@ -78,6 +78,11 @@ it. Jira already modelled the ticket and the link; nothing modelled the issue.
 letting an agent write into a repository: the issue is derived from the specification a person
 confirmed, so it says what was signed and cannot say anything else, and its operation
 identifier is derived too, so an interrupted dispatch resumes rather than filing a second.
+[The loop, and the container that runs it](docs/agent-container.md) is the first thing that
+has had to obey the protocol rather than be scripted through it — find work, hold it, renew
+while working, release on shutdown, tell a refusal from an outage — with the decision about
+what to write supplied from outside. Running it found that the protocol named an authority for
+retrying that did not exist on a refusal, which it now does.
 [One answer instead of six](docs/status.md) reports what is happening now — tasks by state,
 which are waiting on a person and since when, who holds what, leases that lapsed, work
 available by role, quotas and journal capacity — without taking the store-wide lock, so it

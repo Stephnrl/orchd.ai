@@ -40,6 +40,14 @@ arbitrary text in a repository even indirectly, and its operation identifier is 
 so a retry resumes the operation it was rather than starting a new one. Verified against the
 real API through preview without creating anything.
 
+The [agent loop milestone](agent-container.md) gives a container something to run and the
+protocol its first real client. It found that a refusal carried no guidance about retrying
+although the protocol said it did, that the image did not build, that a bind-mounted secret
+cannot satisfy the permission check on Docker Desktop, that a container cannot reach a loopback
+service there, and that an early-starting container died rather than waiting. A fixture decider
+proves the loop, not the thinking: no provider is admitted and everything past a confirmed
+specification is still the fixture.
+
 The [status milestone](status.md) answers the operator's morning question in one command and
 one endpoint, separating work in progress from work stopped on a person, and reads without
 excluding anything so it responds while the machine is busy. [A module map](modules.md)

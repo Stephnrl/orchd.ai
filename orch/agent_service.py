@@ -23,7 +23,7 @@ import re
 from jsonschema import Draft202012Validator
 
 from .broker import FORMATS, MAX_MESSAGE, SecretFile, authenticate, identity, sign, source_digest
-from .contracts import Rejected, canonical
+from .contracts import Rejected, Transient, canonical
 from .engine import Engine
 from .execution import Executor
 from .maintenance import real_path
@@ -290,8 +290,13 @@ class AgentService:
                     payload = service.handle(route, agent, body)
                     validate_wire(payload, ROUTES[route][1])
                     status = 200
+                except Transient:
+                    # A refusal that may stop being one: the task frees, the bound empties.
+                    # Saying so is what lets a caller wait rather than give up, and it says
+                    # only that much — never which agent holds what.
+                    status, payload = 409, {"error": "agent_refused", "retry_allowed": True}
                 except Rejected:
-                    status, payload = 409, {"error": "agent_refused"}
+                    status, payload = 409, {"error": "agent_refused", "retry_allowed": False}
                 except Exception:  # A crash must answer, not hang an agent that is waiting.
                     status, payload = 500, {"error": "agent_service_failure"}
                 self.reply(status, route, payload, key)

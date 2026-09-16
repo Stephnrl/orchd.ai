@@ -190,6 +190,18 @@ have written is the one the second searches for, so reconciliation finds the iss
 rather than filing a second. An unconfirmed draft implies nothing, and a specification too
 large to render is refused rather than trimmed.
 
+[The loop, and the container that runs it](agent-container.md) is the first client that has
+had to decide what to do next rather than be told. The loop decides everything about working
+and nothing about the work, which a `Decider` supplies; it renews before working rather than
+after, releases on shutdown and on being thrown out, and distinguishes a refusal from an
+outage. That distinction exposed the protocol naming `retry_allowed` as the authority on
+retrying while refusals carried no such field, so a `Transient` refusal — one that may stop
+being a refusal without anybody doing anything — is now reported by the service, raised by the
+client and acted on by the loop. Running the container found four more: the image did not
+build, a bind-mounted secret arrives world-accessible on Docker Desktop and is rightly
+refused, a container cannot reach a loopback service there at all, and one that started early
+died instead of waiting.
+
 [One answer instead of six](status.md) collects the signals that were scattered across
 `doctor`, `storage-usage`, `agent-sessions`, the journal usage commands and the deployment
 check. The distinction it is built around is that a task waiting on a person is the machine

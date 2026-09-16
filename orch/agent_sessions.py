@@ -19,7 +19,7 @@ broker records what really ran.
 """
 import re
 
-from .contracts import Rejected, canonical, now, uid
+from .contracts import Rejected, Transient, canonical, now, uid
 
 # The role each state needs next, from the roles the engine actually invokes: planning is
 # the lead planner's, implementation the junior's, review the reviewer's, and every
@@ -92,10 +92,10 @@ def claim(engine, task, agent, role, seconds=None, expected_revision=None):
             raise Rejected("That task's next step belongs to " + wanted + ", not " + role)
         held = engine.store.owner(task)
         if held and engine.store.live(held) and held["owner"] != owner:
-            raise Rejected("That task is already held by " + describe(held))
+            raise Transient("That task is already held by " + describe(held))
         active = engine.store.admitted(task)
         if len(active) >= engine.admission_bound():
-            raise Rejected("Too many tasks are being advanced at once (%d); wait for one to finish"
+            raise Transient("Too many tasks are being advanced at once (%d); wait for one to finish"
                            % len(active))
         with engine.store.transaction():
             engine.store.claim(task, owner, state["revision"],
