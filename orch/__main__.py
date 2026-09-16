@@ -12,7 +12,7 @@ from .cli_provider import FixtureCliProvider
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-serve", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
+    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-serve", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "skill-export", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -65,6 +65,10 @@ def main():
     parser.add_argument("--agent-secret", help="This agent's secret file, for calling an agent service")
     parser.add_argument("--role", help="Role an agent session claims work as")
     parser.add_argument("--lease", type=int, help="Seconds an agent session lasts before it must be renewed")
+    parser.add_argument("--to", help="Directory skill-export writes the agent protocol into")
+    parser.add_argument("--layout", choices=["plain", "claude", "copilot"], default="plain",
+                        help="Where skill-export places the protocol: beside the destination, under .claude/skills, or with a Copilot instructions pointer")
+    parser.add_argument("--check", action="store_true", help="For skill-export, report whether a vendored copy is current without writing anything")
     parser.add_argument("--title", default="Repository JSON validation")
     parser.add_argument("--decision", choices=["approve", "reject"])
     args = parser.parse_args()
@@ -345,6 +349,18 @@ def main():
             if journal is not None: journal.close()
         print(canonical(report).decode())
         if report.get('status') == 'blocked': raise SystemExit(2)
+        return
+    if args.command == 'skill-export':
+        from .contracts import Rejected, canonical
+        from .skill import export
+        if not args.to:
+            parser.error('skill-export requires the --to directory it writes into')
+        try:
+            report = export(args.to, args.layout, args.check)
+        except (Rejected, OSError) as exc:
+            parser.error('Skill export refused: ' + str(exc))
+        print(canonical(report).decode())
+        if report['status'] == 'stale': raise SystemExit(2)
         return
     if args.command == 'agent-serve':
         from .agent_service import AgentService

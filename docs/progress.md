@@ -1,5 +1,14 @@
 # Roadmap progress — September 16, 2026
 
+The [agent protocol context milestone](agent-protocol-context.md) publishes how to work
+through this control plane as plain Markdown an agent container can be given. The tools that
+run agents disagree about where such text lives, not about what it says, so there is one
+protocol in two files — a short always-loaded core and a reference read on demand — and
+`skill-export` places them for a Claude-style loader, for Copilot CLI or as a vendored copy,
+with `--check` for an image that carries one. Tests compare every state, role, route, field
+and lease bound in the text against the code it describes. The text explains the boundary and
+is no part of it: approvals, roles and refusals are unchanged.
+
 The [agent API milestone](agent-api.md) turns role-scoped claiming from a convention into a
 boundary. An agent container held a lease only because it had the control plane installed
 and the store mounted, so it could have claimed any role or written the evidence directly.
