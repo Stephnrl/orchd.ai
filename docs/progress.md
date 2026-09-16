@@ -16,6 +16,13 @@ returned as a receipt rather than raised. It is not yet wired into the task work
 `PR_CREATED` still requires a simulated receipt, and admitting a real one there is a separate
 deliberate step.
 
+Issue intents are now staged, approved and reserved in the GitHub journal alongside pull
+requests, which closes the one link the dispatcher was missing: it accepts a request matching a
+hash, and that hash is now reachable from an approval a human gave rather than asserted beside
+it. Approval evidence differs by family, since an issue has no patch, test or review to be
+approved against — it has the specification a human confirmed and the search that found nothing
+already tracking the work — and neither envelope is accepted for the other family.
+
 The [GitHub issue milestone](github-issues.md) adds the intent a project manager needs
 to track work where the work lives. Jira already modelled Epics, Stories, Tasks and a link to
 a GitHub issue by number; nothing modelled the issue, so the number had no origin. Issue

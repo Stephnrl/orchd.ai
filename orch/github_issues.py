@@ -249,6 +249,22 @@ def preview_issue(intent, profile, capture):
     return {"kind": "GitHubIssuePreview", "binding": binding, "sha256": digest(binding), **FLAGS}
 
 
+def issue_scope(intent, profile, capture, expected_sha256):
+    """Everything needed to reconstruct this preview, so a journal can hold it.
+
+    The preview is derived rather than trusted: a journal stores the inputs and recomputes
+    the preview on every read, so a stored scope that no longer produces the preview it
+    claims is refused instead of acted on. That is the same property the pull-request scope
+    has, reached the other way round because an issue preview needs its capture to exist.
+    """
+    preview = preview_issue(intent, profile, capture)
+    if preview["sha256"] != expected_sha256:
+        raise Rejected("Expected GitHub issue preview required")
+    return {"kind": "GitHubIssueScope", "schema_version": "1.0.0", "intent": intent,
+            "profile": profile, "capture": capture, "preview": preview,
+            "preview_sha256": expected_sha256, "read_plan": read_plan(intent, profile)}
+
+
 def reconcile_issue(intent, profile, capture):
     """After an uncertain dispatch, find the one issue this operation created.
 

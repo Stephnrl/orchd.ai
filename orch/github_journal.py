@@ -27,6 +27,33 @@ def bound_scope(intent, allowed_repository, repository_id):
     return {"preview": preview, "repository_id": repository_id}
 
 
+def issue_family(scope):
+    return isinstance(scope, dict) and scope.get('kind') == 'GitHubIssueScope'
+
+
+def validated_scope(scope):
+    """The scope only when it still reconstructs to itself, whichever family it is.
+
+    A pull-request scope stores its preview and recovers the intent from it; an issue scope
+    stores the inputs and recomputes the preview, because an issue preview cannot exist
+    without the capture it was checked against. Either way a stored scope that no longer
+    produces what it claims is refused rather than acted on.
+    """
+    if issue_family(scope):
+        from .github_issues import issue_scope
+        expected = issue_scope(scope['intent'], scope['profile'], scope['capture'], scope['preview_sha256'])
+        if canonical(scope) != canonical(expected):
+            raise Rejected("Invalid journal scope binding")
+        return expected
+    validated_intent(scope)
+    return scope
+
+
+def scope_intent(scope):
+    """The intent a scope holds, wherever that family keeps it."""
+    return scope['intent'] if issue_family(scope) else validated_intent(scope)
+
+
 def validated_intent(scope):
     """Recover intent only when the entire stored preview matches its reconstruction."""
     binding = scope['preview']['binding']
@@ -112,7 +139,7 @@ class GitHubJournal:
             if row['scope'] is None:
                 raise Rejected("Stored scope exceeds byte limit")
             scope = json.loads(row['scope'])
-            intent = validated_intent(scope)
+            intent = scope_intent(validated_scope(scope))
             if (canonical(scope).decode() != row['scope']
                     or digest(scope) != row['sha256'] or intent['task_id'] != row['task_id']
                     or intent['operation_id'] != row['operation_id']):
@@ -158,8 +185,15 @@ class GitHubJournal:
         record = self.get(operation_id)
         if record['sha256'] != expected_sha256 or record['state'] != 'uncertain':
             raise Rejected("Reconciliation requires the expected scope and an uncertain reservation")
-        intent = validated_intent(record['scope'])
-        assessment = reconcile_pull_request(intent, intent['repository'], record['scope']['repository_id'], observations)
+        scope = record['scope']
+        if issue_family(scope):
+            # An issue names itself in its own body, so its reconciliation is the codec's:
+            # observations are the capture of the reads that look for the operation marker.
+            from .github_issues import reconcile_issue
+            assessment = reconcile_issue(scope['intent'], scope['profile'], observations)
+        else:
+            intent = validated_intent(scope)
+            assessment = reconcile_pull_request(intent, intent['repository'], scope['repository_id'], observations)
         binding = {"schema_version": "1.0.0", "operation_id": record['operation_id'],
                    "task_id": record['task_id'], "scope_sha256": record['sha256'],
                    "state": record['state'], "reserved_at": record['reserved_at'],
@@ -195,7 +229,16 @@ class GitHubJournal:
     def stage(self, intent, allowed_repository, repository_id):
         if self.read_only:
             raise Rejected("Journal is read-only")
-        scope = bound_scope(intent, allowed_repository, repository_id)
+        return self._stage_scope(bound_scope(intent, allowed_repository, repository_id), intent)
+
+    def stage_issue(self, intent, profile, capture, expected_preview_sha256):
+        """Hold an issue intent the way a pull request is held: once, fenced, and reserved once."""
+        from .github_issues import issue_scope
+        if self.read_only:
+            raise Rejected("Journal is read-only")
+        return self._stage_scope(issue_scope(intent, profile, capture, expected_preview_sha256), intent)
+
+    def _stage_scope(self, scope, intent):
         encoded = canonical(scope)
         if len(encoded) > MAX_SCOPE_BYTES:
             raise Rejected("GitHub journal scope exceeds byte limit")

@@ -154,6 +154,18 @@ record saying an effect may exist. An `outbound_dispatch` deployment gate passes
 credential is configured and the broker is a separate OS account, since a credential on the
 orchestrator's own account is readable by everything the orchestrator runs.
 
+Issue intents are now held the way pull requests are. The dispatcher sends only a request
+matching a given sha256, but nothing recorded which hash a human approved; an issue intent now
+lives in the same journal with one live operation per task, an immutable scope and a
+reservation consumed exactly once, so the approved scope contains the preview, the preview
+contains the request, and the hash the dispatcher accepts is reachable from the approval. The
+two families store a scope differently because they must — a pull request keeps its preview and
+recovers the intent, an issue keeps its inputs and recomputes the preview, since an issue
+preview cannot exist without the capture it was checked against — and either way a scope that
+no longer reconstructs to what it claims is refused. Approval evidence follows what is being
+approved: a patch, test and review for a pull request, a confirmed specification and a
+duplicate search for an issue, and neither family's envelope is accepted for the other's.
+
 [GitHub issues as intents](github-issues.md) close the gap between the two halves of
 tracking work. Jira actions modelled Epics, Stories, Tasks, Epic and issue links and a
 `github_link` naming an issue by number, while the only GitHub intent was a pull request, so
