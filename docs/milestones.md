@@ -130,7 +130,15 @@ role and that role is the one the task's next step needs. The wire is five fixed
 request and reply contracts, HMAC verified before any JSON is parsed, replies signed with the
 secret that authenticated them and bound to the route and nonce they answer.
 
-[Outbound dispatch](outbound-dispatch.md) gives this control plane its first and only way
+[Outbound dispatch](outbound-dispatch.md) also closes the loop those codecs were written
+for. Every one of them prepares a read plan naming exactly what must be observed before
+acting, and until the `fetch` route nothing could perform one, so a preview needed a person
+to fetch each URL by hand and paste the JSON back. A fetch is not approved, because nothing
+it does changes anything; its fence is that only GETs, only to the credential's origin, at
+most eight of them, bounded and parsed as strict JSON, are performed, and a write smuggled
+among the reads is refused before any of them run. The capture comes back in exactly the
+shape the codec that asked expects, and that codec refuses one whose reads or hash answer a
+different plan. It gives this control plane its first and only way
 to reach something outside it, on the broker rather than in an agent container. A credential
 mounted into an agent would make every approval above it decorative, because the container
 could use it whenever it liked while the evidence recorded one approved call; the broker

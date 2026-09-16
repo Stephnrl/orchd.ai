@@ -29,6 +29,7 @@ returns `uncertain`, which is what reconciliation exists to resolve.
 """
 import hashlib
 import http.client
+import json
 import os
 from pathlib import Path
 import re
@@ -41,6 +42,8 @@ from .contracts import Rejected, canonical, digest, now, redact
 VERSION = "1.0.0"
 MAX_RESPONSE = 65536
 MAX_TOKEN = 512
+MAX_READS = 8
+MAX_CAPTURE = 65536
 TIMEOUT = 30
 METHODS = ("POST", "PATCH", "PUT")
 # The broker adds authentication. A request that carries its own is either confused about
@@ -134,6 +137,92 @@ def checked_request(request, expected_sha256, credential):
     if redact(encoded) != encoded:
         raise Rejected("A dispatch request must not contain a recognized secret")
     return origin
+
+
+def _json(raw):
+    """Parsed strictly: no duplicate keys, no NaN or Infinity, UTF-8 only."""
+    def unique(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise Rejected("Duplicate key in a fetched response")
+            value[key] = item
+        return value
+
+    def invalid(_):
+        raise Rejected("Non-JSON number in a fetched response")
+
+    try:
+        return json.loads(raw.decode("utf-8"), object_pairs_hook=unique, parse_constant=invalid)
+    except (ValueError, UnicodeError) as exc:
+        raise Rejected("A fetched response was not JSON") from exc
+
+
+def checked_reads(requests, credential):
+    """The reads a plan asks for, each one a GET to the origin this credential is for."""
+    if not isinstance(requests, dict) or not 1 <= len(requests) <= MAX_READS:
+        raise Rejected("A read plan asks for 1 to " + str(MAX_READS) + " reads")
+    for name, read in requests.items():
+        if not isinstance(name, str) or not re.fullmatch(r"[a-z_]{1,64}", name):
+            raise Rejected("Unsupported read name")
+        if not isinstance(read, dict) or set(read) - {"method", "url", "headers"} or "url" not in read:
+            raise Rejected("Unsupported read shape")
+        if read.get("method", "GET") != "GET":
+            # Reads have no effect, which is the only reason this route needs no approval.
+            # A write smuggled in here would have one.
+            raise Rejected("A fetch reads; it does not " + str(read.get("method")))
+        headers = read.get("headers", {})
+        if not isinstance(headers, dict):
+            raise Rejected("Unsupported read headers")
+        for header in headers:
+            if not isinstance(header, str) or header.lower() in FORBIDDEN_HEADERS:
+                raise Rejected("A read may not carry its own authentication")
+        if origin_of(read["url"]) != credential["origin"]:
+            raise Rejected("This credential is not for " + origin_of(read["url"]))
+    return requests
+
+
+def fetch(plan_sha256, requests, credential):
+    """Perform a read plan and return the capture its codec expects.
+
+    Reads are why this exists at all: every codec here prepares a plan naming exactly what
+    must be observed, and until something could perform one, a preview needed a person to
+    fetch each URL by hand and paste the JSON back. Nothing is approved here because nothing
+    is changed; the fence is that only GETs, only to the credential's origin, are performed.
+
+    The capture carries the plan hash it was asked for. The broker cannot check that hash —
+    it does not hold the plan — but the codec that does will refuse a capture whose reads or
+    hash do not match, so a capture cannot be passed off as answering a different question.
+    """
+    if not isinstance(plan_sha256, str) or not re.fullmatch("[0-9a-f]{64}", plan_sha256):
+        raise Rejected("A fetch needs the sha256 of the plan it answers")
+    checked_reads(requests, credential)
+    responses, total = {}, 0
+    for name, read in requests.items():
+        parts = urlsplit(read["url"])
+        headers = dict(read.get("headers", {}))
+        headers["Authorization"] = "Bearer " + credential["token"]
+        connection = _connect(credential["origin"])
+        try:
+            connection.request("GET", parts.path + ("?" + parts.query if parts.query else ""), None, headers)
+            answer = connection.getresponse()
+            status, raw = answer.status, answer.read(MAX_RESPONSE + 1)
+        except (OSError, http.client.HTTPException) as exc:
+            # A read that did not happen is simply absent; nothing was changed by trying.
+            raise Rejected("Could not read " + name) from exc
+        finally:
+            connection.close()
+        if len(raw) > MAX_RESPONSE:
+            raise Rejected("The response to " + name + " exceeds the read budget")
+        total += len(raw)
+        if total > MAX_CAPTURE:
+            raise Rejected("This plan's responses exceed the capture budget")
+        responses[name] = {"url": read["url"],
+                           # Never followed, so a 3xx is reported as what it is and the
+                           # codec refuses it rather than reading a redirect's body.
+                           "redirected": 300 <= status < 400,
+                           "status": status, "body": _json(raw) if raw else None}
+    return {"schema_version": VERSION, "plan_sha256": plan_sha256, "responses": responses}
 
 
 def _connect(origin):

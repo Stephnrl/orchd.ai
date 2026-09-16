@@ -52,7 +52,10 @@ human.
 agent container holds a secret and a socket instead of the store, the agent it is comes from
 the secret that signed the request, and the roles it may claim come from the service's own
 registry.
-[Outbound dispatch](docs/outbound-dispatch.md) is the one path that actually sends a
+[Outbound dispatch](docs/outbound-dispatch.md) also performs the read plans every codec
+here prepares, which nothing could do before: a preview needed a person to fetch each URL by
+hand and paste the JSON back. A fetch needs no approval because it changes nothing, and its
+fence is that only GETs, only to the credential's origin, are performed. It is the one path that actually sends a
 prepared request, and it lives on the broker because the credential does: an agent holds a
 secret that proves which agent it is and grants nothing, while the broker under its own OS
 account holds what can change the world. The credential names the origin it may go to, the
