@@ -33,6 +33,13 @@ staging it in a journal with an approval, and assembling an epic with its storie
 as one reviewed bundle, are the next steps, and reaching a real GitHub still needs the
 least-privilege token and destination-bound broker that remain gated.
 
+The [derived issue milestone](derived-issues.md) closes the join between what an agent
+writes and what reaches a repository, by removing the step where anything could be written. An
+issue intent is a pure function of the confirmed specification, so an agent cannot put
+arbitrary text in a repository even indirectly, and its operation identifier is derived too,
+so a retry resumes the operation it was rather than starting a new one. Verified against the
+real API through preview without creating anything.
+
 The [agent work milestone](agent-work.md) makes an agent container able to do the project
 manager's step rather than only hold it. Everything built before it was operator-driven: a
 container could authenticate, claim, renew and release, and nothing else. Three routes now
