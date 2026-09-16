@@ -1,4 +1,13 @@
-# Roadmap progress — September 15, 2026
+# Roadmap progress — September 16, 2026
+
+The [task ownership milestone](task-ownership.md) removes the single obstacle to more
+than one worker: a store-wide dispatcher lock that let exactly one process advance anything
+at a time. Task work now holds that task's own lock, so two workers can advance two
+different tasks at once and never the same one, while a durable claim records who holds a
+task and survives a crash that a kernel lock cannot. Whole-store maintenance still excludes
+every task mutation, and takeover never repeats interrupted work: an unresolved operation
+still forces explicit reconciliation. Scheduling, admission slots and conflict handling
+remain unimplemented, and nothing here starts a second worker.
 
 The [intent revision milestone](journal-revision.md) closes the other half of the same
 contract: a task whose prepared scope went stale, because the base branch moved or the plan
@@ -101,7 +110,7 @@ an assumption that more UI features alone will make the system production-ready.
 | 8. Jira Data Center integration | Consolidated offline comments, Epic/Story/Task preparation, relationships, transitions, GitHub associations, durable journal, review/preflight and recovery; live deployment/admission remains blocked |
 | 9. Credential broker/auth hardening | Local session expiry, rotation/revocation, stale-client clearing, strict HTTP parsing and broker shared-secret rotation implemented; production provider credentials/SSO remain |
 | 10. OWASP/ACS hardening and adversarial tests | Substantial boundary tests, consolidated source-bound offline release verification and an executable criterion-to-test mapping; independent deployment review and broader live-system testing remain |
-| 11. Concurrent workers | Deferred; current execution is deliberately bounded |
+| 11. Concurrent workers | Foundation implemented: one owner per task, per-task advancement locks and recorded claims; scheduling, admission and conflicts remain |
 | 12. Advanced orchestration | Bounded serial fixture batches implemented; broader scheduling and orchestration remain to be scoped |
 
 PRs opened while developing this repository are collaboration through development
@@ -173,6 +182,10 @@ pilot acceptance now runs in the consolidated offline/full release lane.
    rotation/revocation, safe UI reconnection and strict HTTP parsing. Corporate identity,
    credential brokering and independent deployment review remain separate gates.
 5. Define and implement bounded concurrent-worker and advanced-orchestration milestones.
+   [Task ownership](task-ownership.md) is the first of these and is implemented: the
+   dispatcher no longer serialises the whole store, so the remaining work is bounded
+   parallel admission, then conflicts, budgets and scheduling. It is a single-host
+   mechanism; multi-host operation needs a different primitive and its own review.
    [Serial workflow batches](workflow-batches.md) now provide operator-reviewed task
    lists, snapshot fencing, durable reservations/checkpoints and explicit interruption
    review. They run existing fixture tasks serially and preserve every approval pause;

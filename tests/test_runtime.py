@@ -15,7 +15,7 @@ from orch.engine import Engine
 from orch.execution import Executor
 from orch.maintenance import audit, backup, collect_orphans, restore
 from orch.process import capture
-from orch.storage import Store
+from orch.storage import OWNERSHIP_VERSION, Store
 
 
 class RuntimeTests(unittest.TestCase):
@@ -161,9 +161,10 @@ class RuntimeTests(unittest.TestCase):
             db.close()
             store = Store(base)
             try:
-                self.assertEqual(store.db.execute("PRAGMA user_version").fetchone()[0], 2)
+                self.assertEqual(store.db.execute("PRAGMA user_version").fetchone()[0], OWNERSHIP_VERSION)
                 row = store.db.execute("SELECT generation,status FROM operations WHERE id='operation'").fetchone()
                 self.assertEqual(tuple(row), (1, "done"))
+                self.assertEqual(store.owners(), [])   # The registry arrives empty, owning nothing.
             finally:
                 store.close()
 

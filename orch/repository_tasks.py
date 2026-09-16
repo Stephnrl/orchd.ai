@@ -143,7 +143,7 @@ class RepositoryTasks:
 
     def approve(self, task, request_id, decision, expected_revision, principal='local-operator'):
         if decision not in ('approve', 'reject') or type(expected_revision) is not int: raise Rejected('Invalid repository approval')
-        with self.store.exclusive(), self.store.transaction():
+        with self.engine.deciding(task), self.store.transaction():
             state, context = self.store.task(task)
             self._scope(state, context)
             if state['revision'] != expected_revision or not state['pending_approval'] or state['pending_approval']['id'] != request_id:
@@ -168,7 +168,7 @@ class RepositoryTasks:
             return accepted
 
     def advance(self, task, expected_snapshot=None):
-        with self.store.exclusive():
+        with self.engine.advancing(task):
             state, context = self.store.task(task)
             if expected_snapshot is not None: raise Rejected('Repository tasks are not admitted to fixture batches')
             if state['state'] == 'IMPLEMENTING':
@@ -240,7 +240,7 @@ class RepositoryTasks:
                 'runtime_checked': False, 'next_step': 'Recover using this task revision; missing journals or changed runtime will block cleanup.'}
 
     def recover(self, task, expected_revision, principal='local-operator'):
-        with self.store.exclusive():
+        with self.engine.deciding(task):
             state, context = self.store.task(task)
             plan, scope = self._scope(state, context)
             if type(expected_revision) is not int or state['revision'] != expected_revision or state['state'] != 'BLOCKED' or not state['active_operation_id']:
@@ -270,7 +270,7 @@ class RepositoryTasks:
     def cancel(self, task, expected_revision, reason, principal='local-operator'):
         if not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 500 or redact(reason) != reason or type(expected_revision) is not int:
             raise Rejected('Invalid repository cancellation')
-        with self.store.exclusive(), self.store.transaction():
+        with self.engine.deciding(task), self.store.transaction():
             state, context = self.store.task(task)
             self._scope(state, context)
             if state['revision'] != expected_revision or state['active_operation_id'] or 'CANCELLED' not in EDGES.get(state['state'], set()):
@@ -281,7 +281,7 @@ class RepositoryTasks:
             return self.engine.task(task)
 
     def renew(self, task, request_id, expected_revision, principal='local-operator'):
-        with self.store.exclusive(), self.store.transaction():
+        with self.engine.deciding(task), self.store.transaction():
             state, context = self.store.task(task)
             if (state['state'] != 'AWAITING_ACTION_APPROVAL' or type(expected_revision) is not int or state['revision'] != expected_revision
                     or not state['pending_approval'] or state['pending_approval']['id'] != request_id):

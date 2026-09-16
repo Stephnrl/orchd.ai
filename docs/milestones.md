@@ -122,6 +122,15 @@ its chain already retains and fails closed when a predecessor cannot be read, wh
 property a hand-made replacement journal cannot have. Backup comparison reports succession
 changes, so a snapshot taken before retirement no longer claims to describe the journal.
 
+[Task ownership](task-ownership.md) begins the concurrent-worker phase by removing what
+made it impossible: one store-wide lock that every engine mutation took. Task work now
+holds a per-task lock, operator decisions hold that lock and the store-wide one, and
+whole-store maintenance stops new claims and then refuses while a task is genuinely being
+advanced. A durable claim names the worker, survives the crash that releases its lock, is
+reported by recovery diagnostics, and is taken over with a recorded event. Takeover repeats
+no work: an operation left unresolved still requires explicit reconciliation. Parallel
+admission, conflicts and scheduling are not implemented, and no second worker is started.
+
 [Intent revision](journal-revision.md) completes that lifecycle. A prepared operation whose
 scope has gone stale is withdrawn against its retained digest and an audited reason, so its
 task can be prepared again under a new operation identifier, while the withdrawn record, its

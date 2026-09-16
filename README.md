@@ -38,6 +38,9 @@ attempt for any task its chain already retains, deleting no record.
 [Intent revision](docs/journal-revision.md) withdraws a prepared operation whose scope went
 stale so its task can be prepared again under a new operation ID, while a consumed attempt
 stays where it is and must be reconciled.
+[Task ownership](docs/task-ownership.md) replaces the store-wide dispatcher lock with one
+owner per task, so two workers can advance two different tasks at once and never the same
+one, and a worker that dies leaves a recorded claim instead of a silently reusable task.
 [The consolidated Jira package](docs/jira-integration.md) adds Epic/Story/Task preparation,
 relationships, transitions, GitHub associations and review/preflight diagnostics, with
 synthetic examples and a complete offline acceptance scenario. Live activation remains gated.
