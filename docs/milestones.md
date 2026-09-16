@@ -190,6 +190,16 @@ have written is the one the second searches for, so reconciliation finds the iss
 rather than filing a second. An unconfirmed draft implies nothing, and a specification too
 large to render is refused rather than trimmed.
 
+[A provider for each role](provider-roster.md) replaces the single engine-wide factory that
+made every invocation record the same provider and model whatever role produced it. A roster
+maps a role to the provider that answers for it, with one answering for the rest, and two
+properties make it worth more than the mapping: it cannot introduce a provider the engine would
+otherwise refuse, because configuration must not become the way past admission, and it cannot
+claim a model the provider does not run, because an invocation naming a model that never
+answered is false evidence. Since no real provider is admitted, the refusal is the useful part:
+the roster an operator intends can be written and checked now, and it says exactly which
+provider or model has not been admitted.
+
 [The loop, and the container that runs it](agent-container.md) is the first client that has
 had to decide what to do next rather than be told. The loop decides everything about working
 and nothing about the work, which a `Decider` supplies; it renews before working rather than

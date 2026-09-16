@@ -16,9 +16,20 @@ from .provider import MockProvider
 from .cli_provider import FixtureCliProvider
 
 
+def chosen_roster(args, parser):
+    """The roster an operator supplied, refused by name rather than ignored if it is wrong."""
+    from .contracts import Rejected
+    from .github_preview import load_intent
+    from .provider_roster import load as load_roster
+    try:
+        return load_roster(load_intent(args.providers) if args.providers else None)
+    except (Rejected, OSError) as exc:
+        parser.error("Roster rejected: " + str(exc))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "broker-fetch", "broker-dispatch", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-serve", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "skill-export", "task-open", "spec-draft", "spec-ask", "spec-answer", "spec-confirm", "spec-show", "task-issue-intent", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "status", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "deployment-check", "github-preview", "github-issue-read-plan", "github-issue-preview", "github-issue-reconcile", "github-issue-duplicate-plan", "github-issue-duplicates", "github-issue-stage", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
+    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "broker-fetch", "broker-dispatch", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-serve", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "skill-export", "task-open", "spec-draft", "spec-ask", "spec-answer", "spec-confirm", "spec-show", "task-issue-intent", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "status", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "provider-roster", "deployment-check", "github-preview", "github-issue-read-plan", "github-issue-preview", "github-issue-reconcile", "github-issue-duplicate-plan", "github-issue-duplicates", "github-issue-stage", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -32,6 +43,7 @@ def main():
     parser.add_argument("--expected-revision", type=int)
     parser.add_argument("--reason", help="One-line audited operator reason for cancel or a live pilot-reclaim (1–500 characters)")
     parser.add_argument("--provider", choices=["github_copilot_cli", "abc_binary_ai_placeholder"])
+    parser.add_argument("--providers", help="JSON roster naming which provider answers for which role")
     parser.add_argument("--executable", help="Absolute provider executable path for read-only inventory")
     parser.add_argument("--expected-sha256", help="Expected executable, operation scope, preview or evidence bundle digest")
     parser.add_argument("--runtime-report", help="Existing runtime evidence to revalidate for deployment-check; may query Docker")
@@ -297,7 +309,8 @@ def main():
                 finally: store.close()
             else:
                 engine = Engine(args.data, Executor('trusted-fixture' if args.trusted_fixture else 'docker', args.image),
-                                provider_factory=FixtureCliProvider if args.fixture_provider == 'cli' else MockProvider, broker_service=broker_service)
+                                provider_factory=FixtureCliProvider if args.fixture_provider == 'cli' else MockProvider,
+                                broker_service=broker_service, providers=chosen_roster(args, parser))
                 batches = Batches(engine)
                 if args.command == 'batch-create': report = batches.create(load_intent(args.intent))
                 elif args.command == 'batch-run': report = batches.run(args.batch_id, args.expected_sha256, args.expected_revision)
@@ -1143,6 +1156,18 @@ def main():
             parser.error("GitHub intent rejected; check its schema, scope and content")
         print(json.dumps(preview, indent=2))
         return  # Success means a preview was prepared, never a remote effect.
+    if args.command == "provider-roster":
+        from .contracts import Rejected, canonical
+        from .github_preview import load_intent
+        from .provider_roster import load as load_roster
+        try:
+            roster = load_roster(load_intent(args.providers) if args.providers else None)
+        except (Rejected, OSError) as exc:
+            # The refusal is the useful part: it names the provider or model that has not
+            # been admitted, which is exactly what an operator planning one needs to know.
+            parser.error("Roster rejected: " + str(exc))
+        print(canonical(roster.report()).decode())
+        return
     if args.command == "status":
         from .contracts import Rejected, canonical
         from .status import report
@@ -1243,7 +1268,7 @@ def main():
         finally:
             store.close()
         return
-    engine = Engine(args.data, Executor("trusted-fixture" if args.trusted_fixture or args.command in ("cancel", "renew-approval", "retry-cleanup") else "docker", args.image), provider_factory=FixtureCliProvider if args.fixture_provider == "cli" else MockProvider, broker_service=broker_service)
+    engine = Engine(args.data, Executor("trusted-fixture" if args.trusted_fixture or args.command in ("cancel", "renew-approval", "retry-cleanup") else "docker", args.image), provider_factory=FixtureCliProvider if args.fixture_provider == "cli" else MockProvider, broker_service=broker_service, providers=chosen_roster(args, parser))
     try:
         if args.command == "serve":
             serve(engine, args.port)

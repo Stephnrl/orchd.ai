@@ -66,6 +66,7 @@ python scripts/module_map.py
 | `orch/process.py` | Bounded capture for trusted executables; never a general shell interface. |
 | `orch/provider.py` | Deterministic proposal-only implementation of the Phase 1 AgentProvider. |
 | `orch/provider_fixture.py` | Stdlib-only fixture CLI: no tools, network, workspace editing or database access. |
+| `orch/provider_roster.py` | Which provider answers for which role, instead of one provider answering for all. |
 | `orch/readiness.py` | Portable, fail-closed runtime evidence. Never installs Docker or pulls images. |
 | `orch/release.py` | Fixed offline acceptance lanes and portable, non-authorizing evidence. |
 | `orch/repository_tasks.py` | Task-kernel admission for the bounded pilot; no provider or remote action authority. |

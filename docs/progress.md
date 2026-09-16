@@ -40,6 +40,12 @@ arbitrary text in a repository even indirectly, and its operation identifier is 
 so a retry resumes the operation it was rather than starting a new one. Verified against the
 real API through preview without creating anything.
 
+The [provider roster milestone](provider-roster.md) makes per-role providers expressible:
+a junior on one, a lead on another, with each invocation recording what actually answered
+rather than whatever the engine was constructed with. A roster cannot admit a provider or claim
+a model that did not run, so until a real provider is admitted its refusal names what is
+missing, which is what an operator planning a deployment needs.
+
 The [agent loop milestone](agent-container.md) gives a container something to run and the
 protocol its first real client. It found that a refusal carried no guidance about retrying
 although the protocol said it did, that the image did not build, that a bind-mounted secret

@@ -78,6 +78,10 @@ it. Jira already modelled the ticket and the link; nothing modelled the issue.
 letting an agent write into a repository: the issue is derived from the specification a person
 confirmed, so it says what was signed and cannot say anything else, and its operation
 identifier is derived too, so an interrupted dispatch resumes rather than filing a second.
+[A provider for each role](docs/provider-roster.md) lets a junior run on one provider and a
+lead on another, with each invocation recording what actually answered. A roster may not
+introduce a provider the engine would refuse, nor claim a model that did not run, so the roster
+you intend can be written now and its refusal names exactly what is not admitted yet.
 [The loop, and the container that runs it](docs/agent-container.md) is the first thing that
 has had to obey the protocol rather than be scripted through it — find work, hold it, renew
 while working, release on shutdown, tell a refusal from an outage — with the decision about
