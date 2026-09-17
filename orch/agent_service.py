@@ -29,7 +29,7 @@ from .contracts import Rejected, Transient, canonical
 from .engine import Engine
 from .execution import Executor
 from .maintenance import real_path
-from . import agent_queue, agent_sessions, task_drafts
+from . import agent_queue, agent_sessions, consultations, task_drafts
 
 VERSION = "1.0.0"
 ROUTES = {"agent-identity": ("AgentIdentityRequest", "AgentIdentityReply"),
@@ -43,7 +43,13 @@ ROUTES = {"agent-identity": ("AgentIdentityRequest", "AgentIdentityReply"),
           "agent-draft": ("AgentDraftRequest", "AgentDraftReply"),
           "agent-ask": ("AgentAskRequest", "AgentAskReply"),
           # Finding work, which needs no task because it is how a task is found.
-          "agent-available": ("AgentAvailableRequest", "AgentAvailableReply")}
+          "agent-available": ("AgentAvailableRequest", "AgentAvailableReply"),
+          # Questions, which are not work: they hold nothing, advance nothing and approve
+          # nothing. See docs/consultations.md for why they are not tasks with two extra
+          # states, and why nothing here can turn one into a task.
+          "agent-consultations": ("AgentConsultationsRequest", "AgentConsultationsReply"),
+          "agent-consult-take": ("AgentConsultTakeRequest", "AgentConsultTakeReply"),
+          "agent-consult-answer": ("AgentConsultAnswerRequest", "AgentConsultAnswerReply")}
 # Routes that act on a task the agent must already hold.
 WORK = ("agent-spec", "agent-draft", "agent-ask")
 MAX_AGENTS = 32
@@ -206,6 +212,22 @@ class AgentService:
                 listed = agent_queue.available(engine, self.agents[agent]["roles"])
                 return {**base, **{key: listed[key] for key in
                                    ("available", "count", "admitted", "admission_bound", "at_bound")}}
+            if route == "agent-consultations":
+                # Scoped to this agent's roles for the same reason available work is: a
+                # listing of questions it could never answer tells it about things that were
+                # asked out of its hearing.
+                offered = consultations.open_for(engine.store, self.agents[agent]["roles"])
+                return {**base, "consultations": offered, "count": len(offered)}
+            if route in ("agent-consult-take", "agent-consult-answer"):
+                # The roles come from this service's configuration, never from the body, so
+                # an agent cannot answer as a role it was not enrolled for.
+                roles = self.agents[agent]["roles"]
+                held = body["consultation_id"]
+                if route == "agent-consult-take":
+                    report = consultations.take(engine.store, held, agent, roles)
+                else:
+                    report = consultations.answer(engine.store, held, agent, body["answer"], roles)
+                return {**base, "consultation": report}
             if route == "agent-sessions":
                 listed = agent_sessions.sessions(engine.store)
                 return {**base, "sessions": listed["sessions"], "held": listed["held"]}

@@ -96,6 +96,15 @@ class AgentClient:
     def available(self):
         return self.call("agent-available")
 
+    def consultations(self):
+        return self.call("agent-consultations")
+
+    def consult_take(self, consultation):
+        return self.call("agent-consult-take", {"consultation_id": consultation})
+
+    def consult_answer(self, consultation, reply):
+        return self.call("agent-consult-answer", {"consultation_id": consultation, "answer": reply})
+
     def specification(self, task):
         return self.call("agent-spec", {"task_id": task})
 

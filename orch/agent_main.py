@@ -37,6 +37,10 @@ class Idle(Decider):
     def consider(self, draft):
         return ("release", None)
 
+    def advise(self, question):
+        """Nothing, which is what a decider with no intelligence behind it should say."""
+        return None
+
 
 def load(path):
     """A `module:attribute` decider, refused clearly rather than imported hopefully."""
@@ -125,7 +129,8 @@ def main(environment=None):
         # retry. Report it as a line, not as a traceback a container log will bury.
         print("orchd agent: " + str(exc), file=sys.stderr, flush=True)
         return 1
-    print("orchd agent " + name + " stopped; " + str(runner.worked) + " steps", flush=True)
+    print("orchd agent " + name + " stopped; " + str(runner.worked) + " steps, "
+          + str(runner.answered) + " questions answered", flush=True)
     return 0
 
 

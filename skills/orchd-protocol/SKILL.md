@@ -46,6 +46,8 @@ orchd agent-claim --task TASK --role ROLE --lease 900   # ask to hold one task
 orchd agent-spec --task TASK                            # read where the work has got to
 orchd agent-renew --task TASK --lease 900               # while you are still working
 orchd agent-release --task TASK                         # when you are done, or stopping
+orchd agent-consultations                              # questions for your role
+orchd agent-consult-answer --consultation ID --answer T # an opinion, not a decision
 ```
 
 Claim before you do anything to a task, renew well before the lease ends, and release even

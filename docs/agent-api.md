@@ -59,9 +59,19 @@ the point.
 
 ## The wire
 
-Five fixed POST routes on 127.0.0.1 — `agent-identity`, `agent-claim`, `agent-renew`,
-`agent-release`, `agent-sessions` — each with a request and reply contract in
-`contracts/agent-v1.schema.json`. The service checks the Host header, refuses `Origin`,
+Twelve fixed POST routes on 127.0.0.1, each with a request and reply contract in
+`contracts/agent-v1.schema.json`:
+
+| Group | Routes |
+| --- | --- |
+| Who am I | `agent-identity` |
+| Holding a task | `agent-claim`, `agent-renew`, `agent-release`, `agent-sessions` |
+| Finding work | `agent-available` |
+| Doing the work | `agent-spec`, `agent-draft`, `agent-ask` |
+| [Questions](consultations.md) | `agent-consultations`, `agent-consult-take`, `agent-consult-answer` |
+
+The work routes require a live lease on the task named, and the question routes require
+nothing but a role: a consultation is not a task, holds nothing, and changes nothing. The service checks the Host header, refuses `Origin`,
 `Transfer-Encoding` and `Content-Encoding`, bounds the body, and **verifies the HMAC before
 parsing any JSON**. Replies are signed with the secret that authenticated the request, so an
 agent mid-rotation can still verify its own answer, and each reply carries the nonce of the

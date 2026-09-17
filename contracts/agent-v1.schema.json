@@ -823,6 +823,222 @@
           "type": "boolean"
         }
       }
+    },
+    "Consultation": {
+      "$ref": "#/$defs/Id"
+    },
+    "AgentConsultationsRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-consultations"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        }
+      }
+    },
+    "AgentConsultationsReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "consultations",
+        "count",
+        "live_authorized",
+        "retry_allowed"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-consultations"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "consultations": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "consultation_id",
+              "role",
+              "question",
+              "about",
+              "asked_at"
+            ],
+            "properties": {
+              "consultation_id": {
+                "$ref": "#/$defs/Consultation"
+              },
+              "role": {
+                "$ref": "#/$defs/Role"
+              },
+              "question": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000
+              },
+              "about": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Task"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "asked_at": {
+                "$ref": "#/$defs/Moment"
+              }
+            }
+          }
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "live_authorized": {
+          "const": false
+        },
+        "retry_allowed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "AgentConsultTakeRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "consultation_id"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-consult-take"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "consultation_id": {
+          "$ref": "#/$defs/Consultation"
+        }
+      }
+    },
+    "AgentConsultTakeReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "consultation",
+        "live_authorized",
+        "retry_allowed"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-consult-take"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "consultation": {
+          "type": "object"
+        },
+        "live_authorized": {
+          "const": false
+        },
+        "retry_allowed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "AgentConsultAnswerRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "consultation_id",
+        "answer"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-consult-answer"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "consultation_id": {
+          "$ref": "#/$defs/Consultation"
+        },
+        "answer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 5000
+        }
+      }
+    },
+    "AgentConsultAnswerReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "nonce",
+        "consultation",
+        "live_authorized",
+        "retry_allowed"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "kind": {
+          "const": "agent-consult-answer"
+        },
+        "nonce": {
+          "$ref": "#/$defs/Id"
+        },
+        "consultation": {
+          "type": "object"
+        },
+        "live_authorized": {
+          "const": false
+        },
+        "retry_allowed": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }

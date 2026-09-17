@@ -212,6 +212,21 @@ build, a bind-mounted secret arrives world-accessible on Docker Desktop and is r
 refused, a container cannot reach a loopback service there at all, and one that started early
 died instead of waiting.
 
+[Asking an agent a question](consultations.md) adds the one interaction the workflow had no
+room for: "what are your inputs if I deployed this?" changes nothing, so there is nothing to
+approve, and an approval gate on a question would teach people to click through gates. That
+argument holds only while a consultation cannot become an effect, so it is not a task with two
+extra states — it has its own table, its own small lifecycle and no route into the state
+machine, and a test parses the module and fails on an import of the engine or a call that
+advances, approves or claims anything. An answer is model output and is recorded as an opinion,
+in the reports and in words under it in the window; nothing an agent says there can approve,
+advance or change a task, and a question that names one gets read-only context. The role a
+question was put to is the only role that may answer it, checked from the service's own
+configuration; the loop asks its decider before taking a question, so a decider with nothing to
+say does not leave one held for a quarter of an hour. Text shaped like a credential is redacted
+rather than refused, because the first real use is reviewing terraform and terraform is full of
+lines that look like secrets — and the record says it was altered.
+
 Agents are now visible whether or not they hold anything. Holding a task was the only way an
 agent appeared, so a container running and correctly idle looked exactly like one that crashed;
 presence is derived from the authenticated requests each agent already makes, needs no

@@ -43,6 +43,12 @@ const execute = code => vm.runInContext(code, context);
   assert.ok(settled, 'connecting loads the attention panel');
   settled.resolve({status:200, ok:true, json:async () => ({tasks:{waiting_on_a_person:[]},
     agents:{holding:[], lapsed_count:0}, work:{at_bound:false}, summary:{tasks_active:0}})});
+  // Connecting also loads the questions panel; that request is drained by name too, so the
+  // indices below stay about what they are testing rather than about how many panels exist.
+  for (let i=0; i<20 && !pending.some(p => p.path === '/consultations'); i++) await Promise.resolve();
+  const questions = pending.find(p => p.path === '/consultations');
+  assert.ok(questions, 'connecting loads the questions panel');
+  questions.resolve({status:200, ok:true, json:async () => ({consultations:[], count:0, open:0, answered:0})});
   pending[2].resolve({status:401, ok:false});
   await first;
   assert.equal(execute('token'), 'second');
@@ -50,9 +56,9 @@ const execute = code => vm.runInContext(code, context);
 
   const rotating = execute('sessionAction("rotate")');
   const newToken = 'r'.repeat(43);
-  pending[5].resolve({status:200, ok:true, json:async () => ({session:newToken, status:{generation:2, expires_in_seconds:120}})});
-  for (let i=0; i<10 && pending.length<7; i++) await Promise.resolve();
-  pending[6].resolve({status:200, ok:true, json:async () => ({items:[], next:null})});
+  pending[6].resolve({status:200, ok:true, json:async () => ({session:newToken, status:{generation:2, expires_in_seconds:120}})});
+  for (let i=0; i<10 && pending.length<8; i++) await Promise.resolve();
+  pending[7].resolve({status:200, ok:true, json:async () => ({items:[], next:null})});
   await rotating;
   assert.equal(execute('token'), newToken);
   assert.match(element('session-status').textContent, /generation 2/);
@@ -61,7 +67,7 @@ const execute = code => vm.runInContext(code, context);
   // Headers can arrive before rotation while the body is still being read.
   let finishBody;
   const delayed = execute('api("/session")');
-  pending[7].resolve({status:200, ok:true, json:() => new Promise(resolve => { finishBody = resolve; })});
+  pending[8].resolve({status:200, ok:true, json:() => new Promise(resolve => { finishBody = resolve; })});
   for (let i=0; i<10 && !finishBody; i++) await Promise.resolve();
   assert.equal(typeof finishBody, 'function');
   execute('token="newer"');

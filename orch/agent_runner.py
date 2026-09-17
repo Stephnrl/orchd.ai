@@ -57,6 +57,17 @@ class Decider:
     def consider(self, draft):
         raise NotImplementedError
 
+    def advise(self, question):
+        """What this agent thinks about a question. A string, or None to say nothing.
+
+        Separate from `consider` because it is a different kind of answer: `consider` decides
+        what happens to a task, and this decides nothing at all. Returning None, or raising
+        `Rejected`, leaves the question for another agent rather than recording an empty
+        opinion. The default says nothing, so a decider written before consultations existed
+        keeps working and simply never answers one.
+        """
+        return None
+
 
 class Runner:
     """One container's working life: find work, hold it, do it, hand it back."""
@@ -74,6 +85,7 @@ class Runner:
         self.held = None
         self.renewed_at = 0.0
         self.worked = 0
+        self.answered = 0
 
     # Shutdown
 
@@ -100,8 +112,13 @@ class Runner:
         return completed
 
     def round(self):
-        """One pass: take work if there is any, do a step of it, or wait."""
+        """One pass: answer a question, take work if there is any, do a step of it, or wait."""
         if self.held is None:
+            # Questions first. A task in a queue is waiting; a person who asked a question is
+            # waiting at their desk, and answering changes nothing, so it cannot be the thing
+            # that goes wrong while somebody is watching.
+            if self.consult():
+                return
             if not self.take():
                 return
         if self.stopping:
@@ -138,6 +155,44 @@ class Runner:
             self.renewed_at = self.clock()
             return True
         self.wait(IDLE_SECONDS)
+        return False
+
+    def consult(self):
+        """Answer one question put to this role, or report that there was none to answer.
+
+        Nothing here claims a task, renews a lease or releases one, because a consultation is
+        not a task: it has no owner in the registry, it counts against no admission bound,
+        and answering it advances nothing. The loop is the same shape as taking work and that
+        is the whole resemblance.
+        """
+        try:
+            offered = self.client.consultations()
+        except Rejected:
+            # Not knowing is different from being told no, and a service that is down has no
+            # work to offer either. Wait, and let the next round ask again.
+            self.wait(OUTAGE_SECONDS)
+            return True
+        for row in offered["consultations"]:
+            if row["role"] != self.role:
+                continue
+            try:
+                reply = self.decider.advise(row)
+            except Rejected:
+                # This agent cannot answer this one. Another may; leave it where it is.
+                continue
+            if not reply:
+                continue
+            try:
+                # Taking *after* thinking rather than before. Taking first would mean a
+                # decider with nothing to say leaves the question held for a quarter of an
+                # hour. Two agents that both think about one question waste a little work;
+                # only one of them can record an answer, which is what taking is for.
+                self.client.consult_take(row["consultation_id"])
+                self.client.consult_answer(row["consultation_id"], reply)
+            except Rejected:
+                continue
+            self.answered += 1
+            return True
         return False
 
     def step(self):
