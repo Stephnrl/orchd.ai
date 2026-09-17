@@ -87,7 +87,12 @@ has had to obey the protocol rather than be scripted through it — find work, h
 while working, release on shutdown, tell a refusal from an outage — with the decision about
 what to write supplied from outside. Running it found that the protocol named an authority for
 retrying that did not exist on a refusal, which it now does.
-[One answer instead of six](docs/status.md) puts what needs a person first, in the operator
+[One answer instead of six](docs/status.md) also shows which agents are there: presence is
+derived from the authenticated requests each agent already makes rather than from a heartbeat
+it could forget, so a container that is running and idle is no longer indistinguishable from
+one that stopped. `agent-enrol` declares an agent without anybody having to remember a
+`chmod`, and the window can open work an agent will actually take. It puts what needs a person
+first, in the operator
 window and on the command line: a state reads as a sentence rather than an identifier, work
 stopped on someone is separated from work in progress, and every row opens the task it names.
 It reports what is happening now — tasks by state,

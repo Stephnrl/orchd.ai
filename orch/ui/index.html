@@ -38,6 +38,12 @@
           <button id="batch-abandon" disabled>Abandon selected entry</button>
         </section>
       </details>
+      <section id="agents" class="card" aria-labelledby="agents-title">
+        <div class="section-head"><h2 id="agents-title">Agents</h2><button id="agents-refresh">Refresh</button></div>
+        <p id="agents-summary" role="status" aria-live="polite">No agent registry was given to this server.</p>
+        <ol id="agent-list" class="roster"></ol>
+        <p class="hint">Presence comes from each agent’s own authenticated requests. Starting and stopping containers stays outside this window.</p>
+      </section>
       <section id="attention" class="card attention" aria-labelledby="attention-title">
         <div class="section-head"><h2 id="attention-title">What needs you now</h2><button id="attention-refresh">Refresh</button></div>
         <p id="attention-summary" role="status" aria-live="polite">Loading the current state of this workspace.</p>
@@ -46,7 +52,7 @@
         <p class="hint">Nothing here changes anything. Each entry opens the task it names so you can inspect the evidence before deciding.</p>
       </section>
       <div class="layout">
-        <aside class="card"><div class="section-head"><h2>Tasks</h2><button id="refresh">Refresh</button></div><form id="create"><label for="title">New fixture task</label><input id="title" maxlength="200" value="Greeting fixture" required><p class="hint">Creating confirms the fixed request: replace the greeting with “hello world”.</p><button class="primary">Create task</button></form><nav id="tasks" aria-label="Tasks"></nav><button id="more-tasks" hidden>Load more tasks</button></aside>
+        <aside class="card"><div class="section-head"><h2>Tasks</h2><button id="refresh">Refresh</button></div><form id="create"><label for="title">Give the team work</label><input id="title" maxlength="200" placeholder="Add a rate limit to the public API" required><label class="check"><input id="create-draft" type="checkbox" checked>Let an agent specify it</label><p class="hint">Checked, this opens a task with no specification: the project manager writes one and you confirm it. Unchecked, it creates the greeting fixture with its fixed request.</p><button class="primary">Create task</button></form><nav id="tasks" aria-label="Tasks"></nav><button id="more-tasks" hidden>Load more tasks</button></aside>
         <section id="empty" class="card empty"><h2>Your workflow, step by step.</h2><p>Select a task or create a new fixture to get started.</p></section>
         <section id="detail" hidden>
           <div class="card"><button id="refresh-task" disabled>Refresh task</button><p id="task-refresh-status" role="status" aria-live="polite">Select a task to load its current state.</p></div>

@@ -54,6 +54,11 @@ service there, and that an early-starting container died rather than waiting. A 
 proves the loop, not the thinking: no provider is admitted and everything past a confirmed
 specification is still the fixture.
 
+Agents now appear whether or not they hold work, with presence derived from their own
+authenticated requests rather than a heartbeat, and the one whose task is waiting on a person
+marked apart from the rest. Declaring an agent is a command rather than two hand-written files
+and a remembered `chmod`, and the window can open the kind of task an agent will take.
+
 The operator window now opens with what needs a person, in words rather than state
 identifiers, with work in progress kept separate and each row opening its own task. It reads
 the status endpoint and grants nothing.
