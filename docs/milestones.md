@@ -212,6 +212,22 @@ build, a bind-mounted secret arrives world-accessible on Docker Desktop and is r
 refused, a container cannot reach a loopback service there at all, and one that started early
 died instead of waiting.
 
+[Running the agents from the window](agent-lifecycle.md) closes the gap between a window
+that could see agents and a terminal that had to start them. It is the milestone that lets a
+window start a process, so most of it is about what it cannot start: a request contributes one
+thing, which enrolled agent, and every route refuses a payload outright. What an agent may run
+is a declaration on the host with a closed set of fields, each with a grammar, and the two
+things that are not declarable are the ones that would matter — the secret to mount is derived
+from the registry, because a declaration that can name any host file can read any host file
+through a container, and nothing follows the image in the argv, because the entry point is the
+loop. An image is pinned to bytes when it is declared, including a tag built locally, since a
+tag moves and a declaration that moves with it is not a declaration. Docker is asked what is
+running rather than the store being told, because a second copy drifts the first time
+something happens out of band. The pairing of presence with the container is what the window
+gains: a container that is up while nothing calls in is broken rather than idle, and before
+this it looked exactly like one nobody had started. Refusals are reported with a reason an
+operator can act on and never with the daemon's own words, which carry host paths.
+
 [Asking an agent a question](consultations.md) adds the one interaction the workflow had no
 room for: "what are your inputs if I deployed this?" changes nothing, so there is nothing to
 approve, and an approval gate on a question would teach people to click through gates. That

@@ -112,6 +112,17 @@ present.
 An agent whose task is stopped on a person is marked separately, because that is the one an
 operator should notice: it is not stuck, it is waiting for them.
 
+## Running them
+
+Each row has **Run** and **Stop**, acting on the container that agent was declared to run on
+this host. Nothing typed in the window becomes part of a command: the only thing the request
+carries is which enrolled agent, and what it runs is a file beside its secret. The whole
+design of that is in [running the agents from the window](agent-lifecycle.md).
+
+It adds one state presence alone could not give. Presence says whether an agent is calling in;
+the container says whether it is there. A container that is **up while nothing calls in** is
+broken rather than idle, and the roster marks it the way it marks a task waiting on you.
+
 ## Asking one of them a question
 
 The roster's **Ask** button points the question form at that agent's role, and the panel below
