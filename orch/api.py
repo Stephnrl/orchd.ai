@@ -24,6 +24,12 @@ class BundleUpload:
     sha256: str
 
 
+# Who the window's actions are attributed to. This server authenticates one local operator
+# session and there is no user directory behind it, so every consultation asked through the
+# window is that one principal. The command line takes --principal for anything else.
+OPERATOR = "local-operator"
+
+
 def page(query):
     if set(query) - {"after", "limit"} or any(len(v) != 1 for v in query.values()):
         raise Rejected("Invalid pagination")
@@ -83,6 +89,28 @@ class Application:
                     return 200, batches.abandon(parts[1], payload['scope_sha256'], payload['expected_revision'],
                                                 payload['task_id'], payload['expected_snapshot_sha256'])
                 return 405, {'error': 'Unsupported batch route or method'}
+            if parts[0] == 'consultations':
+                # Questions, which are not tasks: see docs/consultations.md. Nothing under
+                # this route creates a task, an approval or a request to do anything.
+                from . import consultations
+                if method == 'GET' and parts == ['consultations']:
+                    if payload or query:
+                        raise Rejected('Consultation listing takes no fields')
+                    return 200, consultations.listed(self.engine.store)
+                if query:
+                    raise Rejected('Unexpected consultation query')
+                if method == 'POST' and parts == ['consultations']:
+                    if (not isinstance(payload, dict) or set(payload) - {'role', 'question', 'about'}
+                            or not {'role', 'question'} <= set(payload)):
+                        raise Rejected('A consultation is a role and a question')
+                    return 201, consultations.ask(self.engine.store, payload['role'], payload['question'],
+                                                  OPERATOR, payload.get('about') or None)
+                if method == 'POST' and len(parts) == 3 and parts[2] in ('withdraw', 'close'):
+                    if payload:
+                        raise Rejected('Withdrawing or closing a consultation takes no fields')
+                    act = consultations.withdraw if parts[2] == 'withdraw' else consultations.close
+                    return 200, act(self.engine.store, parts[1], OPERATOR)
+                return 405, {'error': 'Unsupported consultation route or method'}
             if method == 'POST' and parts == ['repository-tasks']:
                 if query or not isinstance(payload, dict) or set(payload) != {'title', 'intent'}:
                     raise Rejected('Explicit repository task title and intent required')

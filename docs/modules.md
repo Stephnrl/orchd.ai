@@ -28,6 +28,7 @@ python scripts/module_map.py
 | `orch/broker_process.py` | Trusted broker execution shared by the short-lived subprocess and the loopback service. |
 | `orch/broker_service.py` | Loopback broker service so the host action broker can run under its own OS account. |
 | `orch/cli_provider.py` | Provider-neutral JSON adapter; only the bundled fixture transport is admitted. |
+| `orch/consultations.py` | A question to a role, and the answer it gets. Deliberately not a task. |
 | `orch/contracts.py` | Schema validation and canonical, task-bound contract helpers. |
 | `orch/copilot.py` | Documented Copilot text protocol preparation; no live executable launcher. |
 | `orch/deployment.py` | Deployment gap assessment; this report cannot authorize a live provider. |

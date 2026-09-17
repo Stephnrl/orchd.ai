@@ -44,6 +44,14 @@
         <ol id="agent-list" class="roster"></ol>
         <p class="hint">Presence comes from each agent’s own authenticated requests. Starting and stopping containers stays outside this window.</p>
       </section>
+      <section id="consult" class="card" aria-labelledby="consult-title">
+        <div class="section-head"><h2 id="consult-title">Ask an agent</h2><button id="consult-refresh">Refresh</button></div>
+        <p>A question is not a task. Nothing is approved here because nothing will happen: an answer is what an agent thinks, recorded as an opinion, and acting on it is a separate decision with its own gates.</p>
+        <form id="consult-form"><label for="consult-role">Who are you asking</label><select id="consult-role"></select><label for="consult-question">Your question</label><textarea id="consult-question" maxlength="4000" rows="3" required placeholder="I have this repo with terraform. What are your inputs if I deployed this?"></textarea><label class="check"><input id="consult-about" type="checkbox">About the selected task</label><button class="primary">Ask</button></form>
+        <p id="consult-status" role="status" aria-live="polite">No questions asked.</p>
+        <ol id="consult-list" class="queue"></ol>
+        <p class="hint">An agent answers only questions put to a role it was enrolled for. Nothing an agent says here can approve, advance or change a task.</p>
+      </section>
       <section id="attention" class="card attention" aria-labelledby="attention-title">
         <div class="section-head"><h2 id="attention-title">What needs you now</h2><button id="attention-refresh">Refresh</button></div>
         <p id="attention-summary" role="status" aria-live="polite">Loading the current state of this workspace.</p>

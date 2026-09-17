@@ -27,6 +27,7 @@ from .agent_queue import available
 from .agent_sessions import AGENT_ROLES, holder, role_for
 from datetime import datetime
 
+from . import consultations
 from .contracts import Rejected, now
 from .engine import TERMINAL
 from .github_journal import GitHubJournal
@@ -171,7 +172,7 @@ def report(engine, github_journal=None, jira_journal=None, registry=None):
     """Everything at once, for the operator who wants one answer rather than six."""
     result = {"kind": "OrchdStatus", "checked_at": now(), "tasks": tasks(engine.store),
               "agents": agents(engine.store), "enrolled": enrolled(engine.store, registry),
-              "work": work(engine),
+              "work": work(engine), "consultations": consultations.summary(engine.store),
               "artifacts": artifacts(engine.store), "journals": [],
               "live_authorized": False, "retry_allowed": False}
     for path, family in ((github_journal, "GitHub"), (jira_journal, "Jira")):
@@ -185,7 +186,12 @@ def report(engine, github_journal=None, jira_journal=None, registry=None):
         "agents_holding": result["agents"]["held"],
         "work_available": result["work"]["available"],
         "at_bound": result["work"]["at_bound"],
-        "attention": bool(waiting or result["work"]["at_bound"] or result["agents"]["lapsed_count"]),
+        # An answer nobody has read is waiting for a person as surely as an approval is,
+        # and unlike an approval it is finished work sitting unlooked-at.
+        "answers_to_read": result["consultations"]["answered"],
+        "questions_open": result["consultations"]["open"],
+        "attention": bool(waiting or result["work"]["at_bound"] or result["agents"]["lapsed_count"]
+                          or result["consultations"]["answered"]),
         "agents_enrolled": len(result["enrolled"]),
         "agents_present": sum(1 for row in result["enrolled"] if row["state"] != "not seen"),
     }

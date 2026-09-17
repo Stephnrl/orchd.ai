@@ -39,7 +39,7 @@ function rows() {
     detail: item.children[1].children[1].textContent,
     when: item.children[2].textContent,
     highlighted: item.className,
-    opens: item.children.length > 3 ? item.children[3].textContent : null}));
+    buttons: item.children.slice(3).map(control => control.textContent)}));
 }
 
 (async () => {
@@ -67,8 +67,9 @@ function rows() {
   assert.equal(listed[1].dot, "dot gone");
   assert.equal(listed[1].when, "never", "an agent never seen says so rather than showing a time");
   assert.equal(listed[2].dot, "dot working");
-  assert.equal(listed[2].opens, "Open task", "a working agent offers the task it holds");
-  assert.equal(listed[0].opens, null, "an idle agent holds nothing to open");
+  assert.deepEqual(listed[2].buttons, ["Open task", "Ask"], "a working agent offers the task it holds");
+  assert.deepEqual(listed[0].buttons, ["Ask"],
+                   "an idle agent holds nothing to open, and is still the one you would ask");
   assert.match(element("agents-summary").textContent, /2 of 3 present\./);
 
   // The case that should catch the eye.
@@ -95,6 +96,17 @@ function rows() {
   element("create-draft").checked = false;
   element("create").handlers.submit({preventDefault() {}});
   assert.equal(context.sent.draft, false, "unchecked still creates the greeting fixture");
+
+  // Asking the agent in front of you: the button puts its role into the question form,
+  // and asks nothing by itself.
+  await withStatus(report([
+    {agent: "lead-devops", roles: ["lead_planner"], last_seen: recently, holding: "task-1",
+     state: "working", needs_you: false}]));
+  assert.deepEqual(rows()[0].buttons, ["Open task", "Ask"]);
+  run("globalThis.sent = null; api = (route, body) => { globalThis.sent = [route, body]; return Promise.resolve({}); };");
+  element("agent-list").children[0].children[4].handlers.click();
+  assert.equal(context.sent, null, "choosing who to ask asks nothing");
+  assert.equal(element("consult-role").value, "lead_planner", "the form is pointed at that agent's role");
 
   console.log("PASS: presence separates idle from gone, an agent waiting on you is marked, and the window can open work an agent will take");
 })().catch(error => { console.error(error); process.exitCode = 1; });

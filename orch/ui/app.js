@@ -57,7 +57,9 @@ function clearSessionView() {
   selected = snapshot = approval = recovery = evidenceDownload = null;
   cursor = 0; taskNext = recordNext = null; tasksLoading = recordsLoading = false;
   names.clear(); resetClaimReview(); clearBundleReview("No bundle checked.");
-  for (const id of ["tasks", "records", "events", "evidence-links", "approval-links"]) $(id).replaceChildren();
+  for (const id of ["tasks", "records", "events", "evidence-links", "approval-links", "consult-list"]) $(id).replaceChildren();
+  $("consult-question").value = ""; $("consult-about").checked = false;
+  $("consult-status").textContent = "No questions asked.";
   for (const id of ["state-json", "evidence-json", "approval-json", "maintenance-json", "maintenance-summary", "task-title", "task-id", "recovery-json"]) $(id).textContent = "";
   $("reviewed").checked = $("recovery-reviewed").checked = $("cleanup-reviewed").checked = false;
   $("bundle-file").value = $("bundle-expected").value = $("token").value = "";
@@ -418,6 +420,11 @@ function renderAgents(report) {
     item.className = row.needs_you ? "asking" : "";
     item.append(dot, who, when);
     if (row.holding) item.append(button("Open task", async () => { await select(row.holding); }));
+    item.append(button("Ask", async () => {
+      $("consult-role").value = row.roles[0];
+      const question = $("consult-question");
+      if (typeof question.focus === "function") question.focus();
+    }));
     list.append(item);
   }
   const present = declared.filter(row => row.state !== "not seen").length;
@@ -426,6 +433,77 @@ function renderAgents(report) {
     ? "No agent registry was given to this server. Start it with --agents to see them here."
     : present + " of " + declared.length + " present"
       + (asking ? ", and " + asking + " waiting on you." : ".");
+}
+
+// Questions and what came back. A question is not a task: there is no approval here, no
+// evidence record and no way from an answer into the workflow. See docs/consultations.md.
+const CONSULT_STATE = {asked: "Waiting for an agent to pick this up", answering: "An agent is writing an answer",
+                       answered: "Answered", withdrawn: "Withdrawn", closed: "Read"};
+let rolesFilled = false;
+function roleChoices() {
+  if (rolesFilled) return;
+  rolesFilled = true;
+  const select = $("consult-role");
+  for (const role of ["lead_planner", "project_manager", "junior", "reviewer", "guardian",
+                      "lead_clarifier", "test_runner", "orchestrator", "action_broker"]) {
+    const option = document.createElement("option");
+    option.value = role;
+    option.textContent = plain_role(role);
+    select.append(option);
+  }
+  select.value = "lead_planner";
+}
+function line(className, content) {
+  const element = document.createElement("div");
+  element.className = className;
+  element.textContent = content;
+  return element;
+}
+async function consultations() {
+  const version = epoch;
+  try {
+    const report = await api("/consultations");
+    if (version !== epoch) return;
+    const list = $("consult-list");
+    list.replaceChildren();
+    // Questions that are finished with — read, or taken back — stay in the store and leave
+    // the window. A panel that only grows is one people stop looking at, and neither of
+    // those has anything left for anybody to do.
+    const done = ["closed", "withdrawn"];
+    const shown = report.consultations.filter(row => !done.includes(row.state)).reverse();
+    for (const row of shown) {
+      const item = document.createElement("li");
+      item.className = row.state === "answered" ? "answered" : "";
+      const what = document.createElement("div");
+      what.className = "what";
+      what.append(line("name", "To the " + plain_role(row.role) + (row.about ? " \u00b7 about " + row.about.slice(0, 12) : "")),
+                  line("why", row.question));
+      if (row.answer) {
+        what.append(line("answer", row.answer),
+                    line("hint", (row.agent || "An agent") + " answered. This is an opinion: it approves nothing and changes nothing."));
+      } else {
+        what.append(line("hint", CONSULT_STATE[row.state] || row.state));
+      }
+      if (row.redacted) what.append(line("hint", "Text that looked like a credential was replaced before this was stored."));
+      const age = document.createElement("span");
+      age.className = "waited";
+      age.textContent = waited(row.answered_at || row.asked_at);
+      item.append(what, age);
+      if (row.state === "answered") item.append(button("Mark read", () => settle(row.consultation_id, "close")));
+      else if (row.state === "asked" || row.state === "answering") item.append(button("Withdraw", () => settle(row.consultation_id, "withdraw")));
+      list.append(item);
+    }
+    const unread = report.consultations.filter(row => row.state === "answered").length;
+    const open = report.open;
+    $("consult-status").textContent = !report.count ? "No questions asked."
+      : (unread ? unread + " answer(s) to read. " : "") + (open ? open + " question(s) waiting for an agent." : "Nothing is waiting for an agent.");
+  } catch (error) {
+    if (version === epoch) $("consult-status").textContent = "Could not read the questions: " + error.message;
+  }
+}
+async function settle(consultation, what) {
+  await api("/consultations/" + encodeURIComponent(consultation) + "/" + what, {});
+  await consultations();
 }
 
 async function attention() {
@@ -452,6 +530,7 @@ async function attention() {
     if (waiting.length) parts.push(waiting.length === 1 ? "1 thing needs you." : waiting.length + " things need you.");
     if (report.work.at_bound) parts.push("As many tasks are advancing as this workspace allows; new work will wait.");
     if (report.agents.lapsed_count) parts.push(report.agents.lapsed_count + " lease(s) lapsed without being released.");
+    if (report.summary.answers_to_read) parts.push(report.summary.answers_to_read + " answer(s) to read.");
     if (!parts.length) parts.push(report.summary.tasks_active ? "Nothing needs you. " + report.summary.tasks_active + " task(s) in progress." : "Nothing needs you, and nothing is in progress.");
     renderAgents(report);
     $("attention-summary").textContent = parts.join(" ");
@@ -627,7 +706,7 @@ $("integrity-report").addEventListener("click", () => maintenanceReport("integri
 $("connect").addEventListener("submit", async e => {
   e.preventDefault(); token = $("token").value.trim(); $("token").value = "";
   const connectingToken = token;
-  try { await tasks(); if (connectingToken !== token) return; $("login").hidden = true; $("workspace").hidden = false; $("disconnect").hidden = false; notice("Connected to the local operator session."); attention().catch(() => {}); }
+  try { await tasks(); if (connectingToken !== token) return; $("login").hidden = true; $("workspace").hidden = false; $("disconnect").hidden = false; notice("Connected to the local operator session."); roleChoices(); attention().catch(() => {}); consultations().catch(() => {}); }
   catch (error) { if (connectingToken === token) { token = ""; notice(error.message); } }
 });
 $("disconnect").addEventListener("click", () => location.reload());
@@ -652,8 +731,20 @@ async function sessionAction(action) {
   finally { busy = false; controls(); }
 }
 for (const action of ["check", "rotate", "revoke"]) $("session-" + action).addEventListener("click", () => sessionAction(action));
-$("refresh").addEventListener("click", () => tasks().then(attention).catch(e => notice(e.message)));
+$("refresh").addEventListener("click", () => tasks().then(attention).then(consultations).catch(e => notice(e.message)));
 $("attention-refresh").addEventListener("click", () => attention().catch(e => notice(e.message)));
+$("consult-refresh").addEventListener("click", () => consultations().catch(e => notice(e.message)));
+$("consult-form").addEventListener("submit", e => {
+  e.preventDefault();
+  mutate(async () => {
+    const body = {role: $("consult-role").value, question: $("consult-question").value};
+    // Read-only context, and only when there is a task selected to be context for.
+    if ($("consult-about").checked && selected) body.about = selected;
+    await api("/consultations", body);
+    $("consult-question").value = "";
+    await consultations();
+  }).catch(e => notice(e.message));
+});
 $("agents-refresh").addEventListener("click", () => attention().catch(e => notice(e.message)));
 $("refresh-task").addEventListener("click", () => {
   if (busy || !token || !selected) return;

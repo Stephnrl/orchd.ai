@@ -101,6 +101,13 @@ available by role, quotas and journal capacity — without taking the store-wide
 answers while everything is busy rather than refusing until it stops.
 [What each module is for](docs/modules.md) maps the package, generated from each module's own
 opening sentence so it cannot describe something the code stopped doing.
+[Asking an agent a question](docs/consultations.md) is the one interaction that is not work:
+a question changes nothing, so it has no approval, and it has no approval only because it
+cannot become a task — its own table, its own lifecycle and no route into the state machine,
+with a test that reads the module's syntax rather than its promises. An answer is recorded as
+an opinion and authorizes nothing; the role a question was put to is the only role that may
+answer it; and text shaped like a credential is redacted rather than refused, because
+reviewing terraform is the point of it.
 [Finding the work](docs/agent-queue.md) lets a container discover what is its to do rather
 than being handed identifiers: tasks whose next step belongs to a role it is enrolled for and
 which nobody holds, as identifiers and state only, with the admission bound alongside. Building

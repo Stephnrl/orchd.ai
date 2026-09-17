@@ -70,6 +70,9 @@ only if you are implementing a client.
 | `agent-spec` | `task_id` | `draft` |
 | `agent-draft` | `task_id`, `specification`, optional `expected_revision` | `draft` |
 | `agent-ask` | `task_id`, `questions`, optional `expected_revision` | `draft` |
+| `agent-consultations` | nothing | `consultations`, `count` |
+| `agent-consult-take` | `consultation_id` | `consultation` |
+| `agent-consult-answer` | `consultation_id`, `answer` | `consultation` |
 
 `agent-available` is how you find work in the first place. It lists tasks whose next step
 belongs to a role you are enrolled for and which nobody is holding — identifiers and state
@@ -81,6 +84,19 @@ than working through a list you cannot act on.
 **holding** the task. A lease is only granted for the role that task's next step needs, so
 holding one is what says the work is yours to do. A `draft` tells you the state, the task
 revision, the specification's `spec_sha256` and any `pending_questions`.
+
+`agent-consultations`, `agent-consult-take` and `agent-consult-answer` are questions rather
+than work, and they hold nothing: a consultation is not a task, has no lease, counts against
+no bound, and answering one advances nothing. A person asked a role — perhaps yours — something
+like "what are your inputs if I deployed this?", and an answer is your opinion, recorded as an
+opinion. It approves nothing, and nothing you write there can change any task, including one
+the question names as context.
+
+Think first and take second. Take a consultation when you have an answer ready, then answer
+it: taking one you end up with nothing to say leaves it stuck for fifteen minutes. If two of
+you think about the same question, only the one that takes it can answer, which is what taking
+is for. An answer is at most 5000 characters, because it has to fit in one request whatever
+alphabet it is written in. Say less rather than being refused: it is an opinion, not a report.
 
 Every reply also carries `retry_allowed` and `live_authorized`. A `session` describes one
 held task: `task_id`, `agent`, `role`, `kind`, `claimed_at`, `expires_at`, `revision`,

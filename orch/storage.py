@@ -15,10 +15,11 @@ AUDIT_RESERVE_BYTES = 4 * 1024 * 1024
 OWNERSHIP_VERSION = 3
 SESSION_VERSION = 4
 PRESENCE_VERSION = 5
+CONSULTATION_VERSION = 6
 # What a store migrates to. Name it once so a new schema step changes this line and the
 # accepted set, and never a number spelled out somewhere else.
-CURRENT_VERSION = PRESENCE_VERSION
-SUPPORTED_VERSIONS = (2, OWNERSHIP_VERSION, SESSION_VERSION, PRESENCE_VERSION)
+CURRENT_VERSION = CONSULTATION_VERSION
+SUPPORTED_VERSIONS = (2, OWNERSHIP_VERSION, SESSION_VERSION, PRESENCE_VERSION, CONSULTATION_VERSION)
 # How many tasks may be advancing at once in one store. Each advancing task can hold a
 # container, a workspace and a provider process, so this is a host-resource bound, not a
 # throughput target: work is refused before it starts rather than failing halfway and
@@ -83,6 +84,10 @@ class Store:
             # is indistinguishable from one that stopped an hour ago. Nothing is appended and
             # nothing is kept, so it carries no append-only trigger.
             self.db.execute("CREATE TABLE IF NOT EXISTS agent_presence(agent TEXT PRIMARY KEY, last_seen TEXT NOT NULL, route TEXT NOT NULL)")
+            # Questions and the answers they get. Deliberately not tasks and deliberately not
+            # referencing them: a consultation changes nothing, so it has no approval, and it
+            # has no approval only while it cannot become something that changes anything.
+            self.db.execute("CREATE TABLE IF NOT EXISTS consultations(id TEXT PRIMARY KEY, state TEXT NOT NULL, payload TEXT NOT NULL)")
             self.db.execute("PRAGMA user_version=%d" % CURRENT_VERSION)
         self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_execution_receipt ON records(task_id,kind,json_extract(payload,'$.operation_id')) WHERE kind IN ('PatchReceipt','TestReceipt','ExternalActionReceipt')")
         self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_invocation_receipt ON records(task_id,json_extract(payload,'$.invocation_id')) WHERE kind='AgentInvocationReceipt'")

@@ -112,6 +112,16 @@ present.
 An agent whose task is stopped on a person is marked separately, because that is the one an
 operator should notice: it is not stuck, it is waiting for them.
 
+## Asking one of them a question
+
+The roster's **Ask** button points the question form at that agent's role, and the panel below
+it shows what came back. A question is not a task and cannot become one; the whole design of
+that is in [asking an agent a question](consultations.md).
+
+The status report counts them, and an answer nobody has read counts as needing a person:
+finished work sitting unlooked-at is waiting on you as surely as an approval is. Marking one
+read is the only thing that clears it, which is why marking read exists at all.
+
 ## Declaring an agent
 
 ```sh

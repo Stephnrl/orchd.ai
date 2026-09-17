@@ -29,7 +29,7 @@ def chosen_roster(args, parser):
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "broker-fetch", "broker-dispatch", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-serve", "agent-enrol", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "skill-export", "task-open", "spec-draft", "spec-ask", "spec-answer", "spec-confirm", "spec-show", "task-issue-intent", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "status", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "provider-roster", "deployment-check", "github-preview", "github-issue-read-plan", "github-issue-preview", "github-issue-reconcile", "github-issue-duplicate-plan", "github-issue-duplicates", "github-issue-stage", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
+    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "broker-fetch", "broker-dispatch", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-serve", "agent-enrol", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "agent-consultations", "agent-consult-answer", "consult-ask", "consult-list", "consult-withdraw", "consult-close", "skill-export", "task-open", "spec-draft", "spec-ask", "spec-answer", "spec-confirm", "spec-show", "task-issue-intent", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "status", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "provider-roster", "deployment-check", "github-preview", "github-issue-read-plan", "github-issue-preview", "github-issue-reconcile", "github-issue-duplicate-plan", "github-issue-duplicates", "github-issue-stage", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
@@ -87,13 +87,18 @@ def main():
     parser.add_argument("--agents", help="Registry directory of agent role and secret files for agent-serve")
     parser.add_argument("--agent-endpoint", help="127.0.0.1:PORT of an agent service to call instead of opening the store")
     parser.add_argument("--agent-secret", help="This agent's secret file, for calling an agent service")
-    parser.add_argument("--role", help="Role an agent session claims work as")
+    parser.add_argument("--role", help="Role an agent session claims work as, or that a question is put to")
+    parser.add_argument("--consultation", help="The question being answered, withdrawn or closed")
+    parser.add_argument("--question", help="A question for a role, which is not a task and approves nothing")
+    parser.add_argument("--answer", help="An agent's opinion in reply to a question; it authorizes nothing")
+    parser.add_argument("--about", help="A task a question refers to, as read-only context")
     parser.add_argument("--lease", type=int, help="Seconds an agent session lasts before it must be renewed")
     parser.add_argument("--to", help="Directory skill-export writes the agent protocol into")
     parser.add_argument("--layout", choices=["plain", "claude", "copilot"], default="plain",
                         help="Where skill-export places the protocol: beside the destination, under .claude/skills, or with a Copilot instructions pointer")
     parser.add_argument("--check", action="store_true", help="For skill-export, report whether a vendored copy is current without writing anything")
-    parser.add_argument("--from", dest="source", help="JSON file holding a draft specification, questions or answers")
+    parser.add_argument("--from", dest="source", help="JSON file holding a draft specification, questions or answers; "
+                        "for consult-ask and agent-answer, a plain text file holding the question or the answer")
     parser.add_argument("--principal", help="Who a human boundary crossing is attributed to")
     parser.add_argument("--spec-sha256", help="The sha256 of the exact specification being confirmed")
     parser.add_argument("--title", default="Repository JSON validation")
@@ -565,6 +570,58 @@ def main():
             parser.error('Agent session rejected; check the task state, the role its next step needs, the holder and the lease')
         finally:
             if engine is not None: engine.close()
+        print(canonical(report).decode())
+        return
+    if args.command in ('consult-ask', 'consult-list', 'consult-withdraw', 'consult-close'):
+        # A question, which is not a task: nothing here opens one, approves one or advances
+        # one. See docs/consultations.md.
+        from . import consultations
+        from .contracts import Rejected, canonical
+        import sqlite3
+        listing = args.command == 'consult-list'
+        if not listing and not args.principal:
+            parser.error('Asking, withdrawing or closing a question requires the --principal it is attributed to')
+        if args.command == 'consult-ask' and not (args.role and (args.question or args.source)):
+            parser.error('consult-ask requires --role and either --question or the --from file holding it')
+        if args.command in ('consult-withdraw', 'consult-close') and not args.consultation:
+            parser.error('That command requires the --consultation it acts on')
+        engine = None
+        try:
+            engine = Engine(args.data, Executor('trusted-fixture' if args.trusted_fixture else 'docker', args.image))
+            if listing:
+                report = consultations.listed(engine.store)
+            elif args.command == 'consult-ask':
+                asked = args.question if args.question else Path(args.source).read_text(encoding='utf-8')
+                report = consultations.ask(engine.store, args.role, asked, args.principal, args.about)
+            elif args.command == 'consult-withdraw':
+                report = consultations.withdraw(engine.store, args.consultation, args.principal)
+            else:
+                report = consultations.close(engine.store, args.consultation, args.principal)
+        except (Rejected, OSError, sqlite3.Error):
+            parser.error('Consultation rejected; check the role a question may be put to, the consultation id and its state')
+        finally:
+            if engine is not None: engine.close()
+        print(canonical(report).decode())
+        return
+    if args.command in ('agent-consultations', 'agent-consult-answer'):
+        # The agent's side, and only through the service: answering opens no store, and which
+        # agent is answering comes from the secret that signed the request.
+        from .agent_client import AgentClient
+        from .contracts import Rejected, canonical
+        if not (args.agent_endpoint and args.agent_secret):
+            parser.error('Answering questions needs both --agent-endpoint and --agent-secret')
+        if args.command == 'agent-consult-answer' and not (args.consultation and (args.answer or args.source)):
+            parser.error('agent-consult-answer requires --consultation and either --answer or the --from file holding it')
+        try:
+            client = AgentClient(args.agent_endpoint, args.agent_secret)
+            if args.command == 'agent-consultations':
+                report = client.consultations()
+            else:
+                said = args.answer if args.answer else Path(args.source).read_text(encoding='utf-8')
+                client.consult_take(args.consultation)
+                report = client.consult_answer(args.consultation, said)
+        except (Rejected, OSError):
+            parser.error('Agent service rejected the request; check the endpoint, the secret, the role this agent may answer as and the consultation state')
         print(canonical(report).decode())
         return
     if args.command in ('github-journal-upgrade', 'github-journal-withdraw',
