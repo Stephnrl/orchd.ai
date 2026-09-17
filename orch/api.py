@@ -89,6 +89,23 @@ class Application:
                     return 200, batches.abandon(parts[1], payload['scope_sha256'], payload['expected_revision'],
                                                 payload['task_id'], payload['expected_snapshot_sha256'])
                 return 405, {'error': 'Unsupported batch route or method'}
+            if parts[0] == 'agents':
+                # Running the containers an operator declared. The only thing this route
+                # contributes to a command is which declared agent to act on; everything
+                # else comes from a file on the host. See docs/agent-lifecycle.md.
+                from . import agent_processes
+                if not self.agents:
+                    raise Rejected('This server was given no agent registry')
+                if query or payload:
+                    raise Rejected('Agent lifecycle routes take no fields')
+                if method == 'GET' and parts == ['agents']:
+                    return 200, agent_processes.processes(self.agents)
+                if method == 'POST' and len(parts) == 3 and parts[2] in ('start', 'stop'):
+                    act = agent_processes.start if parts[2] == 'start' else agent_processes.stop
+                    # A refusal is reported rather than raised: "it did not start, and here
+                    # is why" is what the operator needs to see, not a generic rejection.
+                    return 200, act(self.agents, parts[1])
+                return 405, {'error': 'Unsupported agent route or method'}
             if parts[0] == 'consultations':
                 # Questions, which are not tasks: see docs/consultations.md. Nothing under
                 # this route creates a task, an approval or a request to do anything.

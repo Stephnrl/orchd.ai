@@ -29,11 +29,11 @@ def chosen_roster(args, parser):
 
 def main():
     parser = argparse.ArgumentParser(description="Offline orchd.ai fixture workflow")
-    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "broker-fetch", "broker-dispatch", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-serve", "agent-enrol", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "agent-consultations", "agent-consult-answer", "consult-ask", "consult-list", "consult-withdraw", "consult-close", "skill-export", "task-open", "spec-draft", "spec-ask", "spec-answer", "spec-confirm", "spec-show", "task-issue-intent", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "status", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "provider-roster", "deployment-check", "github-preview", "github-issue-read-plan", "github-issue-preview", "github-issue-reconcile", "github-issue-duplicate-plan", "github-issue-duplicates", "github-issue-stage", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
+    parser.add_argument("command", choices=["broker-serve", "broker-check", "broker-rotate-secret", "broker-fetch", "broker-dispatch", "repository-task-create", "repository-task-run", "repository-task-approve", "agent-serve", "agent-enrol", "agent-claim", "agent-renew", "agent-release", "agent-sessions", "agent-declare", "agent-start", "agent-stop", "agent-processes", "agent-consultations", "agent-consult-answer", "consult-ask", "consult-list", "consult-withdraw", "consult-close", "skill-export", "task-open", "spec-draft", "spec-ask", "spec-answer", "spec-confirm", "spec-show", "task-issue-intent", "pilot-reconcile", "pilot-usage", "pilot-reclaim", "pilot-journal-audit", "pilot-journal-retire", "pilot-journal-chain", "pilot-journal-backup", "pilot-verify-journal-backup", "pilot-compare-journal-backup", "pilot-prepare", "pilot-inspect", "pilot-run", "pilot-abandon", "demo", "serve", "status", "history", "backup", "verify-backup", "restore", "gc", "storage-usage", "audit", "recover", "retry-cleanup", "cancel", "renew-approval", "doctor", "verify-runtime", "provider-check", "provider-roster", "deployment-check", "github-preview", "github-issue-read-plan", "github-issue-preview", "github-issue-reconcile", "github-issue-duplicate-plan", "github-issue-duplicates", "github-issue-stage", "github-check-refs", "github-reconcile", "github-stage", "github-inspect", "github-reconcile-journal", "github-journal-usage", "github-journal-audit", "github-journal-retire", "github-journal-chain", "github-journal-upgrade", "github-journal-withdraw", "github-journal-backup", "github-verify-journal-backup", "github-compare-journal-backup", "github-journal-recovery-drill", "github-approval-preview", "github-check-approval", "github-check-evidence", "github-assess-approval", "github-check-evidence-claims", "github-check-record-claims", "github-list-evidence-records", "github-resolve-evidence-selection", "github-export-evidence-bundle", "github-verify-evidence-bundle", "github-bundle-approval-preview", "github-assess-bundle-approval", "github-ref-observation-snapshot", "github-preflight", "github-ref-read-plan", "github-ref-transcript-snapshot", "github-recovery-read-plan", "github-reconcile-transcript", "jira-review-issue", "jira-comment-preview", "jira-comment-read-plan", "jira-reconcile-comments", "jira-stage", "jira-inspect", "jira-journal-usage", "jira-journal-audit", "jira-journal-retire", "jira-journal-chain", "jira-journal-upgrade", "jira-journal-withdraw", "jira-journal-read-plan", "jira-reconcile-journal", "jira-journal-backup", "jira-verify-journal-backup", "jira-compare-journal-backup", "jira-journal-recovery-drill", "jira-action-read-plan", "jira-action-preview", "jira-stage-action", "jira-approval-preview", "jira-check-approval", "jira-preflight-read-plan", "jira-preflight", "jira-deployment-check", "verify-release", "check-release", "batch-create", "batch-inspect", "batch-list", "batch-run", "batch-abandon"])
     parser.add_argument("--data", default=".runtime/phase2")
     parser.add_argument("--trusted-fixture", action="store_true", help="Local fixed test programs only; NOT a sandbox")
     parser.add_argument("--fixture-provider", choices=["in-process", "cli"], default="in-process", help="Offline provider fixture transport")
-    parser.add_argument("--image", help="Preloaded digest-pinned Python image for Docker")
+    parser.add_argument("--image", help="Preloaded digest-pinned image: the Python image for Docker execution, or the agent image agent-declare records")
     parser.add_argument("--task")
     parser.add_argument("--operation-id", help="Operation to inspect or retry workspace cleanup for")
     parser.add_argument("--request-id", help="Expired pending approval request ID")
@@ -89,6 +89,11 @@ def main():
     parser.add_argument("--agent-secret", help="This agent's secret file, for calling an agent service")
     parser.add_argument("--role", help="Role an agent session claims work as, or that a question is put to")
     parser.add_argument("--consultation", help="The question being answered, withdrawn or closed")
+    parser.add_argument("--network", help="How an agent container reaches the service: host, or container:NAME")
+    parser.add_argument("--decider", help="module:attribute an agent container runs as its decider")
+    parser.add_argument("--memory", help="Memory ceiling for an agent container, such as 512m")
+    parser.add_argument("--host-cannot-protect-secrets", action="store_true",
+                        help="Declare that this host cannot keep a mounted secret private, so the container copies it; the host file stays exposed")
     parser.add_argument("--question", help="A question for a role, which is not a task and approves nothing")
     parser.add_argument("--answer", help="An agent's opinion in reply to a question; it authorizes nothing")
     parser.add_argument("--about", help="A task a question refers to, as read-only context")
@@ -571,6 +576,35 @@ def main():
         finally:
             if engine is not None: engine.close()
         print(canonical(report).decode())
+        return
+    if args.command in ('agent-declare', 'agent-start', 'agent-stop', 'agent-processes'):
+        # Starting a container an operator declared. Nothing here composes a command from an
+        # argument: --agent names one, and what it runs is the file beside its secret.
+        from . import agent_processes
+        from .contracts import Rejected, canonical
+        if not args.agents:
+            parser.error('Agent lifecycle commands require the --agents registry directory')
+        if args.command != 'agent-processes' and not args.agent:
+            parser.error('That command requires the --agent it acts on')
+        if args.command == 'agent-declare' and not (args.image and args.agent_endpoint and args.role):
+            parser.error('agent-declare requires --image, --agent-endpoint and --role')
+        try:
+            if args.command == 'agent-declare':
+                report = agent_processes.declare(args.agents, args.agent, args.image, args.agent_endpoint,
+                                                 args.role, args.decider, args.lease, args.network,
+                                                 args.memory, args.host_cannot_protect_secrets)
+            elif args.command == 'agent-start':
+                report = agent_processes.start(args.agents, args.agent)
+            elif args.command == 'agent-stop':
+                report = agent_processes.stop(args.agents, args.agent)
+            else:
+                report = agent_processes.processes(args.agents)
+        except (Rejected, OSError) as exc:
+            parser.error('Cannot do that: ' + str(exc))
+        print(canonical(report).decode())
+        # A refusal is a report, not a crash, and the exit code says so for a script.
+        if report.get('status') == 'refused':
+            raise SystemExit(2)
         return
     if args.command in ('consult-ask', 'consult-list', 'consult-withdraw', 'consult-close'):
         # A question, which is not a task: nothing here opens one, approves one or advances

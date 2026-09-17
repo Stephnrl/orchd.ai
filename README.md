@@ -101,6 +101,14 @@ available by role, quotas and journal capacity — without taking the store-wide
 answers while everything is busy rather than refusing until it stops.
 [What each module is for](docs/modules.md) maps the package, generated from each module's own
 opening sentence so it cannot describe something the code stopped doing.
+[Running the agents from the window](docs/agent-lifecycle.md) lets a day start where it
+should: click an agent, click Run. It is the one milestone that lets a window start a process,
+so the design is mostly about what it cannot start — a request contributes only which enrolled
+agent, every route refuses a payload, and what runs is a declaration on the host whose fields
+are a closed set with grammars. The secret is derived from the registry rather than named, no
+command follows the image, and an image is pinned to bytes when it is declared. Docker is
+asked what is running rather than the store being told, which is what lets the roster show the
+state presence alone could not: a container that is up while nothing calls in.
 [Asking an agent a question](docs/consultations.md) is the one interaction that is not work:
 a question changes nothing, so it has no approval, and it has no approval only because it
 cannot become a task — its own table, its own lifecycle and no route into the state machine,

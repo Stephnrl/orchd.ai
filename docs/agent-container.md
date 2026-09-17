@@ -68,6 +68,11 @@ docker run --rm --network host \
     -e ORCHD_ENDPOINT=127.0.0.1:PORT -e ORCHD_ROLE=project_manager orchd-agent
 ```
 
+The operator window runs the same thing from a button once the agent is declared; see
+[running the agents from the window](agent-lifecycle.md), which pins the image, derives the
+mount from the registry and fixes every flag above. The command line is what declares it and
+what you reach for when something has gone wrong.
+
 It is given an endpoint, a role, and its own secret mounted read-only. **It is never given a
 store path and never given a credential for anything outside this host** — those live on
 [the broker](outbound-dispatch.md), under its own account, because a container holding one can

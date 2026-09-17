@@ -397,6 +397,41 @@ function queueEntry(list, name, why, since, open) {
 // correctly idle holds nothing, so before presence it was indistinguishable from one that
 // stopped; the dot is the difference an operator acts on.
 const PRESENCE = {working: "Working", idle: "Idle, waiting for work", "not seen": "Not seen"};
+// Why a start or a stop did not happen, in words. The server answers with a code from a
+// closed set and never with the daemon's own output, which carries host paths.
+const LIFECYCLE = {
+  not_enrolled: "That agent is not enrolled on this host.",
+  not_declared: "That agent has no container declaration yet. Declare one with agent-declare on the host.",
+  already_running: "That agent is already running.",
+  not_running: "That agent is not running.",
+  docker_cli_missing: "Docker is not on this machine's PATH.",
+  daemon_unavailable: "Docker is not answering.",
+  image_not_present: "That image is not on this machine. Build or pull it first; nothing is pulled for you.",
+  previous_container_not_removed: "The previous container could not be removed. Inspect it with docker ps -a.",
+  start_failed: "Docker refused to start it. Read the container log with docker logs.",
+  stop_failed: "Docker refused to stop it. Inspect it with docker ps.",
+  registry_unreadable: "This server's agent registry could not be read.",
+};
+let processes = new Map(), dockerNote = "";
+async function lifecycle() {
+  // Its own request rather than part of /status: this one asks Docker, and the status view
+  // has to keep answering while everything else is busy.
+  processes = new Map(); dockerNote = "";
+  try {
+    const report = await api("/agents");
+    for (const row of report.agents || []) processes.set(row.agent, row);
+    if (report.docker !== "available") dockerNote = LIFECYCLE[report.reason] || "Docker could not be asked what is running.";
+  } catch (error) {
+    dockerNote = "";   // No registry, or no session: the roster still renders without this.
+  }
+}
+async function lifecycleAction(agent, what) {
+  const result = await api("/agents/" + encodeURIComponent(agent) + "/" + what, {});
+  notice(result.status === "refused"
+    ? agent + ": " + (LIFECYCLE[result.reason] || "That could not be done.")
+    : agent + " " + result.status + ".");
+  await attention();
+}
 function renderAgents(report) {
   const declared = report.enrolled || [];
   const list = $("agent-list");
@@ -410,14 +445,22 @@ function renderAgents(report) {
     const name = document.createElement("b");
     name.textContent = row.agent;
     const detail = document.createElement("span");
-    // The one that should catch the eye: this agent's task is stopped on a person.
+    const process = processes.get(row.agent);
+    // Presence says whether the agent is calling; the container says whether it is even
+    // there. Apart they are two half-answers, and one pair of them is the useful one: a
+    // container that is up while nothing calls in is broken rather than idle.
+    const stopped = process && process.state !== "running";
+    const silent = process && process.state === "running" && row.state === "not seen";
     detail.textContent = row.needs_you ? "Waiting on you before it can go on"
+      : silent ? "Container running, but not calling in"
+      : process && !process.declared ? "No container declared \u00b7 " + row.roles.join(", ")
+      : stopped ? "Not started \u00b7 " + row.roles.join(", ")
       : PRESENCE[row.state] + " \u00b7 " + row.roles.join(", ");
     who.append(name, detail);
     const when = document.createElement("span");
     when.className = "when";
     when.textContent = row.last_seen ? waited(row.last_seen) + " ago" : "never";
-    item.className = row.needs_you ? "asking" : "";
+    item.className = row.needs_you || silent ? "asking" : "";
     item.append(dot, who, when);
     if (row.holding) item.append(button("Open task", async () => { await select(row.holding); }));
     item.append(button("Ask", async () => {
@@ -425,6 +468,13 @@ function renderAgents(report) {
       const question = $("consult-question");
       if (typeof question.focus === "function") question.focus();
     }));
+    // Only when this window knows what the container is doing. Offering Run without that
+    // would be offering to do something whose outcome it cannot report.
+    // ...and only while Docker can be asked: a Run that is certain to be refused is worse
+    // than no button, because it looks like the thing that is broken.
+    if (dockerNote) { /* nothing to offer */ }
+    else if (process && process.state === "running") item.append(button("Stop", () => lifecycleAction(row.agent, "stop")));
+    else if (process && process.declared) item.append(button("Run", () => lifecycleAction(row.agent, "start")));
     list.append(item);
   }
   const present = declared.filter(row => row.state !== "not seen").length;
@@ -432,7 +482,8 @@ function renderAgents(report) {
   $("agents-summary").textContent = !declared.length
     ? "No agent registry was given to this server. Start it with --agents to see them here."
     : present + " of " + declared.length + " present"
-      + (asking ? ", and " + asking + " waiting on you." : ".");
+      + (asking ? ", and " + asking + " waiting on you." : ".")
+      + (dockerNote ? " " + dockerNote : "");
 }
 
 // Questions and what came back. A question is not a task: there is no approval here, no
@@ -510,6 +561,8 @@ async function attention() {
   const version = epoch;
   try {
     const report = await api("/status");
+    if (version !== epoch) return;
+    await lifecycle();
     if (version !== epoch) return;
     const waiting = report.tasks.waiting_on_a_person || [];
     const holding = report.agents.holding || [];
